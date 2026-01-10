@@ -126,7 +126,7 @@ qm create 9000 --name debian-13-docker-template \
 # 2. Add the EFI Storage (This creates the actual .raw or .qcow2 file)
 # This is the step that makes it work reliably.
 ```sh
-qm set 1000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
+qm set 9000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
 ```
 3️⃣ Import and attach, and resize the OS disk
 ```sh
@@ -220,7 +220,7 @@ qm create 9000 --name debian-13-docker-template \
   --agent enabled=1,fstrim_cloned_disks=1 \
   --net0 virtio,bridge=vmbr0
 
-qm set 1000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
+qm set 9000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
 
 qm importdisk 9000 debian-13-genericcloud-amd64.qcow2 local-lvm
 qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0
