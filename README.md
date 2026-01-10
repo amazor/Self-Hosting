@@ -115,16 +115,19 @@ wget https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-
 ```
 2️⃣ Create the base VM
 ```sh
-qm create 9000 \
-  --name debian-13-docker-template \
+qm create 9000 --name debian-13-docker-template \
   --memory 2048 \
   --cores 2 \
   --machine q35 \
   --bios ovmf \
+  --agent enabled=1,fstrim_cloned_disks=1 \
   --net0 virtio,bridge=vmbr0
 ```
-
-
+# 2. Add the EFI Storage (This creates the actual .raw or .qcow2 file)
+# This is the step that makes it work reliably.
+```sh
+qm set 1000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
+```
 3️⃣ Import and attach, and resize the OS disk
 ```sh
 qm importdisk 9000 debian-13-genericcloud-amd64.qcow2 local-lvm
@@ -206,3 +209,26 @@ clarity
 ease of management
 
 future automation (Ansible / Terraform)
+
+for a single-copypasteable copy use this:
+```sh
+qm create 9000 --name debian-13-docker-template \
+  --memory 2048 \
+  --cores 2 \
+  --machine q35 \
+  --bios ovmf \
+  --agent enabled=1,fstrim_cloned_disks=1 \
+  --net0 virtio,bridge=vmbr0
+
+qm set 1000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
+
+qm importdisk 9000 debian-13-genericcloud-amd64.qcow2 local-lvm
+qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0
+qm resize 9000 scsi0 32G
+
+qm set 9000 --ide2 local-lvm:cloudinit
+qm set 9000 --boot c --bootdisk scsi0
+qm set 9000 --serial0 socket --vga serial0
+
+qm set 9000 --cicustom "vendor=local:snippets/common-config.yaml"
+```
