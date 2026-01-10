@@ -216,6 +216,7 @@ for a single-copypasteable script, copy this:
 VM_ID=9001
 STORAGE=local-lvm
 IMG_NAME=debian-13-genericcloud-amd64.qcow2
+USER_NAME=mazora
 
 # 1. Create the VM Shell
 qm create $VM_ID --name debian-13-template \
@@ -231,6 +232,8 @@ qm set $VM_ID --efidisk0 $STORAGE:0,format=raw,pre-enrolled-keys=1
 qm importdisk $VM_ID $IMG_NAME $STORAGE
 qm set $VM_ID --scsihw virtio-scsi-pci \
   --scsi0 $STORAGE:vm-$VM_ID-disk-0,discard=on,ssd=1
+qm resize $VM_ID scsi0 32G
+
 
 # 4. Add Cloud-Init drive (Using SCSI for modern UEFI compatibility)
 qm set $VM_ID --scsi1 $STORAGE:cloudinit
@@ -241,4 +244,9 @@ qm set $VM_ID --serial0 socket --vga serial0
 
 # 6. Attach the Custom Vendor Snippet
 qm set $VM_ID --cicustom "vendor=local:snippets/common-config.yaml"
+
+# 7. Update some basic cloudinit
+# Note: ip6=dhcp enables IPv6 auto-configuration
+qm set $VM_ID --ciuser $USER_NAME \
+  --ipconfig0 ip=dhcp,ip6=dhcp
 ```
