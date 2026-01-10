@@ -210,25 +210,35 @@ ease of management
 
 future automation (Ansible / Terraform)
 
-for a single-copypasteable copy use this:
+for a single-copypasteable script, copy this:
 ```sh
-qm create 9000 --name debian-13-docker-template \
-  --memory 2048 \
-  --cores 2 \
-  --machine q35 \
-  --bios ovmf \
+# Set Variables
+VM_ID=9001
+STORAGE=local-lvm
+IMG_NAME=debian-13-genericcloud-amd64.qcow2
+
+# 1. Create the VM Shell
+qm create $VM_ID --name debian-13-template \
+  --memory 2048 --cores 2 \
+  --machine q35 --bios ovmf \
   --agent enabled=1,fstrim_cloned_disks=1 \
   --net0 virtio,bridge=vmbr0
 
-qm set 9000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
+# 2. Initialize UEFI Storage
+qm set $VM_ID --efidisk0 $STORAGE:0,format=raw,pre-enrolled-keys=1
 
-qm importdisk 9000 debian-13-genericcloud-amd64.qcow2 local-lvm
-qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0
-qm resize 9000 scsi0 32G
+# 3. Import and attach the disk with DISCARD and SSD EMULATION
+qm importdisk $VM_ID $IMG_NAME $STORAGE
+qm set $VM_ID --scsihw virtio-scsi-pci \
+  --scsi0 $STORAGE:vm-$VM_ID-disk-0,discard=on,ssd=1
 
-qm set 9000 --scsi1 local-lvm:cloudinit
-qm set 9000 --boot c --bootdisk scsi0
-qm set 9000 --serial0 socket --vga serial0
+# 4. Add Cloud-Init drive (Using SCSI for modern UEFI compatibility)
+qm set $VM_ID --scsi1 $STORAGE:cloudinit
 
-qm set 9000 --cicustom "vendor=local:snippets/common-config.yaml"
+# 5. Boot and Console settings
+qm set $VM_ID --boot c --bootdisk scsi0
+qm set $VM_ID --serial0 socket --vga serial0
+
+# 6. Attach the Custom Vendor Snippet
+qm set $VM_ID --cicustom "vendor=local:snippets/common-config.yaml"
 ```
