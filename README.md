@@ -110,9 +110,11 @@ Step 4 – Creating the Cloud-Init VM Template (CLI)
 Using the CLI is the most reliable way to import official cloud images.
 
 1️⃣ Download the Debian cloud image
+```sh
 wget https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
-
+```
 2️⃣ Create the base VM
+```sh
 qm create 9000 \
   --name debian-13-docker-template \
   --memory 2048 \
@@ -120,38 +122,38 @@ qm create 9000 \
   --machine q35 \
   --bios ovmf \
   --net0 virtio,bridge=vmbr0
-
+```
 
 
 3️⃣ Import and attach, and resize the OS disk
+```sh
 qm importdisk 9000 debian-12-genericcloud-amd64.qcow2 local-lvm
 qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0
 qm resize 9000 scsi0 32G
-
+```
 
 4️⃣ Add Cloud-Init drive and serial console
+```sh
 qm set 9000 --ide2 local-lvm:cloudinit
 qm set 9000 --boot c --bootdisk scsi0
 qm set 9000 --serial0 socket --vga serial0
-
+```
 
 5️⃣ Attach the vendor snippet
+```sh
 qm set 9000 --cicustom "vendor=local:snippets/common-config.yaml"
-
+```
 Step 5 – Finalizing the Template in the Proxmox GUI
 
 In the Proxmox Web UI:
 
 Cloud-Init tab configuration
-
+```
 User: mazora
-
 Password: (left empty – SSH key only)
-
 SSH Public Key: paste id_rsa.pub
-
 IP Config (net0): DHCP
-
+```
 Why SSH-only?
 
 No shared passwords across clones
@@ -164,7 +166,7 @@ Step 6 – Convert to Template
 
 Right-click the VM:
 
-Convert to Template
+```Convert to Template```
 
 
 At this point, the template is immutable and ready for cloning.
