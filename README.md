@@ -127,7 +127,7 @@ qm create 9000 \
 
 3️⃣ Import and attach, and resize the OS disk
 ```sh
-qm importdisk 9000 debian-12-genericcloud-amd64.qcow2 local-lvm
+qm importdisk 9000 debian-13-genericcloud-amd64.qcow2 local-lvm
 qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0
 qm resize 9000 scsi0 32G
 ```
