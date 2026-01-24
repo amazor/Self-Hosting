@@ -42,6 +42,7 @@ This repository is managed on a local workstation and pushed to GitHub. It is or
 │   └── monitoring/         # Dashboard, Grafana, Prometheus
 ├── 3d-printing/            # STL/STEP files for custom rack mounts
 └── README.md               # Project landing page
+```
 
 ## 🎯 The Mission
 The goal of this project is to build a robust, scalable, and automated home server environment that handles everything from media streaming and file storage to home automation and self-hosted development tools.
