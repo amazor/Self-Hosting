@@ -1,0 +1,63 @@
+#cloud-config
+
+# 1. Automatic Package Updates on first boot
+package_update: true
+package_upgrade: true
+package_reboot_if_required: true
+
+# 2. User Configuration
+users: 
+  - name: mazora 
+    groups: sudo, docker 
+    shell: /bin/bash 
+    sudo: ALL=(ALL) NOPASSWD:ALL 
+    lock_passwd: true
+
+# 3. Official Docker Repo Setup
+apt:
+  sources:
+    docker.list:
+      source: "deb [arch=amd64] https://download.docker.com/linux/debian \$RELEASE stable"
+      keyid: 9DC858229FC7DD38854AE2D88D81803C0EBFCD88
+
+# 4. Essential Packages
+packages:
+  - git
+  - curl
+  - docker-ce
+  - docker-ce-cli
+  - containerd.io
+  - docker-buildx-plugin
+  - docker-compose-plugin
+  - avahi-daemon
+  - qemu-guest-agent
+  - htop
+
+# 5. Inject Docker Log Rotation (Safety First)
+write_files:
+  - path: /etc/docker/daemon.json
+    content: |
+      {
+        "log-driver": "json-file",
+        "log-opts": {
+          "max-size": "50m",
+          "max-file": "3"
+        }
+      }
+
+# 6. Final System Tweaks
+runcmd:
+  - systemctl enable --now docker
+  - systemctl enable --now qemu-guest-agent
+  - systemctl enable --now avahi-daemon
+  
+  # Set up a 2GB Swap file to prevent crashes during heavy builds
+  - fallocate -l 2G /swapfile
+  - chmod 600 /swapfile
+  - mkswap /swapfile
+  - swapon /swapfile
+  - echo '/swapfile none swap sw 0 0' >> /etc/fstab
+  
+  # Set swappiness to 10 (Last Resort mode)
+  - sysctl vm.swappiness=10
+  - echo 'vm.swappiness=10' >> /etc/sysctl.conf

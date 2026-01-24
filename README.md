@@ -1,252 +1,97 @@
-🏗️ Homelab Setup – Proxmox Foundation
+# 🛰️ The Homelab Journey: From Bare Metal to Production
 
-This document describes the initial setup of my homelab, focusing on installing Proxmox VE and creating a reusable Cloud-Init VM template for Docker-based workloads.
-This is the foundation upon which all future infrastructure (Docker stacks, Plex, monitoring, etc.) will be built.
+Welcome to my Homelab documentation! This repository serves as a living "field manual" and a functional **Source of Truth** for my home infrastructure. It is designed to be part **journal**, part **technical guide**, and part **Infrastructure-as-Code** repository.
 
-🖥️ Hardware Overview
 
-Host machine: Beelink EQi13 Mini PC
-CPU: Intel Core i5-13500
-RAM: 32 GB
-Storage: 500 GB NVMe SSD
-Form factor: Low-power, always-on mini PC
 
-Why this hardware?
+---
 
-- Excellent performance per watt → suitable for 24/7 operation
-- Strong single-core and multi-core performance → great for Plex, Docker, and VMs
-- 32 GB RAM → allows multiple VMs without memory pressure
-- NVMe storage → fast VM disks and snapshots
-- Compact & quiet → ideal for running at a family home
+## 🎯 The Mission
+The goal of this project is to build a robust, scalable, and automated home server environment that handles everything from media streaming and file storage to home automation and development tools.
 
-Step 0 – Boot Media Preparation (Ventoy)
+### My Guiding Principles:
+* **Cattle, Not Pets:** Everything is automated. If a VM fails, I don't "fix" it; I redeploy a fresh one in seconds.
+* **Decoupled Architecture:** Keeping "Compute" (Proxmox) separate from "Data" (Synology) for maximum safety.
+* **Documentation-First:** Every choice has a "Philosophy" note explaining the *why*, ensuring reproducibility.
+* **Infrastructure as Code (IaC):** Version controlling my configurations so that my lab is predictable and recoverable.
 
-Before installing Proxmox, I prepared a flexible boot USB using Ventoy.
+---
 
-Why Ventoy?
-- One USB can boot multiple ISOs
-- No reflashing needed when switching installers
-- Perfect for homelab experimentation
+## 🖥️ The Tech Stack
+* **Hypervisor:** Proxmox VE (Type-1 Hypervisor)
+* **Compute Host:** Beelink EQi13 (Intel i5-13500H, 32GB RAM, 500GB NVMe)
+* **Storage (NAS):** Synology DS220+
+* **OS:** Debian 13 (Trixie)
+* **Automation:** Cloud-Init & Bash Scripting
 
-Steps
+---
 
-1. Download Ventoy from https://www.ventoy.net
+## 🗺️ Repository Structure & Workflow
 
-2. Install Ventoy onto a USB drive
-3. Copy the Proxmox VE ISO onto the USB (no flashing needed)
+This repository is managed on a local workstation and pushed to GitHub. It is organized to separate the physical/hypervisor setup from the applications running on top.
 
-This USB will remain useful for:
-Proxmox installs
-Rescue ISOs
+```text
+.
+├── documentation/          # Chronological journey (Chapters 0, 1, 2...)
+├── proxmox/                # Hypervisor-level automation
+│   ├── scripts/            # Shell scripts (Template creation, post-install)
+│   └── snippets/           # Cloud-Init blueprints (common-config.yaml)
+├── docker/                 # Containerized applications
+│   ├── infrastructure/     # Core services (Reverse Proxy, DNS, etc.)
+│   ├── media/              # Entertainment stack (Plex, Arrs)
+│   └── monitoring/         # Dashboard, Grafana, Prometheus
+├── 3d-printing/            # STL/STEP files for custom rack mounts
+└── README.md               # Project landing page
 
-Live Linux tools
-
-Step 1 – Installing Proxmox VE
-Why Proxmox?
-- Bare-metal hypervisor (not nested)
-- Excellent Web UI
-- Native support for:
-  - VMs
-  - LXC
-  - Snapshots
-  - Cloud-Init
-- Strong community and documentation
-
-Installation notes
-
-1. Booted the Beelink from the Ventoy USB
-2. Selected Install Proxmox VE (Graphical)
-3. Used local-lvm storage layout
-4. Set a static hostname (e.g. pve1.local)
-
-Networking via Ethernet (Wi-Fi not recommended for Proxmox)
-After installation, Proxmox is managed entirely via the web interface.
-
-Step 2 – Preparing Proxmox for Cloud-Init Templates
-Enable Snippets Storage
-Cloud-Init “snippets” allow injecting custom YAML config into VMs at boot time.
-In the Proxmox UI:
-Datacenter → Storage → local → Edit
-Enable:
+## 🎯 The Mission
+The goal of this project is to build a robust, scalable, and automated home server environment that handles everything from media streaming and file storage to home automation and self-hosted development tools.
 
-✅ Snippets
+### My Guiding Principles:
+* **Cattle, Not Pets:** Everything should be automated. If a VM fails, I don't fix it; I redeploy it in seconds.
+* **Decoupled Architecture:** Keeping "Compute" (Proxmox) separate from "Data" (Synology) for maximum safety and portability.
+* **Document Everything:** Every choice has a "Philosophy" note explaining *why* it was made, ensuring I (and others) can replicate the success later.
+* **Security First:** Moving toward a Zero-Trust model with VLAN segmentation and key-based authentication.
 
-This creates (or uses):
+---
 
-/var/lib/vz/snippets
+## 🏗️ The Tech Stack
+* **Hypervisor:** Proxmox VE (Type-1 Hypervisor)
+* **Compute:** Beelink EQi13 (Intel i5-13500H, 32GB RAM)
+* **Storage:** Synology DS220+ NAS
+* **Automation:** Cloud-Init, Bash Scripting, and Docker Compose
+* **OS:** Debian 13 (Trixie)
 
-Step 3 – Creating a Reusable Cloud-Init Bootstrap Snippet
+---
 
-This snippet installs common tools and prepares the VM for Docker workloads.
+## 📖 Roadmap: The Chapters
+I have organized this journey into chronological chapters. Each chapter contains the **Reasoning**, the **Configuration**, and the **Code** required to complete that phase.
 
-Create the snippet file
-mkdir -p /var/lib/vz/snippets
-nano /var/lib/vz/snippets/common-config.yaml
+### [Chapter 0: The Physical Foundation](docs/Chapter0-hardware.md)
+*Hardware selection, the "Mini-PC" strategy, and preparing boot media with Ventoy.*
 
-common-config.yaml
-#cloud-config
-packages:
-  - git
-  - docker.io
-  - curl
-  - htop
+### [Chapter 1: The Proxmox Foundation](docs/Chapter1-proxmox.md)
+*Installing the Hypervisor, post-install optimizations, and creating a "Golden Image" VM Template using Cloud-Init.*
 
-runcmd:
-  - usermod -aG docker mazora
-  - systemctl enable --now docker
+### ⏳ Coming Soon...
+* **Chapter 2:** The Docker Compose Workflow & First Services.
+* **Chapter 3:** Networking & Storage (Connecting the Synology via NFS/SMB).
+* **Chapter 4:** Security, VLANs, and Reverse Proxies.
 
-Why use a snippet?
+---
 
-Keeps OS identity separate from system opinionation
+## 🛠️ How to Use This Repo
+1.  **Read the Chapters:** If you are starting your own journey, start with [Chapter 0](docs/Chapter0-hardware.md).
+2.  **Use the Snippets:** The `snippets/` folder contains the actual YAML and Shell scripts used in the guides.
+3.  **Check the Philosophy Notes:** Look for the 🧠 icon throughout the documentation to understand the logic behind specific technical choices.
 
-Reusable across many VMs
+---
 
-Easy to modify later without rebuilding everything
+## 🔮 The Future
+This lab is a work in progress. Future expansions include:
+* **3D Printed Rack:** Moving from the desk to a custom-printed 10-inch server rack.
+* **Managed Networking:** Implementing an Omada or UniFi switch for full VLAN segmentation.
+* **High Availability:** Potentially adding a second Beelink node for a Proxmox cluster.
 
-Cleaner than hardcoding logic into templates
+---
 
-Step 4 – Creating the Cloud-Init VM Template (CLI)
-
-Using the CLI is the most reliable way to import official cloud images.
-
-1️⃣ Download the Debian cloud image
-```sh
-wget https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2
-```
-2️⃣ Create the base VM
-```sh
-qm create 9000 --name debian-13-docker-template \
-  --memory 2048 \
-  --cores 2 \
-  --machine q35 \
-  --bios ovmf \
-  --agent enabled=1,fstrim_cloned_disks=1 \
-  --net0 virtio,bridge=vmbr0
-```
-2. Add the EFI Storage (This creates the actual .raw or .qcow2 file)
-This is the step that makes it work reliably.
-```sh
-qm set 9000 --efidisk0 local-lvm:0,format=raw,pre-enrolled-keys=1
-```
-3️⃣ Import and attach, and resize the OS disk
-```sh
-qm importdisk 9000 debian-13-genericcloud-amd64.qcow2 local-lvm
-qm set 9000 --scsihw virtio-scsi-pci --scsi0 local-lvm:vm-9000-disk-0
-qm resize 9000 scsi0 32G
-```
-
-4️⃣ Add Cloud-Init drive and serial console
-```sh
-qm set 9000 --scsi1 local-lvm:cloudinit
-qm set 9000 --boot c --bootdisk scsi0
-qm set 9000 --serial0 socket --vga serial0
-```
-
-5️⃣ Attach the vendor snippet
-```sh
-qm set 9000 --cicustom "vendor=local:snippets/common-config.yaml"
-```
-Step 5 – Finalizing the Template in the Proxmox GUI
-
-In the Proxmox Web UI:
-
-Cloud-Init tab configuration
-```
-User: mazora
-Password: (left empty – SSH key only)
-SSH Public Key: paste id_rsa.pub
-IP Config (net0): DHCP
-```
-Why SSH-only?
-
-No shared passwords across clones
-
-More secure
-
-Cloud-native best practice
-
-Step 6 – Convert to Template
-
-Right-click the VM:
-
-```Convert to Template```
-
-
-At this point, the template is immutable and ready for cloning.
-
-Step 7 – Deploying New VMs
-
-To create a new VM:
-
-Right-click the template → Clone
-
-Mode: Full Clone
-
-Name the VM (this becomes the hostname)
-
-Start the VM
-
-What happens automatically
-
-Hostname set from VM name
-SSH host keys regenerated
-/etc/machine-id regenerated
-User mazora created
-Docker installed and enabled
-Docker group permissions fixed
-No manual setup required.
-Resulting Architecture
-Proxmox host → bare metal
-Cloud-Init template → single source of truth
-Cloned VMs → infra, media, apps, etc.
-Docker everywhere, consistently
-This setup prioritizes:
-
-reproducibility
-
-clarity
-
-ease of management
-
-future automation (Ansible / Terraform)
-
-for a single-copypasteable script, copy this:
-```sh
-# Set Variables
-VM_ID=9001
-STORAGE=local-lvm
-IMG_NAME=debian-13-genericcloud-amd64.qcow2
-USER_NAME=mazora
-
-# 1. Create the VM Shell
-qm create $VM_ID --name debian-13-template \
-  --memory 2048 --cores 2 \
-  --machine q35 --bios ovmf \
-  --agent enabled=1,fstrim_cloned_disks=1 \
-  --net0 virtio,bridge=vmbr0
-
-# 2. Initialize UEFI Storage
-qm set $VM_ID --efidisk0 $STORAGE:0,format=raw,pre-enrolled-keys=1
-
-# 3. Import and attach the disk with DISCARD and SSD EMULATION
-qm importdisk $VM_ID $IMG_NAME $STORAGE
-qm set $VM_ID --scsihw virtio-scsi-pci \
-  --scsi0 $STORAGE:vm-$VM_ID-disk-0,discard=on,ssd=1
-qm resize $VM_ID scsi0 32G
-
-
-# 4. Add Cloud-Init drive (Using SCSI for modern UEFI compatibility)
-qm set $VM_ID --scsi1 $STORAGE:cloudinit
-
-# 5. Boot and Console settings
-qm set $VM_ID --boot c --bootdisk scsi0
-qm set $VM_ID --serial0 socket --vga serial0
-
-# 6. Attach the Custom Vendor Snippet
-qm set $VM_ID --cicustom "vendor=local:snippets/common-config.yaml"
-
-# 7. Update some basic cloudinit
-# Note: ip6=dhcp enables IPv6 auto-configuration
-qm set $VM_ID --ciuser $USER_NAME \
-  --ipconfig0 ip=dhcp,ip6=dhcp
-```
+> "A homelab is never finished; it just reaches a stable state before the next upgrade."
