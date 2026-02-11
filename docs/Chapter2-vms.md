@@ -42,6 +42,37 @@ Instead, I’m separating by **failure domain** and **type of complexity**.
 
 ---
 
+---
+
+## VMID Naming & Numbering Scheme (Proxmox)
+
+I use a simple VMID range scheme so the Proxmox UI stays readable over time.
+
+**Goals**
+- Instantly see “what kind of VM this is” from the VMID
+- Leave room to grow without renumbering
+- Keep templates and throwaways clearly separated
+
+**Ranges**
+- **9000–9099** → Templates (Cloud-Init base images)
+- **100–199** → Core infrastructure VMs (access plane + foundational services)
+- **200–299** → Workload VMs (apps, media, GPU workloads)
+- **800–899** → Temporary / experiments / throwaway VMs
+
+**Current mapping**
+| VM | VMID | Notes |
+|----|------|------|
+| `docker-ubuntu` | 9000 | Cloud-Init template (do not run directly) |
+| `core` | 110 | reverse proxy, SSO, DNS |
+| `monitoring` | 120 | Grafana, Uptime Kuma, etc. |
+| `apps` | 210 | general user apps |
+| `media` | 220 | *arr + download pipeline |
+| `accelerated` | 230 | GPU / transcoding / CV workloads |
+
+> **Spacing note:** I use increments of 10 (110, 120, 130…) so I can insert new VMs later without renumbering.
+
+---
+
 ## 🧩 What Runs Where (Quick Reference)
 
 This section is intentionally compact: **what the app is + what it contributes**.
@@ -193,6 +224,49 @@ Rather than inventing a new pattern per VM, I’m going to treat these as **univ
 This chapter introduces the concept only.
 The full Compose strategy and a universal snippet live in **Chapter 3**.
 
+---
+
+---
+
+## The Practical Step: Spinning Up the VMs (From the Template)
+
+Chapter 1 builds the Cloud-Init Docker template.  
+This chapter is where we actually turn that template into real VMs.
+
+### Starting resource allocation (adjustable)
+
+These are intentionally “good defaults”, not permanent decisions.
+
+| VM (VMID) | vCPU | RAM | Why this is my starting point |
+|-----------|------|-----|------------------------------|
+| `core` (110) | 2 | 4GB | Access + identity should feel responsive and stable |
+| `monitoring` (120) | 2 | 6GB | Observability stacks grow and benefit from memory |
+| `apps` (210) | 2 | 4GB | General apps are moderate footprint |
+| `media` (220) | 4 | 8GB | Higher churn + heavier pipeline services |
+| `accelerated` (230) | 4 | 8GB | GPU workloads and related services like RAM |
+
+> Disk stays “small OS disk” by default so snapshots/backups are fast. Data gets mounted/attached intentionally later.
+
+### Clone steps (repeat per VM)
+
+1. **Clone Template `9000`**
+   - Right-click template → **Clone**
+   - VMID/name: e.g. `110 core`, `120 monitoring`, `210 apps`, etc.
+
+2. **Set CPU/RAM**
+   - VM → **Hardware** → set cores + memory based on the table above
+
+3. **Cloud-Init sanity**
+   - Ensure your SSH key is present in Cloud-Init
+   - Keep DHCP for now (the architecture relies on DNS names, not static addressing)
+
+4. **Boot + verify**
+   ```bash
+   docker --version && systemctl status qemu-guest-agent --no-pager && free -h
+    ```
+5. **Snapshot the “fresh provisioned” state**
+    - Take a snapshot once the VM is healthy and reachable
+    - This becomes your clean rollback anchor before you start deploying stacks
 ---
 
 ## ❓ Frequently Asked Questions

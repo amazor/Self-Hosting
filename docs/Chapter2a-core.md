@@ -19,6 +19,30 @@ When this VM is healthy, the rest of the system feels coherent. When it isn’t,
 
 ---
 
+---
+
+## Provisioning the Core VM (From the Template)
+
+The Core VM is the only VM that the internet touches. It deserves an intentional baseline.
+
+**VMID + name**
+- `110` → `core`
+
+**Starting resources**
+- **vCPU:** 2
+- **RAM:** 4GB
+
+### Steps (Proxmox)
+
+1. Clone template `9000` → new VM `110 core`
+2. Set CPU/RAM to 2 cores / 4GB
+3. Confirm SSH key in Cloud-Init
+4. Boot and verify:
+  ```bash
+   docker --version && systemctl status qemu-guest-agent --no-pager && free -h
+  ```
+5. Snapshot: core - fresh provisioned 
+
 ## What the Core VM is responsible for
 
 The Core VM concentrates three primitives that everything else depends on:
