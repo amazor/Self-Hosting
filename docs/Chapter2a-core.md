@@ -2,6 +2,8 @@
 
 ## Introduction
 
+**Prerequisites:** [Chapter 1](Chapter1-proxmox.md) (template created), [Chapter 2](Chapter2-vms.md) (VMID scheme).
+
 The Core VM is the homelab’s “front door” and access foundation. It exists to make everything else reachable, consistently named, and safely gated.
 
 When this VM is healthy, the rest of the system feels coherent. When it isn’t, the lab may still be running — but access becomes unreliable, inconsistent, or unsafe.
@@ -18,6 +20,15 @@ When this VM is healthy, the rest of the system feels coherent. When it isn’t,
 > The details of what lives on that homepage belong in the `apps` VM.
 
 ---
+
+## Table of contents
+- [Provisioning the Core VM](#provisioning-the-core-vm-from-the-template)
+- [What the Core VM is responsible for](#what-the-core-vm-is-responsible-for)
+- [Why these services belong together](#why-these-services-belong-together)
+- [Design constraints](#design-constraints)
+- [App selection](#app-selection)
+- [What breaks if the Core VM disappears](#what-breaks-if-the-core-vm-disappears)
+- [FAQ](#faq)
 
 ---
 
@@ -91,6 +102,15 @@ Keeping these together makes the system easier to reason about: there is one pla
 ---
 
 ## App selection
+
+| App | Role | Key choice |
+|-----|------|------------|
+| Caddy | Reverse proxy | HTTPS + routing; first-class Let's Encrypt |
+| Authentik | Identity / SSO | One login across many apps |
+| Minimal DNS | Internal naming | Stable hostnames; low churn |
+| whoami | Troubleshooting | Echo endpoint for access-plane validation |
+
+---
 
 ### Reverse proxy: Caddy
 

@@ -1,5 +1,14 @@
 # 🏗️ Chapter 0: The Physical Foundation
 
+*Scope: This chapter assumes a single Beelink host and a Synology NAS; multi-node or other NAS brands may differ.*
+
+## Table of contents
+- [Hardware Overview: The Homelab Core](#-hardware-overview-the-homelab-core)
+- [Step 0 – Boot Media Preparation (Ventoy)](#step-0--boot-media-preparation-ventoy)
+- [Future Roadmap: Physical & Network Expansion](#-future-roadmap-physical--network-expansion)
+
+---
+
 ## 🖥️ Hardware Overview: The Homelab Core
 Before diving into the software, we need to look at the "Silicon" that makes it all possible. For this lab, I’ve chosen a hardware stack that balances power, efficiency, and quiet operation—essential for a setup running in a family home.
 
@@ -71,9 +80,10 @@ As the lab grows, security becomes paramount. My future plans include adding a *
 
 
 
-[Image of network segmentation with VLANs]
+*(Optional: add a diagram of network segmentation with VLANs here.)*
 
+*Recovery:* If the NAS is unavailable, core services on the Proxmox host still run; data access is restored when the NAS returns. Storage strategy and NFS mounts are covered in later chapters.
 
 ---
 
-**Next Step:** Ready to plug this into the Beelink? Move to **Chapter 1: The Proxmox Foundation**.
+**Next Step:** Ready to plug this into the Beelink? Move to [Chapter 1: The Proxmox Foundation](Chapter1-proxmox.md).

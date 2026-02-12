@@ -2,6 +2,8 @@
 
 ## 🛰️ Introduction: Defining the Shape of the Lab
 
+**Prerequisites:** [Chapter 1](Chapter1-proxmox.md) (template created).
+
 Before deploying Docker stacks, I want a crisp, durable answer to:
 
 > **What VMs exist, what do they own, and what does each one contribute to the lab?**
@@ -12,14 +14,26 @@ This chapter is meant to be a **one-stop reference**:
 - a quick “what this app provides” view for readers (and future me)
 
 The deeper “why did I choose *this* specific app” reasoning lives in the follow-ups:
-- **Chapter 2A** (`core`)
-- **Chapter 2B** (`monitoring`)
-- **Chapter 2C** (`media`)
-- **Chapter 2D** (`accelerated`)
+- [Chapter 2A (core)](Chapter2a-core.md)
+- **Chapter 2B** (`monitoring`) *(planned)*
+- [Chapter 2C (media)](Chapter2c-media.md)
+- **Chapter 2D** (`accelerated`) *(planned)*
 
 > ### 🧠 Philosophy: Boring Infrastructure, Flexible Workloads
 > Foundational services should feel appliance-like: stable, predictable, and rarely changed.
 > Workloads should be easy to iterate on, rebuild, and replace without threatening access to the lab.
+
+---
+
+## Table of contents
+- [VM Inventory (At a Glance)](#-vm-inventory-at-a-glance)
+- [VMID Naming & Numbering Scheme (Proxmox)](#vmid-naming--numbering-scheme-proxmox)
+- [What Runs Where (Quick Reference)](#-what-runs-where-quick-reference)
+- [VM-by-VM: The Boundary Rules](#vm-by-vm-the-boundary-rules-the-important-part)
+- [Universal Sidecar Pattern](#a-small-preview-the-universal-sidecar-pattern)
+- [The Practical Step: Spinning Up the VMs](#the-practical-step-spinning-up-the-vms-from-the-template)
+- [When to add a new VM](#when-to-add-a-new-vm)
+- [FAQ](#-frequently-asked-questions)
 
 ---
 
@@ -42,8 +56,6 @@ Instead, I’m separating by **failure domain** and **type of complexity**.
 
 ---
 
----
-
 ## VMID Naming & Numbering Scheme (Proxmox)
 
 I use a simple VMID range scheme so the Proxmox UI stays readable over time.
@@ -62,7 +74,7 @@ I use a simple VMID range scheme so the Proxmox UI stays readable over time.
 **Current mapping**
 | VM | VMID | Notes |
 |----|------|------|
-| `docker-ubuntu` | 9000 | Cloud-Init template (do not run directly) |
+| `debian-13-template` | 9000 | Cloud-Init template (do not run directly) |
 | `core` | 110 | reverse proxy, SSO, DNS |
 | `monitoring` | 120 | Grafana, Uptime Kuma, etc. |
 | `apps` | 210 | general user apps |
@@ -76,7 +88,7 @@ I use a simple VMID range scheme so the Proxmox UI stays readable over time.
 ## 🧩 What Runs Where (Quick Reference)
 
 This section is intentionally compact: **what the app is + what it contributes**.
-Full app-by-app reasoning belongs in the Chapter 2X files.
+Full app-by-app reasoning belongs in the Chapter 2X files (2a, 2b, 2c, 2d).
 
 ### `core` — Access & Naming Foundation
 
@@ -99,7 +111,7 @@ Full app-by-app reasoning belongs in the Chapter 2X files.
 
 | App | What it is | What it gives the lab |
 |-----|------------|------------------------|
-| Homepage (TBD) | dashboard / launcher | friendly landing page + service index |
+| Homepage / Homarr / Dashy | dashboard / launcher | friendly landing page + service index (e.g. [gethomepage.dev](https://gethomepage.dev), Homarr, Dashy) |
 | Mealie | recipes & meal planning | a real “daily-use” app that benefits from self-hosting |
 | (more later) | misc apps | a clean home for non-infra services |
 
@@ -108,8 +120,8 @@ Full app-by-app reasoning belongs in the Chapter 2X files.
 | App | What it is | What it gives the lab |
 |-----|------------|------------------------|
 | Sonarr / Radarr / etc. | automation managers | hands-off acquisition + organization |
-| Deluge | download client | moves content into the pipeline |
-| VPN (for Deluge) | network isolation | download traffic routed safely |
+| qBittorrent | download client | moves content into the pipeline |
+| VPN (for qBittorrent) | network isolation | download traffic routed safely |
 | FlareSolverr | anti-bot helper | keeps indexers working when they get annoying |
 
 ### `accelerated` — GPU Workloads
@@ -183,7 +195,7 @@ indexers break, download automation misbehaves, and workflows evolve.
 So it is intentionally isolated.
 
 A hard rule applies:
-- download clients (e.g., Deluge) are never exposed directly to the internet
+- download clients (e.g., qBittorrent) are never exposed directly to the internet
 
 Even if some *arr endpoints are reachable, the download client stays internal.
 
@@ -222,7 +234,7 @@ Rather than inventing a new pattern per VM, I’m going to treat these as **univ
 - predictable behavior across VMs
 
 This chapter introduces the concept only.
-The full Compose strategy and a universal snippet live in **Chapter 3**.
+The full Compose strategy and a universal snippet live in **Chapter 3** *(planned)*.
 
 ---
 
@@ -230,7 +242,7 @@ The full Compose strategy and a universal snippet live in **Chapter 3**.
 
 ## The Practical Step: Spinning Up the VMs (From the Template)
 
-Chapter 1 builds the Cloud-Init Docker template.  
+[Chapter 1](Chapter1-proxmox.md) builds the Cloud-Init Docker template.  
 This chapter is where we actually turn that template into real VMs.
 
 ### Starting resource allocation (adjustable)
@@ -267,6 +279,19 @@ These are intentionally “good defaults”, not permanent decisions.
 5. **Snapshot the “fresh provisioned” state**
     - Take a snapshot once the VM is healthy and reachable
     - This becomes your clean rollback anchor before you start deploying stacks
+---
+
+## When to add a new VM
+
+Consider adding a new VM when:
+
+- A workload's **failure domain** no longer fits an existing VM (e.g. its failures or restarts would impact others).
+- A workload's **resource profile** (CPU, RAM, GPU, or I/O) justifies isolation.
+- A distinct **security or compliance boundary** is needed (e.g. a dedicated "data" or "DMZ" VM).
+- The existing VM is becoming a grab-bag of unrelated services and the mental model is eroding.
+
+The VMID ranges (100–199 for core, 200–299 for workloads) leave room to insert new VMs without renumbering.
+
 ---
 
 ## ❓ Frequently Asked Questions

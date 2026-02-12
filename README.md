@@ -41,7 +41,7 @@ Build a robust, scalable, and automated home server environment that can host:
 - **Hypervisor:** Proxmox VE
 - **Compute host:** Beelink EQi13 (Intel i5-13500H, 32GB RAM)
 - **Storage:** Synology NAS
-- **VM OS baseline:** Ubuntu (Cloud-Init template, Docker host)
+- **VM OS baseline:** Debian (Cloud-Init template, Docker host)
 - **Workloads:** Docker Compose (per-VM stacks)
 - **Automation:** Cloud-Init + repo-driven bootstrap scripts (described in Chapter 3)
 
@@ -62,6 +62,9 @@ This journey is written as chronological chapters.
 
 - **[Chapter 2A: Core VM](docs/Chapter2a-core.md)**  
   The access plane: reverse proxy, HTTPS, SSO, DNS.
+
+- **[Chapter 2C: Media VM](docs/Chapter2c-media.md)**  
+  Media automation pipeline: *arr stack, qBittorrent, VPN, storage design, optional layers.
 
 > Upcoming chapters will cover Docker Compose workflow, storage mounts (NFS), and the per-VM bootstrap approach in detail.
 
@@ -165,9 +168,10 @@ This repo is intentionally split between:
 ✅ Proxmox + template (Chapter 1)
 ✅ VM architecture (Chapter 2)
 ✅ Core VM design (Chapter 2A)
+✅ Media VM design (Chapter 2C)
 🔜 Docker Compose workflow + bootstrap scripts
 🔜 Storage strategy (NFS mounts, permissions, boundaries)
-🔜 Monitoring, media pipeline, accelerated workloads
+🔜 Monitoring (Chapter 2B), accelerated workloads (Chapter 2D)
 
 ## 🔮 The Future
 This lab is a work in progress. Future expansions include:

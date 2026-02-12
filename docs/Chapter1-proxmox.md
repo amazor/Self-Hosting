@@ -1,6 +1,9 @@
 # 🏗️ Chapter 1: The Proxmox Foundation
 
 ## 🛰️ Introduction: The Core of the Lab
+
+*Scope: this guide was written for Proxmox 9.x and Debian 13 (Trixie).*
+
 This chapter is the most critical phase of the journey. We are not just installing an operating system; we are building a **Type-1 Hypervisor environment**. This layer sits directly on your hardware and acts as the "Manager" for every service, database, and media tool we will deploy in later chapters.
 
 
@@ -24,9 +27,20 @@ Proxmox Virtual Environment (PVE) is a complete, open-source platform for enterp
 
 ---
 
+## Table of contents
+- [Step 1 – The Base Install](#step-1--the-base-install)
+- [Step 2 – Post-Install & Environment Prep](#step-2--post-install--environment-prep)
+- [Step 3 – The Cloud-Init Bootstrap Snippet](#step-3--the-cloud-init-bootstrap-snippet)
+- [Step 4 – Automation Script (The "Template Maker")](#step-4--automation-script-the-template-maker)
+- [Step 5. Finalize in the GUI](#step-5-finalize-in-the-gui)
+- [Step 6 – Verification](#step-6--verification-is-it-actually-working)
+- [Philosophy & FAQ: The "Why" Behind the Defaults](#-philosophy--faq-the-why-behind-the-defaults)
+
+---
+
 ## Step 1 – The Base Install
 1. **Download:** Get the latest ISO from [proxmox.com](https://www.proxmox.com/en/downloads).
-2. **Flash:** Use Ventoy (see Chapter 0) to boot the installer.
+2. **Flash:** Use Ventoy (see [Chapter 0](Chapter0-hardware.md)) to boot the installer.
 3. **Network:** Set a **Static IP** (e.g., `192.168.1.50`). Do not use DHCP; your server's address must stay permanent.
 
 > ### 🧠 Reasoning: VM vs. LXC for Docker?
@@ -183,6 +197,9 @@ runcmd:
 ```
 
 ### 📝 Line-by-Line Blueprint Breakdown
+
+*This section explains each part of the Cloud-Init snippet; you can skip it if you only need the file.*
+
 - **System Update & Upgrade**
     - `package_update: true`: Tells the VM to run `apt update` to refresh the list of available software as soon as it boots.
     - `package_upgrade: true`: Runs `apt upgrade` to ensure every pre-installed package is at the latest security version.
@@ -216,7 +233,7 @@ runcmd:
 ### 🔑 The SSH Key Requirement
 Because we set `lock_passwd: true`, the user `mazora` **has no password**. If you open the "Console" in Proxmox, you will be stuck at a login prompt you cannot bypass.
 To get in, you **must** use an SSH key. This is the single most common "gotcha" for new Cloud-Init users. You must paste your **Public Key** into the Proxmox Cloud-Init GUI tab before the first boot. Once the VM is up, you'll connect from your own terminal:
-``ssh mazora@<VM IP or hostname from avahi daemon>``
+`ssh mazora@<VM_IP_or_hostname.local>`
 
 ## Step 4 – Automation Script (The "Template Maker")
 Now that we have our Cloud-Init "blueprint" ready, we need a VM to use it. While you can create a VM in the Proxmox GUI, we are using a script to build our **"Golden Image"** template.
@@ -341,6 +358,8 @@ Once the script finishes and says `VM XXX Created`, head back to the Proxmox Web
 1. **Select the new VM** (e.g., 9000).
 2. **Add SSH Key:** Go to the **Cloud-Init** tab. Double-click **SSH public key**, paste your key, and click OK.
 3. **Convert to Template:** Right-click the VM in the left sidebar menu and select **Convert to Template**.
+
+*Recovery:* If a clone fails Cloud-Init (e.g. no Docker after boot), delete the VM, re-clone from the template, re-add your SSH key in the Cloud-Init tab, and start again before first boot.
 
 ### ✅ Step 6 – Verification: Is it actually working?
 

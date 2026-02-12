@@ -1,0 +1,51 @@
+# --- IDE / Editor ---
+.cursor/
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# --- OS ---
+.DS_Store
+.DS_Store?
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+
+# --- Secrets & env (keep .env.example) ---
+.env
+.env.local
+.env.*.local
+*.pem
+*.key
+secrets/
+
+# --- Logs & temp ---
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.temp
+*.bak
+*.backup
+
+# --- Docker (when used locally) ---
+.docker/
+docker-compose.override.yml
+# Keep override.example if you use it
+
+# --- Python (if scripts are added) ---
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+venv/
+.venv/
+*.egg-info/
+.eggs/
+
+# --- Shell / misc ---
+*.pid
+.cache/

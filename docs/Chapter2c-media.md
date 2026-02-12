@@ -12,18 +12,83 @@ That is expected.
 
 This chapter is not about building the “perfect media server.” It is about building a media automation system that:
 
-- Contains operational noise
-- Preserves seeding correctly
-- Exposes only what is necessary
-- Can be rebuilt without drama
+- Contains operational noise  
+- Preserves seeding correctly  
+- Exposes only what is necessary  
+- Can be rebuilt without drama  
 
 Two principles guide this VM:
 
-> **Understand the complexity — then contain it.**  
-> **Design for rebuild, not for perfection.**
+> ### 🧠 Philosophy: Contain complexity; design for rebuild
+> Understand the complexity — then contain it. Design for rebuild, not for perfection.
 
 We will not chase cleverness for its own sake.  
 We will build something correct, understandable, and isolated.
+
+This chapter assumes the [VM overview (Chapter 2)](Chapter2-vms.md) and, for reverse proxy and SSO, the [Core VM (Chapter 2A)](Chapter2a-core.md).
+
+---
+
+## Table of contents
+- [Media Stack Overview (Quick Reference)](#media-stack-overview-quick-reference)
+- [Why a Dedicated Media VM?](#why-a-dedicated-media-vm)
+- [What Lives in the Media VM](#what-lives-in-the-media-vm)
+- [VPN Enforcement](#vpn-enforcement)
+- [Storage Design](#storage-design)
+- [Optional Capability Layers](#optional-capability-layers)
+- [How Optional Services Stay Optional](#how-optional-services-stay-optional)
+- [Access Model](#access-model)
+- [Backup and rebuild](#backup-and-rebuild)
+- [Why This VM Is Allowed to Break](#why-this-vm-is-allowed-to-break)
+- [FAQ](#faq)
+
+---
+
+## Media Stack Overview (Quick Reference)
+
+The Media VM evolves in capability layers.
+
+The numbers below are not timelines — they are **optional capability sets**.  
+You may implement all of them, none of them, or grow into them over time.
+
+---
+
+### Core Automation Pipeline
+
+| App | Role |
+|-----|------|
+| Sonarr | TV automation |
+| Radarr | Movie automation |
+| Prowlarr | Centralized indexer management |
+| qBittorrent | Torrent download engine |
+| VPN container | Network isolation for torrent traffic |
+| FlareSolverr | Anti-bot helper for protected indexers |
+
+This is the minimum viable pipeline.
+
+---
+
+### Configuration Discipline Layer
+
+| App | Role |
+|-----|------|
+| Buildarr | Declarative *arr configuration |
+| Recyclarr | Quality profile synchronization |
+| Cleanuparr | Automatic queue cleanup |
+
+These tools reduce configuration drift and operational mess.
+
+---
+
+### Enhancements Layer
+
+| App | Role |
+|-----|------|
+| SABnzbd | Usenet download client |
+| Bazarr | Subtitle automation |
+| ntfy | Lightweight completion notifications |
+
+These add redundancy and quality-of-life improvements.
 
 ---
 
@@ -36,13 +101,14 @@ Media automation behaves differently than the rest of the homelab:
 - Disk I/O fluctuates.
 - External APIs change.
 - Queues stall.
+- Anti-bot protection evolves.
 
 This is fundamentally different from:
 
-- Reverse proxy
-- DNS
-- SSO
-- Monitoring
+- Reverse proxy  
+- DNS  
+- SSO  
+- Monitoring  
 
 Those services must remain stable.
 
@@ -57,17 +123,21 @@ If something here breaks, public access and authentication must remain intact.
 
 That boundary is intentional.
 
+> ### 🧠 Philosophy: Isolate the noisy workload
+> The Media VM is isolated so the rest of the lab stays stable while the media pipeline is allowed to be noisy, change, and be rebuilt.
+
 ---
 
 ## What Lives in the Media VM
 
 This VM contains the automation engine.
 
-### Core Stack (Minimum Viable Pipeline)
+### Core Pipeline Components
 
 - **Sonarr** – TV automation  
 - **Radarr** – Movie automation  
 - **Prowlarr** – Indexer management  
+- **FlareSolverr** – Bypasses Cloudflare protection for supported indexers  
 - **VPN container** – Required for torrent routing  
 - **qBittorrent** – Torrent client  
 
@@ -78,6 +148,58 @@ This is enough to:
 3. Download via torrent  
 4. Import into the media library  
 5. Continue seeding  
+
+FlareSolverr exists solely to preserve automation reliability when indexers introduce anti-bot protections. It is not required for all setups, but it prevents brittle automation.
+
+---
+
+### Pipeline flow
+
+The following diagram summarizes the acquisition flow: the *arrs and Prowlarr (the brains), the download clients and VPN (the muscle), and the external indexers and peers (the web). The numbered edges are the main steps — search request → indexer scrape → results → handoff to downloader → fetch via VPN → status back to the *arrs.
+
+```mermaid
+graph LR
+    subgraph Brains ["🧠 The Brains"]
+        Arrs[Sonarr / Radarr]
+        Prowlarr[Prowlarr]
+        Flare[FlareSolverr]
+    end
+
+    subgraph Web ["☁️ The Web"]
+        Indexers[Indexers / Trackers]
+        Peers[Usenet / Torrent Peers]
+    end
+
+    subgraph Muscle ["📥 The Muscle"]
+        qBit[qBittorrent / SABnzbd]
+        VPN[VPN Container]
+    end
+
+    %% The Acquisition Flow
+    Arrs -- "1. Search Request (API)" --> Prowlarr
+    Prowlarr -. "2. Challenge Solve" .-> Flare
+    Prowlarr -- "3. Scrape Index" --> Indexers
+    Indexers -- "4. Results" --> Prowlarr
+    Prowlarr -- "5. Results + Metadata" --> Arrs
+
+    %% The Handshake
+    Arrs -- "6. Magnet / NZB Link (API)" --> qBit
+
+    %% The Data Flow
+    qBit -- "7. Network Tunnel" --> VPN
+    VPN -- "8. Fetch Chunks" --- Peers
+
+    %% The Status Loop
+    qBit -- "9. Status Progress" --> Arrs
+
+    style Arrs fill:#2d5a88,color:#fff
+    style qBit fill:#2d5a88,color:#fff
+    style Indexers fill:#666,color:#fff
+    style Peers fill:#666,color:#fff
+    style Flare fill:#e67e22,color:#fff
+```
+
+---
 
 ### Why qBittorrent?
 
@@ -94,10 +216,14 @@ Torrent traffic must not exit directly to the internet.
 
 In this setup:
 
-- I use **ExpressVPN**
-- Any VPN provider can work
-- Torrent traffic is routed through a VPN container
-- The torrent container attaches via `network_mode: service:vpn` (or equivalent pattern)
+- I use ExpressVPN  
+- Any VPN provider can work  
+- Torrent traffic is routed through a VPN container  
+- The torrent container attaches via:
+
+```yaml
+network_mode: service:vpn
+```
 
 Bootstrap validates that torrent traffic is routed through the VPN and warns if it is not.
 
@@ -111,7 +237,9 @@ Torrenting without a VPN is strongly discouraged.
 
 Media storage is structured around a single root directory:
 
+```text
 /mnt/media
+```
 
 This directory represents the entire media workspace.
 
@@ -119,34 +247,83 @@ Inside it, we separate responsibilities clearly:
 
 ```text
 /mnt/media/
-├── torrents/        # Torrent client workspace (blackhole + active torrents)
-├── downloads/       # In-progress downloads (torrent or usenet)
-├── library/         # Organized media library
-│   ├── movies/
-│   ├── tv/
-│   └── anime/
+├── downloads/
+│   ├── qbittorrent/
+│   │   ├── completed/
+│   │   └── incomplete/
+│   │
+│   └── sabnzbd/
+│       ├── completed/
+│       ├── intermediate/
+│       └── tmp/
+│
+└── library/
+    ├── movies/
+    ├── tv/
+    └── anime/
 ```
 
 ### Directory Roles
 
-**torrents/**  
-Used by the torrent client. This can include a “blackhole” folder for manually dropped `.torrent` files and the active torrent working directory.
-
 **downloads/**  
-Temporary staging area for in-progress downloads.  
-If using Usenet later, this may be subdivided (e.g., `downloads/torrent/` and `downloads/usenet/`), but the structure remains contained under the same root.
+Staging area for all download clients.  
+This entire directory is mounted into:
+
+- qBittorrent  
+- SABnzbd (when enabled)  
+- Sonarr  
+- Radarr  
+
+Each downloader manages its own internal workspace, but everything remains contained under `/mnt/media/downloads`.
+
+- `qbittorrent/completed/`  
+  Fully downloaded torrents.  
+  • Written by: qBittorrent  
+  • Monitored by: Sonarr / Radarr  
+
+  When a download finishes, the downloader notifies the *arr application via API.  
+  Sonarr or Radarr then updates the release status and performs the import by creating a hardlink into the appropriate `/library/...` path based on the show or movie metadata. The original file remains in `downloads/` so the torrent can continue seeding.
+
+- `qbittorrent/incomplete/`  
+  Active torrent downloads still in progress.  
+  • Used only by: qBittorrent  
+
+- `sabnzbd/completed/`  
+  Fully downloaded and unpacked Usenet content.  
+  • Written by: SABnzbd  
+  • Monitored by: Sonarr / Radarr  
+
+  When complete, Sonarr or Radarr imports the file by creating a hardlink into the correct `/library/...` location, just like with torrents.
+
+- `sabnzbd/intermediate/`  
+  Temporary directory used while assembling Usenet articles.  
+  • Used internally by: SABnzbd only  
+
+- `sabnzbd/tmp/`  
+  Working directory used during repair and extraction.  
+  • Used internally by: SABnzbd only  
+
+Only the `completed/` directories are consumed by the *arr applications.  
+The rest are internal to the downloader and should never be exposed to Plex.
+
+---
 
 **library/**  
 Final organized media.  
-This is what Plex (or any media server) consumes.
+This entire directory is mounted into:
 
-Inside `library/`, content is separated by media type:
+- Sonarr  
+- Radarr  
+- Plex (or other media server)
 
-- `movies/`
-- `tv/`
-- `anime/`
+Inside `library/` content is separated by media type:
 
-These are the folders shared with Plex.
+- `movies/`   → Shared with Plex as the Movies library  
+- `tv/`       → Shared with Plex as the TV library  
+- `anime/`    → Optional separate category  
+
+Only the `library/` directory is exposed to Plex.  
+Download directories are never shared directly with the media server.
 
 ---
 
@@ -170,6 +347,32 @@ By mounting the entire `media/` directory together, we:
 - Avoid cross-filesystem copy operations  
 - Contain all media-related state in one predictable location  
 
+Data flow from download to library looks like this (hardlinks require the same filesystem):
+
+```mermaid
+flowchart LR
+    subgraph downloads ["downloads/"]
+        QC[qbittorrent/completed]
+        SC[sabnzbd/completed]
+    end
+
+    subgraph arrs ["Sonarr / Radarr"]
+        Import[Import: hardlink]
+    end
+
+    subgraph library ["library/"]
+        Movies[movies/]
+        TV[tv/]
+        Anime[anime/]
+    end
+
+    QC --> Import
+    SC --> Import
+    Import --> Movies
+    Import --> TV
+    Import --> Anime
+```
+
 ---
 
 ### Local vs NFS
@@ -183,11 +386,17 @@ Both approaches work — as long as the entire `media/` directory is mounted tog
 The structure remains the same.  
 Only the backing storage changes.
 
-## Optional Enhancements (Phased)
+---
 
-The Media VM evolves in stages.
+## Optional Capability Layers
 
-### Phase 1 – Working Pipeline
+The Media VM evolves in capability sets (see [Media Stack Overview](#media-stack-overview-quick-reference) for the same layers in table form).
+
+These are not required stages — they are modular expansions.
+
+---
+
+### Core Pipeline
 
 Torrent-based automation only.
 
@@ -202,30 +411,28 @@ Keep it simple.
 
 ---
 
-### Phase 2 – Declarative Configuration & Hygiene
+### Configuration Discipline Layer
 
 Once the system stabilizes, configuration drift appears.
 
 At this stage:
 
-- **Buildarr**
-- **Recyclarr**
-- **Cleanuparr**
+- Buildarr  
+- Recyclarr  
+- Cleanuparr  
 
-Buildarr and Recyclarr are grouped because they serve the same purpose:  
-reducing configuration drift.
-
+Buildarr and Recyclarr reduce configuration drift.  
 Cleanuparr improves operational hygiene.
 
 These tools are discipline layers — not requirements.
 
 ---
 
-### Phase 3 – Enhancements
+### Enhancements Layer
 
-- **SABnzbd** (Usenet support)  
-- **Bazarr** (Subtitles)  
-- **ntfy** (Download-finished notifications)  
+- SABnzbd (Usenet support)  
+- Bazarr (Subtitles)  
+- ntfy (Download-finished notifications)  
 
 Usenet introduces additional complexity and cost.  
 Bazarr improves quality of life.  
@@ -237,7 +444,7 @@ ntfy is intentionally minimal — alerting belongs in Monitoring.
 
 The goal is simplicity without hiding structure.
 
-- Base `compose.yml`
+- Base `compose.yml`  
 - Overlay files per app:
   - `compose.buildarr-recyclarr.yml`
   - `compose.cleanuparr.yml`
@@ -287,9 +494,9 @@ To support nzb360 and similar mobile apps:
 
 These endpoints:
 
-- Use HTTPS
-- Require API keys
-- Are rate-limited at the reverse proxy
+- Use HTTPS  
+- Require API keys  
+- Are rate-limited at the reverse proxy  
 
 ---
 
@@ -303,10 +510,10 @@ It is the highest-risk exposed surface in this VM.
 
 Mitigations:
 
-- Strong username/password
-- HTTPS only
-- Stricter rate limits than other APIs
-- VPN-routed torrent traffic
+- Strong username/password  
+- HTTPS only  
+- Stricter rate limits than other APIs  
+- VPN-routed torrent traffic  
 
 This is a deliberate compromise.
 
@@ -318,9 +525,9 @@ Exposing APIs publicly is not ideal.
 
 Even with:
 
-- HTTPS
-- API keys
-- Rate limiting
+- HTTPS  
+- API keys  
+- Rate limiting  
 
 Risks remain.
 
@@ -328,11 +535,25 @@ This exposure exists for convenience.
 
 In the future:
 
-- API access will migrate to Tailscale for the small trusted group.
-- Public API hostnames will be closed.
-- qBittorrent will no longer be publicly accessible.
+- API access will migrate to Tailscale for the small trusted group.  
+- Public API hostnames will be closed.  
+- qBittorrent will no longer be publicly accessible.  
 
 This is a staged security posture — not the final one.
+
+---
+
+## Backup and rebuild
+
+Before major upgrades or rebuilds, back up:
+
+- **Compose and .env** — the stack definition and enabled modules.
+- ***arr configs** — Sonarr/Radarr/Prowlarr (and optional apps) export or config directories; many *arrs support backup/restore from the UI.
+- **Optionally:** application databases if you rely on local DBs rather than config-only state.
+
+**What survives without backup:** The media library lives on NAS (or wherever `/mnt/media/library` is mounted). If the Media VM is rebuilt, you reattach the same mount, restore compose and config (or reconfigure from scratch), and the library is unchanged. Seeding can resume once the download client points at the same `downloads/` paths.
+
+This is why we "design for rebuild": automation state is reproducible; the valuable data is elsewhere.
 
 ---
 
@@ -348,12 +569,15 @@ Optional tools are modular.
 
 If the Media VM becomes unstable:
 
-- It can be rebuilt.
-- The media library remains intact.
-- Seeding can resume.
-- The rest of the infrastructure remains unaffected.
+- It can be rebuilt.  
+- The media library remains intact.  
+- Seeding can resume.  
+- The rest of the infrastructure remains unaffected.  
 
 The Media VM is dynamic by design.
+
+> ### 🧠 Tradeoff: Reproducible automation over perfect uptime
+> Automation state is reproducible, libraries are external, and config lives in files — so we accept that this VM may be rebuilt in exchange for keeping the rest of the lab stable.
 
 ---
 
@@ -403,15 +627,9 @@ An attacker could control the associated application.
 
 Mitigations:
 
-- Rotate the key
-- Disable the exposed hostname
-- Audit logs
-- Migrate to Tailscale access
+- Rotate the key  
+- Disable the exposed hostname  
+- Audit logs  
+- Migrate to Tailscale access  
 
 This is another reason public API exposure is treated as temporary.
-
----
-
-This concludes the Media VM design.
-
-The next chapter implements the Compose structure and bootstrap mechanics that bring this architecture to life.
