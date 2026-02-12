@@ -36,6 +36,8 @@ When this VM is healthy, the rest of the system feels coherent. When it isn’t,
 
 The Core VM is the only VM that the internet touches. It deserves an intentional baseline.
 
+**Full procedure:** The generic clone steps (template 9000, Cloud-Init, verify, snapshot) live in [Chapter 2 → Spinning Up the VMs](Chapter2-vms.md#the-practical-step-spinning-up-the-vms-from-the-template). Below are the values for **core** only.
+
 **VMID + name**
 - `110` → `core`
 

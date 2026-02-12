@@ -32,6 +32,9 @@ The deeper “why did I choose *this* specific app” reasoning lives in the fol
 - [VM-by-VM: The Boundary Rules](#vm-by-vm-the-boundary-rules-the-important-part)
 - [Universal Sidecar Pattern](#a-small-preview-the-universal-sidecar-pattern)
 - [The Practical Step: Spinning Up the VMs](#the-practical-step-spinning-up-the-vms-from-the-template)
+  - [Per-VM quick reference (VMID + resources)](#per-vm-quick-reference-vmid--resources)
+  - [Disk and storage (default 32GB, when to increase)](#disk-and-storage-default-32gb-when-to-increase)
+  - [Clone steps (repeat per VM)](#clone-steps-repeat-per-vm)
 - [When to add a new VM](#when-to-add-a-new-vm)
 - [FAQ](#-frequently-asked-questions)
 
@@ -245,7 +248,23 @@ The full Compose strategy and a universal snippet live in **Chapter 3** *(planne
 [Chapter 1](Chapter1-proxmox.md) builds the Cloud-Init Docker template.  
 This chapter is where we actually turn that template into real VMs.
 
-### Starting resource allocation (adjustable)
+> ### ✅ The One To-Do in This Chapter
+> **Create each VM from template `9000`** using the VMIDs and steps below.  
+> This is the only hands-on procedure in Chapter 2. Once the VMs exist, the subchapters (2A, 2C, …) cover what to run *inside* each one.
+
+### Per-VM quick reference (VMID + resources)
+
+Use this table when cloning. Each row gives the exact VMID, name, and resources; subchapters add VM-specific setup *after* the VM is provisioned.
+
+| VM | VMID | Clone as (name) | vCPU | RAM | Disk (default) | After cloning |
+|----|------|-----------------|------|-----|----------------|----------------|
+| `core` | 110 | `110 core` | 2 | 4GB | 32GB | [Chapter 2A (core)](Chapter2a-core.md#provisioning-the-core-vm-from-the-template) |
+| `monitoring` | 120 | `120 monitoring` | 2 | 6GB | 32GB | *(Chapter 2B planned)* |
+| `apps` | 210 | `210 apps` | 2 | 4GB | 32GB | — |
+| `media` | 220 | `220 media` | 4 | 8GB | 32GB | [Chapter 2C (media)](Chapter2c-media.md) |
+| `accelerated` | 230 | `230 accelerated` | 4 | 8GB | 32GB | *(Chapter 2D planned)* |
+
+### Starting resource allocation (reference)
 
 These are intentionally “good defaults”, not permanent decisions.
 
@@ -259,14 +278,37 @@ These are intentionally “good defaults”, not permanent decisions.
 
 > Disk stays “small OS disk” by default so snapshots/backups are fast. Data gets mounted/attached intentionally later.
 
+### Disk and storage (default 32GB, when to increase)
+
+Cloned VMs inherit the template's **32GB** system disk. That is intentional: a small OS disk keeps snapshots and backups fast; bulk data lives on **mounts** (NFS or extra virtual disks) as described in each VM's subchapter.
+
+**Where to change disk size or attach storage (Proxmox):**
+
+- **Resize the existing disk:** VM → **Hardware** → select **scsi0** → **Resize** → enter new size (e.g. `64G`). Then inside the VM, extend the partition and filesystem (e.g. `growpart` + `resize2fs` or use a live GParted).
+- **Add a second disk:** VM → **Hardware** → **Add** → **Hard Disk** → choose size and storage. Then inside the VM, partition, format, and mount it (e.g. at `/mnt/media`). Subchapters (e.g. [Chapter 2C — Storage Design](Chapter2c-media.md#storage-design)) describe where each VM expects data mounts.
+
+**When to give a VM more than 32GB:**
+
+| VM | Default | Consider more if… |
+|----|---------|--------------------|
+| `core` | 32GB | Rarely. Proxy, SSO, DNS, and certs are small. |
+| `monitoring` | 32GB | Metrics/log retention grows; 32GB is usually enough unless you keep years of data locally. |
+| `apps` | 32GB | Usually enough. Add a disk or resize if you host large app data on the VM instead of mounts. |
+| `media` | 32GB | If you use **local** storage for downloads/library (not NFS), add a second disk and mount it; see [Chapter 2C — Storage Design](Chapter2c-media.md#storage-design). |
+| `accelerated` | 32GB | Transcoding temp and thumbnails can use space; 64GB or a second disk is reasonable if you see low-disk warnings. |
+
+> Disk stays "small OS disk" by default so snapshots/backups are fast. Data gets mounted/attached intentionally later.
+
 ### Clone steps (repeat per VM)
+
+Follow these steps for **each** VM, using the VMID and name from the Per-VM table above.
 
 1. **Clone Template `9000`**
    - Right-click template → **Clone**
-   - VMID/name: e.g. `110 core`, `120 monitoring`, `210 apps`, etc.
+   - VMID/name: from table (e.g. `110 core`, `220 media`)
 
 2. **Set CPU/RAM**
-   - VM → **Hardware** → set cores + memory based on the table above
+   - VM → **Hardware** → set cores + memory from the table above
 
 3. **Cloud-Init sanity**
    - Ensure your SSH key is present in Cloud-Init
@@ -275,10 +317,13 @@ These are intentionally “good defaults”, not permanent decisions.
 4. **Boot + verify**
    ```bash
    docker --version && systemctl status qemu-guest-agent --no-pager && free -h
-    ```
+   ```
 5. **Snapshot the “fresh provisioned” state**
-    - Take a snapshot once the VM is healthy and reachable
-    - This becomes your clean rollback anchor before you start deploying stacks
+   - Take a snapshot once the VM is healthy and reachable
+   - This becomes your clean rollback anchor before you start deploying stacks
+
+**Next:** Use the "After cloning" column in the Per-VM table to jump to the subchapter for that VM (stack setup, bootstrap, etc.).
+
 ---
 
 ## When to add a new VM

@@ -32,6 +32,7 @@ Proxmox Virtual Environment (PVE) is a complete, open-source platform for enterp
 - [Step 2 – Post-Install & Environment Prep](#step-2--post-install--environment-prep)
 - [Step 3 – The Cloud-Init Bootstrap Snippet](#step-3--the-cloud-init-bootstrap-snippet)
 - [Step 4 – Automation Script (The "Template Maker")](#step-4--automation-script-the-template-maker)
+  - [Choose the right storage (important)](#choose-the-right-storage-important)
 - [Step 5. Finalize in the GUI](#step-5-finalize-in-the-gui)
 - [Step 6 – Verification](#step-6--verification-is-it-actually-working)
 - [Philosophy & FAQ: The "Why" Behind the Defaults](#-philosophy--faq-the-why-behind-the-defaults)
@@ -318,22 +319,42 @@ echo "VM $VM_ID Created. Now, add your SSH key in the Proxmox GUI and 'Convert t
 - **`--serial0 socket --vga serial0`**: This redirects the VM's display to a serial terminal. It’s a cleaner way to view the boot process and Cloud-Init logs directly from the Proxmox dashboard.
 - **`--cicustom`**: This is the "secret sauce." It tells Proxmox: _"When you generate the Cloud-Init ISO for this VM, include my custom configuration file as the 'vendor' layer."_
 
+### Choose the right storage (important)
+
+The script puts the template’s disk on the storage you pass as the third argument. **That storage must exist and match your Proxmox install**, or clones will fail with errors like `no such logical volume pve/vm-9000-disk-0`.
+
+| Install type | Typical VM disk storage | Run script with |
+|--------------|--------------------------|-----------------|
+| **ext4** (single disk) | `local-lvm` (LVM thin) | `./create_template.sh` or `./create_template.sh 9000 debian-13-template local-lvm` |
+| **ZFS** (e.g. two drives, RAID1) | `local-zfs` | `./create_template.sh 9000 debian-13-template local-zfs` |
+
+To see what you have, on the Proxmox host run:
+
+```sh
+pvesm status
+```
+
+Use the **Name** of the storage that holds VM disks (e.g. `local-lvm` or `local-zfs`). Do **not** use `local` alone for the template disk unless you have no LVM/ZFS pool—that directory store is usually for ISOs and snippets only.
+
 ### Run the Script
-You have two ways to run this script.
-**Option A: Run with Defaults** This uses the values already in your script (VM ID 9000, Debian 13, local-lvm storage).
+
+**Option A: Defaults (LVM installs)** — VM ID 9000, Debian 13, storage `local-lvm`:
+
 ```sh
 ./create_template.sh
 ```
 
-**Option B: Pass Custom Arguments** If you want to change the ID, Name, or Storage location on the fly, you can pass them as arguments:
+**Option B: Custom arguments** — Use this to set storage for ZFS or a different ID/name:
+
 ```sh
-# Syntax: ./create_template.sh [ID] [NAME] [STORAGE_POOL]
-./create_template.sh 8000 my-docker-template local-zfs
+# Syntax: ./create_template.sh [ID] [NAME] [STORAGE]
+./create_template.sh 9000 debian-13-template local-zfs
 ```
+
+The script checks that the chosen storage exists before creating the VM; if it doesn’t, it exits with a clear message.
 
 #### Tips for this script:
 - **The Snippet Requirement:** This script explicitly looks for `/var/lib/vz/snippets/common-config.yaml`. If you haven't created that file yet (following Step 3 of our journey), the script will finish, but the VM won't auto-install Docker when it boots.
-- **Storage Pool:** The script defaults to `local-lvm`. If your Proxmox setup uses a different name for your main storage (like `local-zfs` or just `local`), make sure to change the `STORAGE` variable at the top of the script or pass it as the third argument.
 - **Cleaning Up:** The script downloads the Debian image to your current folder (`debian-13-temp.qcow2`). Once your template is created, you can safely delete this file to save space: `rm debian-13-temp.qcow2`.
 
 
@@ -425,3 +446,8 @@ In any homelab journey, the "Hardcoded Defaults" are rarely accidental. They rep
 
 **Q: Does this work on Raspberry Pi / ARM?**
 * **A:** No. This specific script pulls `amd64` (x86) images and uses Intel/AMD chipset configurations. For ARM, you would need to point to an ARM64 cloud image and adjust the machine type.
+
+**Q: Clone fails with "no such logical volume pve/vm-9000-disk-0"?**
+* **A:** Proxmox is looking for an LVM volume that isn’t there. Common cases:
+  * **You use ZFS:** There is no `local-lvm`. Delete template 9000 and recreate with `./create_template.sh 9000 debian-13-template local-zfs`, then add SSH key and convert to template again.
+  * **You have LVM:** Check `qm config 9000` and `lvs`. If `scsi0` points to `base-9000-disk-0` but `efidisk0` points to `vm-9000-disk-0`, the **EFI disk** volume is missing (it can be dropped when the template was converted with an older script order). Fix: delete the template VM (9000), run the script again (it now creates the main disk before the EFI disk so both survive “Convert to Template”), then add your SSH key and convert to template. Clones will work after that.
