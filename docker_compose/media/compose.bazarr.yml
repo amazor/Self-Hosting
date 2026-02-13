@@ -1,0 +1,28 @@
+# Media VM — Optional: Bazarr (subtitle automation)
+# Use with: docker compose -f compose.yml -f compose.bazarr.yml up -d
+# Enable via ENABLE_BAZARR=1 in .env; bootstrap and media_compose select overlays from .env.
+#
+# Bazarr connects to Sonarr and Radarr (same compose project; hostnames sonarr, radarr). Needs read/write
+# on library paths to match and write subtitle files (.srt etc.) alongside media.
+# Paths: MEDIA_ROOT and CONFIG_ROOT from .env. LinuxServer: https://docs.linuxserver.io/images/docker-bazarr
+
+services:
+  # --- Bazarr — Subtitle download and sync ---
+  # Configure Sonarr/Radarr in Bazarr UI (URLs http://sonarr:8989, http://radarr:7878; API keys from each app).
+  # Library paths /tv, /movies, /anime must match Sonarr/Radarr mount names for path mapping.
+  bazarr:
+    image: lscr.io/linuxserver/bazarr:latest
+    container_name: bazarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/bazarr:/config
+      # Same library layout as Sonarr/Radarr so Bazarr can read metadata and write subtitles next to files.
+      - ${MEDIA_ROOT:-/mnt/media}/library/tv:/tv
+      - ${MEDIA_ROOT:-/mnt/media}/library/movies:/movies
+      - ${MEDIA_ROOT:-/mnt/media}/library/anime:/anime
+    ports:
+      - "6767:6767"
+    restart: unless-stopped

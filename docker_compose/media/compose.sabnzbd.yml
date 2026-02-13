@@ -1,0 +1,28 @@
+# Media VM — Optional: SABnzbd (Usenet download client)
+# Use with: docker compose -f compose.yml -f compose.sabnzbd.yml up -d
+# Enable via ENABLE_SABNZBD=1 in .env; bootstrap and media_compose select overlays from .env.
+#
+# Usenet traffic does not use the VPN container; SABnzbd runs on the default network.
+# Sonarr/Radarr add SABnzbd as download client: host sabnzbd, port 8080 (container port; host 8081).
+# Paths: MEDIA_ROOT and CONFIG_ROOT from .env. Layout aligns with docs/Chapter2c-media.md.
+
+services:
+  # --- SABnzbd — Usenet download client ---
+  # LinuxServer: https://docs.linuxserver.io/images/docker-sabnzbd
+  # In SABnzbd UI: set Completed to /downloads/completed; temp/intermediate to /downloads/intermediate, /downloads/tmp.
+  # Same MEDIA_ROOT as torrents so Sonarr/Radarr can hardlink from sabnzbd/completed into library.
+  sabnzbd:
+    image: lscr.io/linuxserver/sabnzbd:latest
+    container_name: sabnzbd
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/sabnzbd:/config
+      # Single mount; SABnzbd uses subdirs completed, intermediate, tmp under /downloads.
+      - ${MEDIA_ROOT:-/mnt/media}/downloads/sabnzbd:/downloads
+    # Host 8081 so 8080 remains qBittorrent Web UI on the VPN container.
+    ports:
+      - "8081:8080"
+    restart: unless-stopped

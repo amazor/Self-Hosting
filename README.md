@@ -66,7 +66,7 @@ This journey is written as chronological chapters.
 - **[Chapter 2C: Media VM](docs/Chapter2c-media.md)**  
   Media automation pipeline: *arr stack, qBittorrent, VPN, storage design, optional layers.
 
-> Upcoming chapters will cover Docker Compose workflow, storage mounts (NFS), and the per-VM bootstrap approach in detail.
+> **Chapter 3 (WIP):** How to deploy services — deploy script (`./scripts/deploy.sh`), bootstrap, per-stack `.env`, and shell helpers (`media`, `stack`). Upcoming chapters will also cover Docker Compose workflow, storage mounts (NFS), and the per-VM bootstrap approach in detail.
 
 ---
 
@@ -78,20 +78,16 @@ Follow **Chapter 1** to create a Cloud-Init Docker template (VMID `9000`).
 ### 2) Clone real VMs from the template
 Follow **Chapter 2** to clone and size VMs (e.g., `110 core`, `120 monitoring`, etc.).
 
-### 3) Role-specific “first run” setup inside each VM (bootstrap)
+### 3) Role-specific “first run” setup inside each VM (deploy + bootstrap)
 I keep the template generic. Anything role-specific is done *per VM*.
 
-The intended first-time flow inside a VM is:
+The intended first-time flow inside a VM (repo is already at `/opt/self-hosting` via Cloud-Init; see Chapter 1):
 
-1. `git clone` this repo
-2. `cd docker_compose/<vm>/`
-3. run `./bootstrap.sh`
+1. Create `.env` from `.env.example` in the stack directory (e.g. `docker_compose/media/`). Configure required vars and optional `ENABLE_*` as needed. Deploy does **not** copy `.env` for you — you create it explicitly.
+2. From the repo root: `./scripts/deploy.sh <stack>` (e.g. `./scripts/deploy.sh media`). Deploy runs the stack’s bootstrap, creates a symlink (e.g. `~/media`), starts the stack, and installs shell helpers (`media`, `stack`).
+3. Source `~/.bashrc` or open a new shell; use `media up -d`, `media logs -f`, or `media boot` (Buildarr/Recyclarr) as needed.
 
-The bootstrap script is where VM-specific setup happens, such as:
-- optional **NFS mounts** (scoped per VM — never mount “the whole NAS” everywhere)
-- local quality-of-life helpers (bash functions for quick deploy/update/logs)
-- environment file initialization and validation
-- optional “bring the stack up” steps
+The **bootstrap** script (invoked by deploy) handles VM-specific setup such as optional **NFS mounts** and config dirs. Deploy owns symlinks, state, validation, and shell UX. Full deploy/bootstrap flow will be documented in Chapter 3.
 
 ✅ The template stays boring.  
 ✅ The VM role provisioning stays explicit and reproducible.

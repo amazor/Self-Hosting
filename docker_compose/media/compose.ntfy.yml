@@ -1,0 +1,27 @@
+# Media VM — Optional: ntfy (lightweight completion notifications)
+# Use with: docker compose -f compose.yml -f compose.ntfy.yml up -d
+# Enable via ENABLE_NTFY=1 in .env; bootstrap and media_compose select overlays from .env.
+#
+# Minimal notification server so Sonarr/Radarr (Connect) or scripts can push to a topic; subscribers get alerts.
+# Alerting for the rest of the lab belongs in Monitoring; this is download-finished only.
+# Paths: CONFIG_ROOT from .env. Docs: https://docs.ntfy.sh/
+
+services:
+  # --- ntfy — Push notification server ---
+  # Sonarr/Radarr: Settings → Connect → add ntfy; use base URL http://ntfy:80 or http://<host>:8099 and a topic name.
+  # Optional: drop server.yml in CONFIG_ROOT/ntfy/ (e.g. base_url, auth) and mount as /etc/ntfy (read-only).
+  ntfy:
+    image: binwiederhier/ntfy:latest
+    container_name: ntfy
+    command: ["--cache-file", "/var/cache/ntfy/cache.db", "serve"]
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      # Persist cache so subscriptions survive restarts
+      - ${CONFIG_ROOT:-./config}/ntfy/cache:/var/cache/ntfy
+      # Optional server.yml (base_url, upstream, auth); read-only
+      - ${CONFIG_ROOT:-./config}/ntfy:/etc/ntfy:ro
+    # Host 8099 to avoid binding 80; reverse proxy can front this if needed.
+    ports:
+      - "8099:80"
+    restart: unless-stopped

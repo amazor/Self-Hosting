@@ -444,21 +444,17 @@ ntfy is intentionally minimal — alerting belongs in Monitoring.
 
 The goal is simplicity without hiding structure.
 
-- Base `compose.yml`  
-- Overlay files per app:
+- **Base:** `docker_compose/media/compose.yml` (core pipeline only).  
+- **Overlay files** in the same directory:
   - `compose.buildarr-recyclarr.yml`
   - `compose.cleanuparr.yml`
   - `compose.sabnzbd.yml`
   - `compose.bazarr.yml`
   - `compose.ntfy.yml`
 
-`.env` controls which modules are enabled.
+`.env` is the single place to declare intent: set `ENABLE_BUILDARR_RECYCLARR=1`, `ENABLE_CLEANUPARR=1`, `ENABLE_SABNZBD=1`, `ENABLE_BAZARR=1`, `ENABLE_NTFY=1` as needed. After deploy, a shell helper (`media`) picks the right compose files from these so you don’t type multiple `-f` by hand; the overlays stay visible in the repo.
 
-Bootstrap reads `.env` and selects overlays accordingly.
-
-Shell functions hide repetitive Compose flags — but the structure remains visible in the repository.
-
-The complexity is contained, not abstracted away.
+Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `./scripts/deploy.sh media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS and config dirs. Full deploy/bootstrap flow is documented in Chapter 3 (WIP).
 
 ---
 

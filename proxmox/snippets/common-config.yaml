@@ -24,6 +24,8 @@ apt:
 packages:
   - git
   - curl
+  - jq
+  - nfs-common
   - docker-ce
   - docker-ce-cli
   - containerd.io

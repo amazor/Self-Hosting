@@ -1,0 +1,38 @@
+# Media VM — Optional: Buildarr + Recyclarr (configuration discipline)
+# Enable via ENABLE_BUILDARR_RECYCLARR=1 in .env; deploy/stack-functions select overlays from .env.
+# These services use profile "bootstrap" — they are not started by "up -d". Run explicitly:
+#   media boot   (or: docker compose ... --profile bootstrap run --rm buildarr run; ... recyclarr sync)
+#
+# Buildarr: declarative *arr configuration (buildarr.yml). Recyclarr: quality profile sync from TRaSH guides.
+# Both need network access to Sonarr, Radarr, Prowlarr (same compose project = default network).
+# Paths: CONFIG_ROOT from .env; defaults assume config next to compose.
+
+services:
+  # --- Buildarr — Declarative *arr config (Sonarr, Radarr, Prowlarr) ---
+  # Reads buildarr.yml from /config and applies to instances by hostname (sonarr, radarr, prowlarr).
+  # Docs: https://buildarr.github.io/  Docker: https://buildarr.github.io/installation/docker/
+  buildarr:
+    profiles: ["bootstrap"]
+    image: callum027/buildarr:latest
+    container_name: buildarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    # Config dir must contain buildarr.yml (and instance config). Mount read-only so image can't overwrite.
+    volumes:
+      - ${CONFIG_ROOT:-./config}/buildarr:/config:ro
+
+  # --- Recyclarr — Quality profile sync (TRaSH guides → Sonarr/Radarr) ---
+  # Syncs quality definitions and custom formats from recyclarr config to *arr instances.
+  # Docs: https://recyclarr.dev/  Docker: https://recyclarr.dev/wiki/installation/docker/
+  recyclarr:
+    profiles: ["bootstrap"]
+    image: ghcr.io/recyclarr/recyclarr:latest
+    container_name: recyclarr
+    user: "${PUID:-1000}:${PGID:-1000}"
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+    # Config: recyclarr.yml (and optional per-instance). Writes to /config.
+    volumes:
+      - ${CONFIG_ROOT:-./config}/recyclarr:/config

@@ -1,0 +1,25 @@
+# Media VM — Optional: Cleanuparr (queue and download cleanup)
+# Use with: docker compose -f compose.yml -f compose.cleanuparr.yml up -d
+# Enable via ENABLE_CLEANUPARR=1 in .env; bootstrap and media_compose select overlays from .env.
+#
+# Cleanuparr: automatic queue cleanup, stalled downloads, seeding rules, orphan removal.
+# Talks to Sonarr, Radarr, qBittorrent via API (same compose project = default network).
+# Paths: CONFIG_ROOT from .env. Docs: https://cleanuparr.github.io/Cleanuparr
+
+services:
+  # --- Cleanuparr — Queue and download hygiene ---
+  # Configure in UI at http://<host>:11011: add *arr and download client connections (hostnames: sonarr, radarr, sabnzbd, qbittorrent).
+  # Can remove failed/stalled items, enforce seeding time/ratio, trigger replacement searches.
+  cleanuparr:
+    image: cleanuparr/cleanuparr:latest
+    container_name: cleanuparr
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/cleanuparr:/config
+    # Web UI and API on 11011
+    ports:
+      - "11011:11011"
+    restart: unless-stopped
