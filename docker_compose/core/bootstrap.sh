@@ -20,6 +20,8 @@ set -e
 # ---------------------------
 # constants and defaults
 # ---------------------------
+# SCRIPT_DIR is the directory containing this script (stack dir). Used so paths work the same
+# whether you run ./bootstrap.sh by hand or via deploy.sh; deploy also runs compose from this dir.
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 COMPOSE_FILE="$SCRIPT_DIR/compose.yml"
 ENV_FILE="$SCRIPT_DIR/.env"
@@ -40,6 +42,13 @@ Flags:
   --up         Start stack after bootstrap checks complete.
   --force      Skip placeholder guardrails for local testing.
   --help, -h   Show this help text.
+
+Common errors after 'docker compose up':
+  - Caddy: 'Caddyfile: no such file or directory' → Run this bootstrap from the
+    same directory where you run docker compose: cd docker_compose/core && ./bootstrap.sh
+  - Authentik: 'Permission denied: /media/public' → Run once:
+    sudo chown -R 1000:1000 <CONFIG_ROOT>/authentik/media
+  - dnsmasq: 'failed to read configuration file' → Same as Caddy; run bootstrap from stack dir.
 EOF
 }
 
@@ -156,7 +165,28 @@ ensure_config_directories() {
   echo "Ensured config directories under: $CONFIG_BASE"
 }
 
+# If Docker (or a previous root run) created config dirs as root, we can't write Caddyfile/dnsmasq.conf.
+# Fix ownership so the current user can write. Uses sudo only when needed.
+ensure_config_writable() {
+  local testfile="$CONFIG_BASE/caddy/.bootstrap_write_test"
+  if touch "$testfile" 2>/dev/null; then
+    rm -f "$testfile"
+    return 0
+  fi
+  local uid gid
+  uid="$(id -u)"
+  gid="$(id -g)"
+  if sudo -n chown -R "${uid}:${gid}" "$CONFIG_BASE" 2>/dev/null; then
+    echo "Set config ownership to current user (via sudo) so bootstrap can write Caddyfile and dnsmasq.conf."
+  else
+    echo "Error: Cannot write to $CONFIG_BASE (likely root-owned from Docker). Run once:" >&2
+    echo "  sudo chown -R \$(id -u):\$(id -g) $CONFIG_BASE" >&2
+    exit 1
+  fi
+}
+
 # Authentik runs as UID 1000; migration expects /media/public. Ensure host dirs are writable by that user.
+# See: https://docs.goauthentik.io/troubleshooting/image_upload
 ensure_authentik_media_permissions() {
   local media_dir="$CONFIG_BASE/authentik/media"
   local uid="${AUTHENTIK_UID:-1000}"
@@ -164,11 +194,14 @@ ensure_authentik_media_permissions() {
 
   if chown -R "${uid}:${gid}" "$media_dir" 2>/dev/null; then
     echo "Set authentik media ownership to ${uid}:${gid}."
+  elif sudo -n chown -R "${uid}:${gid}" "$media_dir" 2>/dev/null; then
+    echo "Set authentik media ownership to ${uid}:${gid} (via sudo)."
   else
-    echo "Note: Could not chown $media_dir to ${uid}:${gid} (run as root or use sudo)." >&2
-    echo "      If Authentik fails with 'Permission denied: /media/public', run:" >&2
+    echo "Note: Could not chown $media_dir to ${uid}:${gid}." >&2
+    echo "      If Authentik fails with 'Permission denied: /media/public', run once:" >&2
     echo "      sudo chown -R ${uid}:${gid} $media_dir" >&2
   fi
+  chmod -R ug+rwX "$media_dir" 2>/dev/null || sudo -n chmod -R ug+rwX "$media_dir" 2>/dev/null || true
 }
 
 ensure_starter_caddyfile() {
@@ -307,7 +340,13 @@ maybe_bring_up_stack() {
   else
     echo "Bootstrap complete. Run 'docker compose up -d' when ready."
   fi
+  echo ""
+  echo "Config is under: $CONFIG_BASE (relative to this directory: $SCRIPT_DIR)"
+  echo "If Caddy reports 'Caddyfile: no such file or directory' or dnsmasq fails to read config,"
+  echo "run this bootstrap from the same directory where you run docker compose:"
+  echo "  cd $SCRIPT_DIR && ./bootstrap.sh"
 }
+
 
 # ---------------------------
 # main
@@ -321,6 +360,7 @@ prepare_env_file
 load_env
 validate_guardrails
 ensure_config_directories
+ensure_config_writable
 ensure_authentik_media_permissions
 ensure_starter_caddyfile
 validate_caddyfile_ready
