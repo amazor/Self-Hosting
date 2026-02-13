@@ -43,6 +43,9 @@ Flags:
   --force      Skip placeholder guardrails for local testing.
   --help, -h   Show this help text.
 
+Authentik: Set AUTHENTIK_BOOTSTRAP_EMAIL and AUTHENTIK_BOOTSTRAP_PASSWORD in .env before
+  first start to create the default akadmin user without visiting the initial-setup UI.
+
 Common errors after 'docker compose up':
   - Caddy: 'Caddyfile: no such file or directory' → Run this bootstrap from the
     same directory where you run docker compose: cd docker_compose/core && ./bootstrap.sh
@@ -204,44 +207,9 @@ ensure_authentik_media_permissions() {
   chmod -R ug+rwX "$media_dir" 2>/dev/null || sudo -n chmod -R ug+rwX "$media_dir" 2>/dev/null || true
 }
 
-ensure_starter_caddyfile() {
-  CADDYFILE_PATH="$CONFIG_BASE/caddy/Caddyfile"
-  if [[ -f "$CADDYFILE_PATH" ]]; then
-    echo "Caddyfile already exists; not overwriting."
-    return 0
-  fi
-  # If path exists as a directory (e.g. Docker created it on a previous failed mount), remove it.
-  if [[ -d "$CADDYFILE_PATH" ]]; then
-    rmdir "$CADDYFILE_PATH" 2>/dev/null || rm -rf "$CADDYFILE_PATH"
-  fi
-
-  # For local/testing: use Caddy's internal CA so we don't try Let's Encrypt for .local or .home.arpa.
-  local tls_line=""
-  if [[ -n "${CADDY_USE_INTERNAL_TLS:-}" ]] && [[ "${CADDY_USE_INTERNAL_TLS}" =~ ^(true|1|yes)$ ]]; then
-    tls_line="  tls internal"
-  fi
-
-  cat > "$CADDYFILE_PATH" <<EOF
-{
-  # Keep ops noise low while retaining enough detail for troubleshooting.
-  email admin@${PUBLIC_BASE_DOMAIN}
-}
-
-# Authentik web UI (proxied to internal Authentik server container).
-${AUTHENTIK_FQDN} {
-${tls_line}
-  encode zstd gzip
-  reverse_proxy authentik-server:9000
-}
-
-# whoami debug endpoint (verifies front door, headers, and routing).
-${WHOAMI_FQDN} {
-${tls_line}
-  encode zstd gzip
-  reverse_proxy whoami:80
-}
-EOF
-  echo "Created starter Caddyfile: $CADDYFILE_PATH"
+# Generate Caddyfile from .env (auth, whoami, plus CADDY_EXTRA_SERVICES). Run every time so .env changes are applied.
+generate_caddyfile() {
+  "$SCRIPT_DIR/gen-caddyfile.sh"
 }
 
 # Fail fast if Caddyfile is missing or a directory (e.g. Docker created the mount as a dir).
@@ -337,14 +305,27 @@ maybe_bring_up_stack() {
     echo "Starting core stack..."
     docker compose -f "$COMPOSE_FILE" up -d
     echo "Core stack started."
+    if [[ -n "${AUTHENTIK_BOOTSTRAP_EMAIL:-}" ]] && [[ -n "${AUTHENTIK_BOOTSTRAP_PASSWORD:-}" ]]; then
+      echo "Authentik: AUTHENTIK_BOOTSTRAP_* set — initial akadmin user will be created on first start (no UI setup needed)."
+    fi
   else
     echo "Bootstrap complete. Run 'docker compose up -d' when ready."
   fi
   echo ""
   echo "Config is under: $CONFIG_BASE (relative to this directory: $SCRIPT_DIR)"
+  echo "Caddyfile is generated from .env (set CADDY_EXTRA_SERVICES for more services). Re-run bootstrap or deploy to apply .env changes."
   echo "If Caddy reports 'Caddyfile: no such file or directory' or dnsmasq fails to read config,"
   echo "run this bootstrap from the same directory where you run docker compose:"
   echo "  cd $SCRIPT_DIR && ./bootstrap.sh"
+}
+
+# Reload Caddy so it picks up the generated Caddyfile (no container restart).
+reload_caddy_if_running() {
+  local caddy_container="${CADDY_CONTAINER:-caddy}"
+  if docker ps --format '{{.Names}}' 2>/dev/null | grep -qx "$caddy_container"; then
+    docker exec "$caddy_container" caddy reload --config /etc/caddy-config/Caddyfile
+    echo "Caddy reloaded."
+  fi
 }
 
 
@@ -362,9 +343,10 @@ validate_guardrails
 ensure_config_directories
 ensure_config_writable
 ensure_authentik_media_permissions
-ensure_starter_caddyfile
+generate_caddyfile
 validate_caddyfile_ready
 ensure_starter_dnsmasq_conf
 validate_dnsmasq_conf_ready
 validate_compose
 maybe_bring_up_stack
+reload_caddy_if_running

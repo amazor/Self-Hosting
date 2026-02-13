@@ -155,6 +155,10 @@ services:
       AUTHENTIK_REDIS__PORT: 6379
       AUTHENTIK_ERROR_REPORTING__ENABLED: ${AUTHENTIK_ERROR_REPORTING_ENABLED:-false}
       AUTHENTIK_DISABLE_UPDATE_CHECK: ${AUTHENTIK_DISABLE_UPDATE_CHECK:-false}
+      # Bootstrap env vars are read on the worker on first startup (automated install).
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
       TZ: ${TZ:-Etc/UTC}
     volumes:
       - ${CONFIG_ROOT:-./config}/authentik/media:/media
