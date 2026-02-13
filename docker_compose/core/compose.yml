@@ -1,0 +1,207 @@
+# Core VM — Access plane stack (Chapter 2A)
+#
+# Services:
+#   - Caddy: reverse proxy + HTTPS termination for all public ingress
+#   - Authentik: centralized identity/SSO (server + worker + Postgres + Redis)
+#   - dnsmasq: lightweight internal DNS (local records + upstream forwarding)
+#   - whoami: deterministic echo endpoint for front-door troubleshooting
+#
+# Principles:
+#   - Keep "core" boring and predictable.
+#   - Expose only what is needed (80/443 and DNS 53).
+#   - Keep state in CONFIG_ROOT for easy backup/restore.
+#
+# Paths:
+#   - Set CONFIG_ROOT and other values in .env (see .env.example).
+
+services:
+  # --- Caddy: reverse proxy + automated HTTPS ---
+  # Official docs: https://caddyserver.com/docs/
+  # Caddy terminates TLS and routes to internal services by hostname.
+  caddy:
+    image: caddy:${CADDY_TAG:-2}
+    container_name: caddy
+    # 80/443 are the only public ingress ports for the homelab.
+    ports:
+      - "80:80/tcp"
+      - "443:443/tcp"
+      # UDP 443 enables HTTP/3 where clients support it.
+      - "443:443/udp"
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      # Declarative routing and TLS policy.
+      - ${CONFIG_ROOT:-./config}/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Optional static files (landing page, maintenance page, etc.).
+      - ${CONFIG_ROOT:-./config}/caddy/site:/srv
+      # Caddy TLS storage (certificates, OCSP, account metadata).
+      - ${CONFIG_ROOT:-./config}/caddy/data:/data
+      # Runtime config/cache directory.
+      - ${CONFIG_ROOT:-./config}/caddy/config:/config
+    depends_on:
+      # Not strictly required, but helps avoid early proxy errors on first boot.
+      - authentik-server
+      - whoami
+    restart: unless-stopped
+    networks:
+      - core_internal
+
+  # --- Authentik database: Postgres ---
+  # Authentik best practice is externalized stateful deps (Postgres + Redis),
+  # even in single-node homelabs, to keep clear service boundaries.
+  authentik-postgresql:
+    image: postgres:${POSTGRES_TAG:-16-alpine}
+    container_name: authentik-postgresql
+    environment:
+      - POSTGRES_DB=${AUTHENTIK_POSTGRES_DB:-authentik}
+      - POSTGRES_USER=${AUTHENTIK_POSTGRES_USER:-authentik}
+      - POSTGRES_PASSWORD=${AUTHENTIK_POSTGRES_PASSWORD:-CHANGE_ME}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/authentik/postgresql:/var/lib/postgresql/data
+    healthcheck:
+      # Authentik waits on healthy DB/Redis before starting.
+      test: ["CMD-SHELL", "pg_isready -U ${AUTHENTIK_POSTGRES_USER:-authentik} -d ${AUTHENTIK_POSTGRES_DB:-authentik}"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+    restart: unless-stopped
+    networks:
+      - core_internal
+
+  # --- Authentik cache/queue: Redis ---
+  # Redis handles task queueing and transient cache for Authentik.
+  authentik-redis:
+    image: redis:${REDIS_TAG:-7-alpine}
+    container_name: authentik-redis
+    # Keep lightweight persistence to improve resilience across reboots.
+    command: ["redis-server", "--appendonly", "yes", "--save", "60", "1", "--loglevel", "warning"]
+    volumes:
+      - ${CONFIG_ROOT:-./config}/authentik/redis:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 30s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    restart: unless-stopped
+    networks:
+      - core_internal
+
+  # --- Authentik web/API server ---
+  # Official install reference: https://docs.goauthentik.io/install-config/install/docker-compose
+  authentik-server:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-latest}
+    container_name: authentik-server
+    command: server
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    environment:
+      # Core secret for signing/session crypto. Set a long random value in .env.
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-CHANGE_ME}
+      # DB wiring.
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-CHANGE_ME}
+      # Redis wiring.
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_REDIS__PORT: 6379
+      # Harden telemetry defaults for self-hosted lab environments.
+      AUTHENTIK_ERROR_REPORTING__ENABLED: ${AUTHENTIK_ERROR_REPORTING_ENABLED:-false}
+      AUTHENTIK_DISABLE_UPDATE_CHECK: ${AUTHENTIK_DISABLE_UPDATE_CHECK:-false}
+      # Optional first-run bootstrap identity.
+      AUTHENTIK_BOOTSTRAP_EMAIL: ${AUTHENTIK_BOOTSTRAP_EMAIL:-}
+      AUTHENTIK_BOOTSTRAP_PASSWORD: ${AUTHENTIK_BOOTSTRAP_PASSWORD:-}
+      AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:-}
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      # Authentik uploads and runtime media.
+      - ${CONFIG_ROOT:-./config}/authentik/media:/media
+      # Optional custom login/error templates.
+      - ${CONFIG_ROOT:-./config}/authentik/custom-templates:/templates
+    expose:
+      # Internal HTTP(S); Caddy should be the public entrypoint.
+      - "9000"
+      - "9443"
+    restart: unless-stopped
+    networks:
+      - core_internal
+
+  # --- Authentik background worker ---
+  # Runs asynchronous tasks (events, notifications, outpost tasks, etc.).
+  authentik-worker:
+    image: ghcr.io/goauthentik/server:${AUTHENTIK_TAG:-latest}
+    container_name: authentik-worker
+    command: worker
+    depends_on:
+      authentik-postgresql:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    environment:
+      AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:-CHANGE_ME}
+      AUTHENTIK_POSTGRESQL__HOST: authentik-postgresql
+      AUTHENTIK_POSTGRESQL__PORT: 5432
+      AUTHENTIK_POSTGRESQL__NAME: ${AUTHENTIK_POSTGRES_DB:-authentik}
+      AUTHENTIK_POSTGRESQL__USER: ${AUTHENTIK_POSTGRES_USER:-authentik}
+      AUTHENTIK_POSTGRESQL__PASSWORD: ${AUTHENTIK_POSTGRES_PASSWORD:-CHANGE_ME}
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_REDIS__PORT: 6379
+      AUTHENTIK_ERROR_REPORTING__ENABLED: ${AUTHENTIK_ERROR_REPORTING_ENABLED:-false}
+      AUTHENTIK_DISABLE_UPDATE_CHECK: ${AUTHENTIK_DISABLE_UPDATE_CHECK:-false}
+      TZ: ${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/authentik/media:/media
+      - ${CONFIG_ROOT:-./config}/authentik/custom-templates:/templates
+    restart: unless-stopped
+    networks:
+      - core_internal
+
+  # --- dnsmasq: internal DNS for homelab naming ---
+  # Keep DNS role intentionally small: local host records + upstream forwarding.
+  dnsmasq:
+    image: jpillora/dnsmasq:${DNSMASQ_TAG:-latest}
+    container_name: dnsmasq
+    # no-new-privileges reduces blast radius if a service is compromised.
+    security_opt:
+      - no-new-privileges:true
+    cap_add:
+      # NET_ADMIN is commonly required for dnsmasq network operations.
+      - NET_ADMIN
+    ports:
+      # Bind DNS on host. If the VM has multiple NICs, set DNS_BIND_IP in .env.
+      - "${DNS_BIND_IP:-0.0.0.0}:53:53/tcp"
+      - "${DNS_BIND_IP:-0.0.0.0}:53:53/udp"
+    volumes:
+      # Single explicit config file keeps restore/debug straightforward.
+      - ${CONFIG_ROOT:-./config}/dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf:ro
+    restart: unless-stopped
+    networks:
+      - core_internal
+
+  # --- whoami: deterministic echo endpoint ---
+  # Used to validate ingress, headers, TLS, and routing quickly.
+  whoami:
+    image: traefik/whoami:${WHOAMI_TAG:-latest}
+    container_name: whoami
+    # Keep whoami internal-only; expose via Caddy route as needed.
+    expose:
+      - "80"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    networks:
+      - core_internal
+
+networks:
+  core_internal:
+    # Single bridge network is enough for this stack and simple to debug.
+    driver: bridge

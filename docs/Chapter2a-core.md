@@ -109,7 +109,7 @@ Keeping these together makes the system easier to reason about: there is one pla
 |-----|------|------------|
 | Caddy | Reverse proxy | HTTPS + routing; first-class Let's Encrypt |
 | Authentik | Identity / SSO | One login across many apps |
-| Minimal DNS | Internal naming | Stable hostnames; low churn |
+| dnsmasq | Internal naming | Local records + upstream forwarding; low churn |
 | whoami | Troubleshooting | Echo endpoint for access-plane validation |
 
 ---
@@ -156,7 +156,7 @@ MFA isn’t required on day one. The first win is central identity and consisten
 
 ---
 
-### Internal naming: minimal DNS for the homelab subnet
+### Internal naming: dnsmasq for the homelab subnet
 
 **Why this belongs in `core`**  
 Most VMs use DHCP. DNS provides stable names without committing to static IP management, and it makes routing more durable.
@@ -165,8 +165,9 @@ Most VMs use DHCP. DNS provides stable names without committing to static IP man
 - **“Just use Avahi/mDNS”:** convenient as a fallback, but multicast discovery is harder to reason about and less reliable as the lab grows.
 - **Pi-hole / AdGuard:** useful, but heavier than necessary for a DNS role that should stay boring.
 
-**Why “minimal DNS” won**
-- **Small scope:** local records for the homelab subnet, forward everything else upstream.
+**Why dnsmasq won**
+- **Small scope:** local records for the homelab subnet, forwarding everything else upstream.
+- **Operationally boring:** mature, lightweight, and easy to restore from a tiny config.
 - **Low churn:** DNS should be predictable and rarely touched.
 
 > ### 🧠 Design Intent: DNS Should Stay Boring
@@ -191,11 +192,17 @@ A tiny echo endpoint is a practical way to validate the front door:
 
 It’s also a clean monitoring target for “the access plane is up” without depending on any workload VM.
 
+**Implementation choice**
+- Docker image: `traefik/whoami` (deployed as a minimal standalone container behind Caddy).
+
 **Alternatives considered**
+- **Custom tiny web app:** flexible, but unnecessary maintenance burden for a role that should stay boring.
 - “Just test with an app endpoint” — but that couples availability checks to whatever app happens to be up.
 
-**Why a dedicated echo service won**
+**Why `traefik/whoami` won**
 - Small, deterministic, and purpose-built for debugging and health checks.
+- Zero-config startup with predictable output (method, path, headers, remote address), which makes proxy/TLS debugging fast.
+- Widely used in reverse-proxy workflows, so examples and troubleshooting references are easy to find.
 
 ---
 
