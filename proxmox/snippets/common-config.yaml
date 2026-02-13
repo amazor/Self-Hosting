@@ -53,6 +53,9 @@ runcmd:
   - systemctl enable --now qemu-guest-agent
   - systemctl enable --now avahi-daemon
 
+  # Ensure default user is in docker group (idempotent; fixes clones from older templates)
+  - usermod -aG docker mazora
+
   # Homelab repo: first boot only → latest at provision time. Symlink in home so it's visible when you log in.
   - mkdir -p /opt
   - |
@@ -60,7 +63,13 @@ runcmd:
       git clone --depth 1 "https://github.com/amazor/Self-Hosting.git" /opt/self-hosting
       chown -R mazora:mazora /opt/self-hosting
     fi
-    [ -d /opt/self-hosting/.git ] && ln -sfn /opt/self-hosting /home/mazora/self-hosting
+    if [ -d /opt/self-hosting/.git ]; then
+      if [ -e /home/mazora/self-hosting ] && [ ! -L /home/mazora/self-hosting ]; then
+        mv /home/mazora/self-hosting /home/mazora/self-hosting.pre-cloudinit.$(date +%s)
+      fi
+      ln -sfn /opt/self-hosting /home/mazora/self-hosting
+      chown -h mazora:mazora /home/mazora/self-hosting
+    fi
 
   # Set up a 2GB Swap file to prevent crashes during heavy builds
   - fallocate -l 2G /swapfile

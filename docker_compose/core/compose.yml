@@ -29,9 +29,10 @@ services:
       - "443:443/udp"
     environment:
       - TZ=${TZ:-Etc/UTC}
+    command: ["run", "--config", "/etc/caddy-config/Caddyfile", "--adapter", "caddyfile"]
     volumes:
-      # Declarative routing and TLS policy.
-      - ${CONFIG_ROOT:-./config}/caddy/Caddyfile:/etc/caddy/Caddyfile:ro
+      # Mount caddy config dir (avoids file-vs-dir bind-mount issues); Caddyfile lives inside.
+      - ${CONFIG_ROOT:-./config}/caddy:/etc/caddy-config:ro
       # Optional static files (landing page, maintenance page, etc.).
       - ${CONFIG_ROOT:-./config}/caddy/site:/srv
       # Caddy TLS storage (certificates, OCSP, account metadata).
@@ -173,13 +174,14 @@ services:
     cap_add:
       # NET_ADMIN is commonly required for dnsmasq network operations.
       - NET_ADMIN
+    entrypoint: ["webproc", "--config", "/etc/dnsmasq/dnsmasq.conf", "--", "dnsmasq", "--no-daemon"]
     ports:
       # Bind DNS on host. If the VM has multiple NICs, set DNS_BIND_IP in .env.
       - "${DNS_BIND_IP:-0.0.0.0}:53:53/tcp"
       - "${DNS_BIND_IP:-0.0.0.0}:53:53/udp"
     volumes:
-      # Single explicit config file keeps restore/debug straightforward.
-      - ${CONFIG_ROOT:-./config}/dnsmasq/dnsmasq.conf:/etc/dnsmasq.conf:ro
+      # Mount directory so the host path is always a dir (no file-vs-dir bind-mount issues).
+      - ${CONFIG_ROOT:-./config}/dnsmasq:/etc/dnsmasq:ro
     restart: unless-stopped
     networks:
       - core_internal

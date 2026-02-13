@@ -87,6 +87,13 @@ require_prereqs() {
     echo "docker compose plugin not found. Install Docker Compose v2 plugin." >&2
     exit 1
   fi
+  if ! docker info >/dev/null 2>&1; then
+    echo "Cannot connect to the Docker daemon (permission denied on socket)." >&2
+    echo "Add your user to the docker group and start a new login session:" >&2
+    echo "  sudo usermod -aG docker \$USER" >&2
+    echo "  # then log out and back in, or run: newgrp docker" >&2
+    exit 1
+  fi
 }
 
 prepare_env_file() {
@@ -154,6 +161,10 @@ ensure_starter_caddyfile() {
     echo "Caddyfile already exists; not overwriting."
     return 0
   fi
+  # If path exists as a directory (e.g. Docker created it on a previous failed mount), remove it.
+  if [[ -d "$CADDYFILE_PATH" ]]; then
+    rmdir "$CADDYFILE_PATH" 2>/dev/null || rm -rf "$CADDYFILE_PATH"
+  fi
 
   cat > "$CADDYFILE_PATH" <<EOF
 {
@@ -186,6 +197,11 @@ ensure_starter_dnsmasq_conf() {
   if [[ -f "$DNSMASQ_CONF_PATH" ]]; then
     echo "dnsmasq.conf already exists; not overwriting."
     return 0
+  fi
+  # If path exists as a directory (e.g. Docker created it on a previous failed mount), remove it
+  # so we can create the file. Otherwise bind-mount fails with "directory onto a file".
+  if [[ -d "$DNSMASQ_CONF_PATH" ]]; then
+    rmdir "$DNSMASQ_CONF_PATH" 2>/dev/null || rm -rf "$DNSMASQ_CONF_PATH"
   fi
 
   {
@@ -221,6 +237,21 @@ ensure_starter_dnsmasq_conf() {
   echo "Created starter dnsmasq config: $DNSMASQ_CONF_PATH"
 }
 
+# Fail fast if dnsmasq.conf is missing or a directory (e.g. Docker created it on a failed mount).
+validate_dnsmasq_conf_ready() {
+  local path="${CONFIG_BASE:-$SCRIPT_DIR/config}/dnsmasq/dnsmasq.conf"
+  if [[ -d "$path" ]]; then
+    echo "Error: $path exists as a directory (often from a previous failed bind-mount)." >&2
+    echo "Remove it and re-run bootstrap: rm -rf '$path'" >&2
+    exit 1
+  fi
+  if [[ ! -f "$path" ]]; then
+    echo "Error: dnsmasq config file missing: $path" >&2
+    echo "Re-run bootstrap from docker_compose/core so ensure_starter_dnsmasq_conf can create it." >&2
+    exit 1
+  fi
+}
+
 validate_compose() {
   if ! docker compose -f "$COMPOSE_FILE" config >/dev/null; then
     echo "docker compose config validation failed." >&2
@@ -253,5 +284,6 @@ validate_guardrails
 ensure_config_directories
 ensure_starter_caddyfile
 ensure_starter_dnsmasq_conf
+validate_dnsmasq_conf_ready
 validate_compose
 maybe_bring_up_stack
