@@ -2,7 +2,7 @@
 
 # Configuration (Change these or pass as arguments)
 VM_ID=${1:-9000}
-VM_NAME=${2:-debian-13-template}
+VM_NAME=${2:-debian-13-docker-cloudinit}
 STORAGE=${3:-local-lvm}
 USER_NAME="mazora"
 IMG_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"

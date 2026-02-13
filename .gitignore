@@ -13,8 +13,9 @@ Thumbs.db
 ehthumbs.db
 Desktop.ini
 
-# --- Secrets & env (keep .env.example) ---
+# --- Secrets & env (example is committed; real .env is not) ---
 .env
+!.env.example
 .env.local
 .env.*.local
 *.pem

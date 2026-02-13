@@ -122,6 +122,7 @@ Our specific snippet handles the "boring" parts of server setup so you can get s
 
 - **Security & Users:** It creates a user named `mazora`, grants them `sudo` privileges without requiring a password for commands, and locks the default root account for better security.
 - **The Docker Engine:** It adds the official Docker repository (rather than the older versions found in default Linux repos) and installs the latest version of Docker CE and Docker Compose.
+- **Homelab Repo:** On first boot it clones this homelab repository to `/opt/self-hosting` (latest at provision time) and creates a symlink `~/self-hosting` in your home directory so the repo is visible as soon as you log in. No manual `git clone` per VM—you can go straight to `cd ~/self-hosting/docker_compose/<vm>` and run `./bootstrap.sh`.
 - **System Health:** * **QEMU Guest Agent:** Vital for Proxmox to "talk" to the VM (reporting IP addresses and allowing graceful shutdowns).
     - **Log Rotation:** We limit Docker logs to **50MB**. Without this, runaway logs can eventually fill your entire virtual disk and crash the VM.
     - **Swap File:** We create a **2GB swap file**. This acts as a "safety net" for memory; if a Docker build suddenly spikes in RAM usage, the VM will use the swap space instead of crashing.
@@ -184,14 +185,23 @@ runcmd:
   - systemctl enable --now docker
   - systemctl enable --now qemu-guest-agent
   - systemctl enable --now avahi-daemon
-  
+
+  # Homelab repo: first boot only → latest at provision time. Symlink in home so it's visible when you log in.
+  - mkdir -p /opt
+  - |
+    if [ ! -d /opt/self-hosting/.git ]; then
+      git clone --depth 1 "https://github.com/amazor/Self-Hosting.git" /opt/self-hosting
+      chown -R mazora:mazora /opt/self-hosting
+    fi
+    [ -d /opt/self-hosting/.git ] && ln -sfn /opt/self-hosting /home/mazora/self-hosting
+
   # Set up a 2GB Swap file to prevent crashes during heavy builds
   - fallocate -l 2G /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  
+
   # Set swappiness to 10 (Last Resort mode)
   - sysctl vm.swappiness=10
   - echo 'vm.swappiness=10' >> /etc/sysctl.conf
@@ -224,6 +234,8 @@ runcmd:
     - `path: /etc/docker/daemon.json`: Creates a configuration file for the Docker engine.
     - `"max-size": "50m"`: Tells Docker that once a container's log file reaches 50MB, it's time to start a new one.
     - `"max-file": "3"`: Limits Docker to keeping only the 3 most recent log files. This prevents a "chatty" container from filling up your entire virtual hard drive.
+- **Homelab Repo & Symlink**
+    - On first boot, if `/opt/self-hosting` is not already a git repo, the snippet clones this repository (e.g. `https://github.com/amazor/Self-Hosting.git`) to `/opt/self-hosting` and sets ownership to `mazora`. It then creates a symlink `~/self-hosting` → `/opt/self-hosting` so the repo appears in your home directory when you log in. You get the latest `main` at provision time without baking the repo into the template; for a private repo, use an SSH URL and inject a deploy key via a separate Cloud-Init snippet or clone in the per-VM bootstrap.
 - **Performance & Swap Tuning**
     - `fallocate -l 2G /swapfile`: Reserves 2GB of space on the hard drive to act as "emergency RAM."
     - `mkswap` & `swapon`: Formats that 2GB space as Swap and activates it immediately.
@@ -259,7 +271,7 @@ Copy this script into your Proxmox Shell. It is **idempotent**, meaning it will 
 
 # Configuration (Change these or pass as arguments)
 VM_ID=${1:-9000}
-VM_NAME=${2:-debian-13-template}
+VM_NAME=${2:-debian-13-docker-cloudinit}
 STORAGE=${3:-local-lvm}
 USER_NAME="mazora"
 IMG_URL="https://cloud.debian.org/images/cloud/trixie/latest/debian-13-genericcloud-amd64.qcow2"
@@ -325,8 +337,8 @@ The script puts the template’s disk on the storage you pass as the third argum
 
 | Install type | Typical VM disk storage | Run script with |
 |--------------|--------------------------|-----------------|
-| **ext4** (single disk) | `local-lvm` (LVM thin) | `./create_template.sh` or `./create_template.sh 9000 debian-13-template local-lvm` |
-| **ZFS** (e.g. two drives, RAID1) | `local-zfs` | `./create_template.sh 9000 debian-13-template local-zfs` |
+| **ext4** (single disk) | `local-lvm` (LVM thin) | `./create_template.sh` or `./create_template.sh 9000 debian-13-docker-cloudinit local-lvm` |
+| **ZFS** (e.g. two drives, RAID1) | `local-zfs` | `./create_template.sh 9000 debian-13-docker-cloudinit local-zfs` |
 
 To see what you have, on the Proxmox host run:
 
@@ -348,7 +360,7 @@ Use the **Name** of the storage that holds VM disks (e.g. `local-lvm` or `local-
 
 ```sh
 # Syntax: ./create_template.sh [ID] [NAME] [STORAGE]
-./create_template.sh 9000 debian-13-template local-zfs
+./create_template.sh 9000 debian-13-docker-cloudinit local-zfs
 ```
 
 The script checks that the chosen storage exists before creating the VM; if it doesn’t, it exits with a clear message.
@@ -408,6 +420,8 @@ docker --version && systemctl status qemu-guest-agent --no-pager && free -h
 - **Guest Agent:** A green `active (running)` status.
 - **Swap:** A line showing `Swap: 2.0Gi` at the bottom of the memory report.
 
+You should also see the homelab repo: `ls ~/self-hosting` (or `/opt/self-hosting`) will show `docs/`, `docker_compose/`, `proxmox/`, etc. That’s your field manual and compose stacks—no manual `git clone` needed.
+
 ---
 
 ## 🧠 Philosophy & FAQ: The "Why" Behind the Defaults
@@ -449,5 +463,5 @@ In any homelab journey, the "Hardcoded Defaults" are rarely accidental. They rep
 
 **Q: Clone fails with "no such logical volume pve/vm-9000-disk-0"?**
 * **A:** Proxmox is looking for an LVM volume that isn’t there. Common cases:
-  * **You use ZFS:** There is no `local-lvm`. Delete template 9000 and recreate with `./create_template.sh 9000 debian-13-template local-zfs`, then add SSH key and convert to template again.
+  * **You use ZFS:** There is no `local-lvm`. Delete template 9000 and recreate with `./create_template.sh 9000 debian-13-docker-cloudinit local-zfs`, then add SSH key and convert to template again.
   * **You have LVM:** Check `qm config 9000` and `lvs`. If `scsi0` points to `base-9000-disk-0` but `efidisk0` points to `vm-9000-disk-0`, the **EFI disk** volume is missing (it can be dropped when the template was converted with an older script order). Fix: delete the template VM (9000), run the script again (it now creates the main disk before the EFI disk so both survive “Convert to Template”), then add your SSH key and convert to template. Clones will work after that.

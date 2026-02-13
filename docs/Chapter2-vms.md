@@ -77,7 +77,7 @@ I use a simple VMID range scheme so the Proxmox UI stays readable over time.
 **Current mapping**
 | VM | VMID | Notes |
 |----|------|------|
-| `debian-13-template` | 9000 | Cloud-Init template (do not run directly) |
+| `debian-13-docker-cloudinit` | 9000 | Cloud-Init Docker host template (do not run directly) |
 | `core` | 110 | reverse proxy, SSO, DNS |
 | `monitoring` | 120 | Grafana, Uptime Kuma, etc. |
 | `apps` | 210 | general user apps |

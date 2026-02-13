@@ -1,0 +1,141 @@
+# Media VM — Core automation pipeline (Chapter 2C)
+#
+# Services: VPN (Gluetun) → qBittorrent (via VPN) → Sonarr, Radarr, Prowlarr, FlareSolverr
+# Storage: Single media root (e.g. /mnt/media) so downloads and library share one filesystem
+#         for hardlinks and seeding. See docs/Chapter2c-media.md.
+#
+# Paths: Set MEDIA_ROOT and CONFIG_ROOT via .env or override here.
+#        Defaults assume MEDIA_ROOT=/mnt/media and config next to this file.
+
+services:
+  # --- VPN (Gluetun) — Torrent traffic must exit through VPN only ---
+  # qBittorrent attaches via network_mode: service:vpn and shares this container's network.
+  # Docs: https://github.com/qdm12/gluetun-wiki
+  # ExpressVPN: https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/expressvpn.md
+  vpn:
+    image: qmcgaw/gluetun
+    container_name: vpn
+    cap_add:
+      - NET_ADMIN
+    devices:
+      - /dev/net/tun:/dev/net/tun
+    # Ports exposed on the VPN container are used by qBittorrent (network_mode: service:vpn).
+    # 8080 = qBittorrent Web UI, 6881 = BitTorrent TCP/UDP (change in qBittorrent env too).
+    ports:
+      - "8080:8080/tcp"   # qBittorrent Web UI
+      - "6881:6881/tcp"   # BitTorrent
+      - "6881:6881/udp"   # BitTorrent
+    # Optional: persist Gluetun state (e.g. server list cache).
+    # volumes:
+    #   - ${CONFIG_ROOT:-./config}/gluetun:/gluetun
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+      # --- ExpressVPN (required) ---
+      - VPN_SERVICE_PROVIDER=expressvpn
+      - OPENVPN_USER=${OPENVPN_USER:-}
+      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD:-}
+      # --- Optional: restrict to country/city (comma-separated) ---
+      # - SERVER_COUNTRIES=Netherlands
+      # - SERVER_CITIES=Amsterdam
+      # - SERVER_HOSTNAMES=  # narrowest filter; avoid if you want auto server updates
+      # --- Optional: protocol ---
+      # - VPN_TYPE=openvpn
+      # - VPN_PROTOCOL=udp
+      # --- Optional: built-in proxies (uncomment ports above if you use these) ---
+      # - HTTPPROXY_PORT=8888
+      # - SHADOWSOCKS_PORT=8388
+    restart: unless-stopped
+
+  # --- qBittorrent — Torrent client (all traffic via VPN) ---
+  # Uses the VPN container's network stack so all torrent traffic is routed through VPN.
+  # LinuxServer image: https://docs.linuxserver.io/images/docker-qbittorrent
+  qbittorrent:
+    image: lscr.io/linuxserver/qbittorrent:latest
+    container_name: qbittorrent
+    network_mode: service:vpn
+    depends_on:
+      - vpn
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+      # Web UI and torrent ports must match what the vpn service exposes (see vpn.ports).
+      - WEBUI_PORT=8080
+      - TORRENTING_PORT=6881
+    volumes:
+      - ${CONFIG_ROOT:-./config}/qbittorrent:/config
+      # Single mount for qBittorrent's workspace; set completed/incomplete in qBittorrent UI
+      # to /downloads/completed and /downloads/incomplete (same path layout as host).
+      - ${MEDIA_ROOT:-/mnt/media}/downloads/qbittorrent:/downloads
+    restart: unless-stopped
+
+  # --- Sonarr — TV automation ---
+  # LinuxServer: https://docs.linuxserver.io/images/docker-sonarr
+  # Servarr Docker guide: https://wiki.servarr.com/docker-guide
+  sonarr:
+    image: lscr.io/linuxserver/sonarr:latest
+    container_name: sonarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/sonarr:/config
+      # Same filesystem as downloads so Sonarr can hardlink when importing (keeps seeding).
+      - ${MEDIA_ROOT:-/mnt/media}/library/tv:/tv
+      - ${MEDIA_ROOT:-/mnt/media}/library/anime:/anime
+      - ${MEDIA_ROOT:-/mnt/media}/downloads:/downloads
+    ports:
+      - "8989:8989"
+    restart: unless-stopped
+
+  # --- Radarr — Movie automation ---
+  # LinuxServer: https://docs.linuxserver.io/images/docker-radarr
+  radarr:
+    image: lscr.io/linuxserver/radarr:latest
+    container_name: radarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/radarr:/config
+      - ${MEDIA_ROOT:-/mnt/media}/library/movies:/movies
+      - ${MEDIA_ROOT:-/mnt/media}/downloads:/downloads
+    ports:
+      - "7878:7878"
+    restart: unless-stopped
+
+  # --- Prowlarr — Indexer management for Sonarr/Radarr ---
+  # No media volumes; only config. Sync indexers to *arrs via Prowlarr UI.
+  # LinuxServer: https://docs.linuxserver.io/images/docker-prowlarr
+  prowlarr:
+    image: lscr.io/linuxserver/prowlarr:latest
+    container_name: prowlarr
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/prowlarr:/config
+    ports:
+      - "9696:9696"
+    restart: unless-stopped
+
+  # --- FlareSolverr — Anti-bot / Cloudflare bypass for protected indexers ---
+  # Prowlarr (or indexers) can use this to solve challenges. Not required for all setups.
+  # https://github.com/FlareSolverr/FlareSolverr
+  flaresolverr:
+    image: ghcr.io/flaresolverr/flaresolverr:latest
+    container_name: flaresolverr
+    environment:
+      - LOG_LEVEL=${FLARESOLVERR_LOG_LEVEL:-info}
+      # - LOG_FILE=/config/log.txt  # optional; omit or set to "none" for stdout only
+      - LOG_HTML=false
+      - CAPTCHA_SOLVER=none
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/flaresolverr:/config
+    ports:
+      - "8191:8191"
+    restart: unless-stopped

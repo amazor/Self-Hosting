@@ -50,14 +50,23 @@ runcmd:
   - systemctl enable --now docker
   - systemctl enable --now qemu-guest-agent
   - systemctl enable --now avahi-daemon
-  
+
+  # Homelab repo: first boot only → latest at provision time. Symlink in home so it's visible when you log in.
+  - mkdir -p /opt
+  - |
+    if [ ! -d /opt/self-hosting/.git ]; then
+      git clone --depth 1 "https://github.com/amazor/Self-Hosting.git" /opt/self-hosting
+      chown -R mazora:mazora /opt/self-hosting
+    fi
+    [ -d /opt/self-hosting/.git ] && ln -sfn /opt/self-hosting /home/mazora/self-hosting
+
   # Set up a 2GB Swap file to prevent crashes during heavy builds
   - fallocate -l 2G /swapfile
   - chmod 600 /swapfile
   - mkswap /swapfile
   - swapon /swapfile
   - echo '/swapfile none swap sw 0 0' >> /etc/fstab
-  
+
   # Set swappiness to 10 (Last Resort mode)
   - sysctl vm.swappiness=10
   - echo 'vm.swappiness=10' >> /etc/sysctl.conf
