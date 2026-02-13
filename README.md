@@ -66,7 +66,10 @@ This journey is written as chronological chapters.
 - **[Chapter 2C: Media VM](docs/Chapter2c-media.md)**  
   Media automation pipeline: *arr stack, qBittorrent, VPN, storage design, optional layers.
 
-> **Chapter 3 (WIP):** How to deploy services — deploy script (`./scripts/deploy.sh`), bootstrap, per-stack `.env`, and shell helpers (`media`, `stack`). Upcoming chapters will also cover Docker Compose workflow, storage mounts (NFS), and the per-VM bootstrap approach in detail.
+- **[Chapter 3A: Core Stack](docs/Chapter3a-core-stack.md)**  
+  Core VM stack: `.env`, compose, bootstrap, Caddyfile generation, and deploy (`./deploy.sh core`).
+
+> **Chapter 3 (WIP):** Full deploy design — deploy script (`./deploy.sh`), bootstrap, per-stack `.env`, and shell helpers (`media`, `stack`). Upcoming chapters will cover Docker Compose workflow, storage mounts (NFS), and the per-VM bootstrap approach in detail.
 
 ---
 
@@ -84,7 +87,7 @@ I keep the template generic. Anything role-specific is done *per VM*.
 The intended first-time flow inside a VM (repo is already at `/opt/self-hosting` via Cloud-Init; see Chapter 1):
 
 1. Create `.env` from `.env.example` in the stack directory (e.g. `docker_compose/media/`). Configure required vars and optional `ENABLE_*` as needed. Deploy does **not** copy `.env` for you — you create it explicitly.
-2. From the repo root: `./scripts/deploy.sh <stack>` (e.g. `./scripts/deploy.sh media`). Deploy runs the stack’s bootstrap, creates a symlink (e.g. `~/media`), starts the stack, and installs shell helpers (`media`, `stack`).
+2. From the repo root: `./deploy.sh <stack>` (e.g. `./deploy.sh media`). Deploy runs the stack’s bootstrap, creates a symlink (e.g. `~/media`), starts the stack, and installs shell helpers (`media`, `stack`).
 3. Source `~/.bashrc` or open a new shell; use `media up -d`, `media logs -f`, or `media boot` (Buildarr/Recyclarr) as needed.
 
 The **bootstrap** script (invoked by deploy) handles VM-specific setup such as optional **NFS mounts** and config dirs. Deploy owns symlinks, state, validation, and shell UX. Full deploy/bootstrap flow will be documented in Chapter 3.
@@ -117,7 +120,7 @@ Everything else stays private and is reachable through the reverse proxy (and ad
 This repo is intentionally split between:
 - **docs/** (the journey + reasoning)
 - **proxmox/** (hypervisor/template automation)
-- **docker_compose/** (per-VM stacks + bootstrap) *(planned / coming next)*
+- **docker_compose/** (per-VM stacks + bootstrap; core and media are documented in Chapter 3A and Chapter 2C)
 
 ```text
 .
@@ -126,6 +129,8 @@ This repo is intentionally split between:
 │   ├── Chapter1-proxmox.md
 │   ├── Chapter2-vms.md
 │   ├── Chapter2a-core.md
+│   ├── Chapter2c-media.md
+│   ├── Chapter3a-core-stack.md
 │   └── ... (more chapters as the journey continues)
 │
 ├── proxmox/
@@ -134,7 +139,8 @@ This repo is intentionally split between:
 │   └── snippets/
 │       └── ... (Cloud-Init snippets / common config)
 │
-├── docker_compose/                     # (planned / introduced in the Compose chapter)
+├── deploy.sh                            # stack deploy: ./deploy.sh core | media | ...
+├── docker_compose/                     # per-VM stacks (core, media, etc.)
 │   ├── core/
 │   │   ├── compose.yml
 │   │   ├── .env.example
@@ -165,7 +171,8 @@ This repo is intentionally split between:
 ✅ VM architecture (Chapter 2)
 ✅ Core VM design (Chapter 2A)
 ✅ Media VM design (Chapter 2C)
-🔜 Docker Compose workflow + bootstrap scripts
+✅ Core stack deploy (Chapter 3A: .env, compose, bootstrap, deploy.sh)
+🔜 Full Docker Compose workflow doc (Chapter 3) + bootstrap scripts
 🔜 Storage strategy (NFS mounts, permissions, boundaries)
 🔜 Monitoring (Chapter 2B), accelerated workloads (Chapter 2D)
 

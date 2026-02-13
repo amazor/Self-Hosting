@@ -454,7 +454,7 @@ The goal is simplicity without hiding structure.
 
 `.env` is the single place to declare intent: set `ENABLE_BUILDARR_RECYCLARR=1`, `ENABLE_CLEANUPARR=1`, `ENABLE_SABNZBD=1`, `ENABLE_BAZARR=1`, `ENABLE_NTFY=1` as needed. After deploy, a shell helper (`media`) picks the right compose files from these so you don’t type multiple `-f` by hand; the overlays stay visible in the repo.
 
-Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `./scripts/deploy.sh media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS and config dirs. Full deploy/bootstrap flow is documented in Chapter 3 (WIP).
+Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `./deploy.sh media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS and config dirs. Full deploy/bootstrap flow is documented in Chapter 3 (WIP). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
 
 ---
 

@@ -243,8 +243,6 @@ The full Compose strategy and a universal snippet live in **Chapter 3** *(planne
 
 ---
 
----
-
 ## The Practical Step: Spinning Up the VMs (From the Template)
 
 [Chapter 1](Chapter1-proxmox.md) builds the Cloud-Init Docker template.  
@@ -316,13 +314,16 @@ Follow these steps for **each** VM, using the VMID and name from the Per-VM tabl
    - Ensure your SSH key is present in Cloud-Init
    - Keep DHCP for now (the architecture relies on DNS names, not static addressing)
 
-4. **Boot + verify**
+4. **Boot the VM and wait for first-boot setup**
+   - After the VM boots, Cloud-Init and any bootstrap scripts (e.g. adding your user to the `docker` group, cloning the self-hosted repo) can take a minute or two.
+   - **Recommendation:** wait 1–2 minutes before logging in or running verify. If you log in too soon, your user might not yet be in the `docker` group and the repo may not be present yet.
+
+5. **Verify + snapshot**
+   - Run:
    ```bash
    docker --version && systemctl status qemu-guest-agent --no-pager && free -h
    ```
-5. **Snapshot the “fresh provisioned” state**
-   - Take a snapshot once the VM is healthy and reachable
-   - This becomes your clean rollback anchor before you start deploying stacks
+   - Take a snapshot once the VM is healthy and reachable; this becomes your clean rollback anchor before you start deploying stacks.
 
 **Next:** Use the "After cloning" column in the Per-VM table to jump to the subchapter for that VM (stack setup, bootstrap, etc.).
 
