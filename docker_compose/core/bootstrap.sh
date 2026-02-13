@@ -1,54 +1,75 @@
 #!/usr/bin/env bash
-# Core VM — first-run bootstrap (idempotent)
-# Usage: cd docker_compose/core && ./bootstrap.sh [--up] [--force]
+# Core VM bootstrap (idempotent).
 #
-# Responsibilities:
-#   1) Ensure .env exists (copy from .env.example on first run)
-#   2) Validate critical env values (secrets/passwords not left as placeholders)
-#   3) Create config directories for Caddy, Authentik, Postgres, Redis, dnsmasq
-#   4) Create starter Caddyfile and dnsmasq.conf if missing
-#   5) Optionally run docker compose up -d
+# Owns:
+#   - creating/validating local .env for this stack
+#   - creating core config directories and starter files
+#   - validating compose syntax
+#   - optional local bring-up with --up
+#
+# Does NOT own:
+#   - symlinks, shell helper functions, or cross-stack orchestration (deploy.sh)
+#
+# Usage examples:
+#   cd docker_compose/core && ./bootstrap.sh
+#   cd docker_compose/core && ./bootstrap.sh --up
+#   cd docker_compose/core && ./bootstrap.sh --force
 
 set -e
 
+# ---------------------------
+# constants and defaults
+# ---------------------------
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+COMPOSE_FILE="$SCRIPT_DIR/compose.yml"
+ENV_FILE="$SCRIPT_DIR/.env"
+ENV_EXAMPLE="$SCRIPT_DIR/.env.example"
+
 FORCE=0
 BRING_UP=0
-for arg in "$@"; do
-  [[ "$arg" = "--force" ]] && FORCE=1
-  [[ "$arg" = "--up" ]] && BRING_UP=1
-done
 
-SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-cd "$SCRIPT_DIR"
+# ---------------------------
+# usage and argument parsing
+# ---------------------------
+usage() {
+  cat <<EOF
+Usage:
+  ./bootstrap.sh [flags]
 
-echo "--- Core VM bootstrap ---"
+Flags:
+  --up         Start stack after bootstrap checks complete.
+  --force      Skip placeholder guardrails for local testing.
+  --help, -h   Show this help text.
+EOF
+}
 
-# --- Prereqs ---
-if ! command -v docker >/dev/null 2>&1; then
-  echo "Docker is not installed. Install Docker Engine first."
-  exit 1
-fi
-if ! docker compose version >/dev/null 2>&1; then
-  echo "docker compose plugin not found. Install Docker Compose v2 plugin."
-  exit 1
-fi
+parse_args() {
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --up)
+        BRING_UP=1
+        shift
+        ;;
+      --force)
+        FORCE=1
+        shift
+        ;;
+      --help|-h)
+        usage
+        exit 0
+        ;;
+      *)
+        echo "Unknown option: $1" >&2
+        usage >&2
+        exit 1
+        ;;
+    esac
+  done
+}
 
-# --- Env init ---
-if [[ ! -f .env ]]; then
-  if [[ -f .env.example ]]; then
-    cp .env.example .env
-    echo "Created .env from .env.example."
-    echo "Edit .env with real values, then rerun bootstrap."
-    exit 1
-  else
-    echo "Missing .env.example; cannot initialize .env."
-    exit 1
-  fi
-fi
-
-# shellcheck source=/dev/null
-set -a && source ./.env && set +a
-
+# ---------------------------
+# helper functions
+# ---------------------------
 _is_placeholder() {
   local val="$1"
   [[ -z "$val" ]] && return 0
@@ -57,44 +78,83 @@ _is_placeholder() {
   return 1
 }
 
-# --- Guardrails ---
-if [[ "$FORCE" -ne 1 ]]; then
+require_prereqs() {
+  if ! command -v docker >/dev/null 2>&1; then
+    echo "Docker is not installed. Install Docker Engine first." >&2
+    exit 1
+  fi
+  if ! docker compose version >/dev/null 2>&1; then
+    echo "docker compose plugin not found. Install Docker Compose v2 plugin." >&2
+    exit 1
+  fi
+}
+
+prepare_env_file() {
+  if [[ -f "$ENV_FILE" ]]; then
+    return 0
+  fi
+  if [[ ! -f "$ENV_EXAMPLE" ]]; then
+    echo "Missing $ENV_EXAMPLE; cannot initialize .env." >&2
+    exit 1
+  fi
+
+  cp "$ENV_EXAMPLE" "$ENV_FILE"
+  echo "Created .env from .env.example."
+  echo "Fill real values in $ENV_FILE, then re-run bootstrap."
+  exit 1
+}
+
+load_env() {
+  set -a
+  # shellcheck source=/dev/null
+  source "$ENV_FILE"
+  set +a
+}
+
+validate_guardrails() {
+  [[ "$FORCE" -eq 1 ]] && return 0
+
   if _is_placeholder "${AUTHENTIK_SECRET_KEY:-}"; then
-    echo "AUTHENTIK_SECRET_KEY is missing/placeholder in .env."
-    echo "Generate one with: openssl rand -base64 60"
+    echo "AUTHENTIK_SECRET_KEY is missing/placeholder in .env." >&2
+    echo "Generate one with: openssl rand -base64 60" >&2
     exit 1
   fi
   if _is_placeholder "${AUTHENTIK_POSTGRES_PASSWORD:-}"; then
-    echo "AUTHENTIK_POSTGRES_PASSWORD is missing/placeholder in .env."
+    echo "AUTHENTIK_POSTGRES_PASSWORD is missing/placeholder in .env." >&2
     exit 1
   fi
   if _is_placeholder "${PUBLIC_BASE_DOMAIN:-}"; then
-    echo "PUBLIC_BASE_DOMAIN still looks like example value."
-    echo "Set your real domain, or rerun with --force for local testing."
+    echo "PUBLIC_BASE_DOMAIN still looks like an example value." >&2
+    echo "Set your real domain, or use --force only for local testing." >&2
     exit 1
   fi
-fi
+}
 
-# --- Directories ---
-CONFIG_BASE="${CONFIG_ROOT:-./config}"
-[[ "$CONFIG_BASE" != /* ]] && CONFIG_BASE="$SCRIPT_DIR/$CONFIG_BASE"
+ensure_config_directories() {
+  CONFIG_BASE="${CONFIG_ROOT:-./config}"
+  [[ "$CONFIG_BASE" != /* ]] && CONFIG_BASE="$SCRIPT_DIR/$CONFIG_BASE"
 
-mkdir -p \
-  "$CONFIG_BASE/caddy" \
-  "$CONFIG_BASE/caddy/data" \
-  "$CONFIG_BASE/caddy/config" \
-  "$CONFIG_BASE/caddy/site" \
-  "$CONFIG_BASE/authentik/media" \
-  "$CONFIG_BASE/authentik/custom-templates" \
-  "$CONFIG_BASE/authentik/postgresql" \
-  "$CONFIG_BASE/authentik/redis" \
-  "$CONFIG_BASE/dnsmasq"
+  mkdir -p \
+    "$CONFIG_BASE/caddy" \
+    "$CONFIG_BASE/caddy/data" \
+    "$CONFIG_BASE/caddy/config" \
+    "$CONFIG_BASE/caddy/site" \
+    "$CONFIG_BASE/authentik/media" \
+    "$CONFIG_BASE/authentik/custom-templates" \
+    "$CONFIG_BASE/authentik/postgresql" \
+    "$CONFIG_BASE/authentik/redis" \
+    "$CONFIG_BASE/dnsmasq"
 
-echo "Ensured config directories under: $CONFIG_BASE"
+  echo "Ensured config directories under: $CONFIG_BASE"
+}
 
-# --- Starter Caddyfile (only if missing) ---
-CADDYFILE_PATH="$CONFIG_BASE/caddy/Caddyfile"
-if [[ ! -f "$CADDYFILE_PATH" ]]; then
+ensure_starter_caddyfile() {
+  CADDYFILE_PATH="$CONFIG_BASE/caddy/Caddyfile"
+  if [[ -f "$CADDYFILE_PATH" ]]; then
+    echo "Caddyfile already exists; not overwriting."
+    return 0
+  fi
+
   cat > "$CADDYFILE_PATH" <<EOF
 {
   # Keep ops noise low while retaining enough detail for troubleshooting.
@@ -114,13 +174,20 @@ ${WHOAMI_FQDN} {
 }
 EOF
   echo "Created starter Caddyfile: $CADDYFILE_PATH"
-else
-  echo "Caddyfile already exists; not overwriting."
-fi
+}
 
-# --- Starter dnsmasq config (only if missing) ---
-DNSMASQ_CONF_PATH="$CONFIG_BASE/dnsmasq/dnsmasq.conf"
-if [[ ! -f "$DNSMASQ_CONF_PATH" ]]; then
+ensure_starter_dnsmasq_conf() {
+  local old_ifs
+  local pair
+  local host
+  local ip
+
+  DNSMASQ_CONF_PATH="$CONFIG_BASE/dnsmasq/dnsmasq.conf"
+  if [[ -f "$DNSMASQ_CONF_PATH" ]]; then
+    echo "dnsmasq.conf already exists; not overwriting."
+    return 0
+  fi
+
   {
     echo "# dnsmasq starter config (generated by bootstrap.sh)"
     echo "# Keep this file small and explicit for predictable operations."
@@ -138,7 +205,7 @@ if [[ ! -f "$DNSMASQ_CONF_PATH" ]]; then
     echo "# address=/apps.${DNS_LOCAL_DOMAIN:-lab.arpa}/192.168.1.120"
     echo "# address=/media.${DNS_LOCAL_DOMAIN:-lab.arpa}/192.168.1.130"
     if [[ -n "${DNS_LOCAL_RECORDS:-}" ]]; then
-      OLD_IFS="$IFS"
+      old_ifs="$IFS"
       IFS=','
       for pair in $DNS_LOCAL_RECORDS; do
         host="${pair%%:*}"
@@ -147,25 +214,44 @@ if [[ ! -f "$DNSMASQ_CONF_PATH" ]]; then
           echo "address=/${host}.${DNS_LOCAL_DOMAIN:-lab.arpa}/${ip}"
         fi
       done
-      IFS="$OLD_IFS"
+      IFS="$old_ifs"
     fi
   } > "$DNSMASQ_CONF_PATH"
+
   echo "Created starter dnsmasq config: $DNSMASQ_CONF_PATH"
-else
-  echo "dnsmasq.conf already exists; not overwriting."
-fi
+}
 
-# --- Validate compose ---
-if ! docker compose -f "$SCRIPT_DIR/compose.yml" config >/dev/null; then
-  echo "docker compose config validation failed."
-  exit 1
-fi
-echo "Compose file validates successfully."
+validate_compose() {
+  if ! docker compose -f "$COMPOSE_FILE" config >/dev/null; then
+    echo "docker compose config validation failed." >&2
+    exit 1
+  fi
+  echo "Compose file validates successfully."
+}
 
-if [[ "$BRING_UP" -eq 1 ]]; then
-  echo "Starting core stack..."
-  docker compose -f "$SCRIPT_DIR/compose.yml" up -d
-  echo "Core stack started."
-else
-  echo "Bootstrap complete. Run 'docker compose up -d' when ready."
-fi
+maybe_bring_up_stack() {
+  if [[ "$BRING_UP" -eq 1 ]]; then
+    echo "Starting core stack..."
+    docker compose -f "$COMPOSE_FILE" up -d
+    echo "Core stack started."
+  else
+    echo "Bootstrap complete. Run 'docker compose up -d' when ready."
+  fi
+}
+
+# ---------------------------
+# main
+# ---------------------------
+cd "$SCRIPT_DIR"
+echo "--- Core VM bootstrap ---"
+
+parse_args "$@"
+require_prereqs
+prepare_env_file
+load_env
+validate_guardrails
+ensure_config_directories
+ensure_starter_caddyfile
+ensure_starter_dnsmasq_conf
+validate_compose
+maybe_bring_up_stack

@@ -12,6 +12,11 @@ set -e
 # --- Phase 0: safety + assumptions ---
 # Re-exec as root if not root (for fstab, chown, etc.)
 if [[ $EUID -ne 0 ]]; then
+  # Preserve deploy-driven non-interactive intent across sudo re-exec.
+  # sudo often strips custom env vars unless configured to keep them.
+  if [[ -n "${HOMELAB_DEPLOY:-}" ]]; then
+    exec sudo "$0" --non-interactive "$@"
+  fi
   exec sudo "$0" "$@"
 fi
 
@@ -27,17 +32,6 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 VM_ROLE="media"
 DEFAULT_MOUNT_PATH="/mnt/media"
 COMPOSE_BASE="$SCRIPT_DIR/compose.yml"
-
-# Build overlay -f list from ENABLE_* (after .env is loaded). Echo to stdout for capture.
-_build_compose_files() {
-  local files="-f $SCRIPT_DIR/compose.yml"
-  [[ "${ENABLE_BUILDARR_RECYCLARR:-0}" = "1" ]] && files="$files -f $SCRIPT_DIR/compose.buildarr-recyclarr.yml"
-  [[ "${ENABLE_CLEANUPARR:-0}" = "1" ]]         && files="$files -f $SCRIPT_DIR/compose.cleanuparr.yml"
-  [[ "${ENABLE_SABNZBD:-0}" = "1" ]]            && files="$files -f $SCRIPT_DIR/compose.sabnzbd.yml"
-  [[ "${ENABLE_BAZARR:-0}" = "1" ]]             && files="$files -f $SCRIPT_DIR/compose.bazarr.yml"
-  [[ "${ENABLE_NTFY:-0}" = "1" ]]               && files="$files -f $SCRIPT_DIR/compose.ntfy.yml"
-  echo "$files"
-}
 
 # VPN guardrail: base stack must route torrent traffic via VPN (no direct egress).
 # Check: compose.yml has "vpn" service and qbittorrent uses network_mode: service:vpn.
@@ -103,7 +97,7 @@ if [[ "$WANT_NFS" =~ ^[yY] ]]; then
   fi
 
   if [[ -n "$NAS_HOST" ]] && [[ -n "$EXPORT_PATH" ]]; then
-    FSTAB_SPEC="$NAS_HOST:${EXPORT_PATH#/}"
+    FSTAB_SPEC="$NAS_HOST:$EXPORT_PATH"
     FSTAB_LINE="${FSTAB_SPEC}\t${MOUNT_PATH}\tnfs\tnofail,_netdev,x-systemd.automount,timeout=10,vers=4,${NFS_RO}\t0\t0"
     if grep -qF "$MOUNT_PATH" /etc/fstab 2>/dev/null; then
       echo "Mount for $MOUNT_PATH already in /etc/fstab; skipping."
