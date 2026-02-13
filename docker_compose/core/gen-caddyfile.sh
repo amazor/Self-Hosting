@@ -152,11 +152,24 @@ trap 'rm -f "$tmp"' EXIT
   echo "  reverse_proxy authentik-server:9000"
   echo "}"
   echo ""
-  echo "# whoami debug endpoint"
+  # whoami: force Content-Type text/plain (no + so we overwrite upstream; XSS mitigation). Optional IP allowlist.
+  echo "# whoami debug endpoint (text/plain enforced; optional IP allowlist)"
   echo "${WHOAMI_FQDN:-whoami.example.com} {"
   echo "${tls_line}"
   echo "  encode zstd gzip"
-  echo "  reverse_proxy whoami:80"
+  if [[ -n "${WHOAMI_ALLOW_CIDRS:-}" ]]; then
+    echo "  @whoami_allowed remote_ip $WHOAMI_ALLOW_CIDRS"
+    echo "  handle @whoami_allowed {"
+    echo "    header Content-Type text/plain"
+    echo "    reverse_proxy whoami:80"
+    echo "  }"
+    echo "  handle {"
+    echo "    respond 403"
+    echo "  }"
+  else
+    echo "  header Content-Type text/plain"
+    echo "  reverse_proxy whoami:80"
+  fi
   echo "}"
 
   if [[ -n "${CADDY_EXTRA_SERVICES:-}" ]]; then

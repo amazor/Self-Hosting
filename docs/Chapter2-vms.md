@@ -19,6 +19,8 @@ The deeper “why did I choose *this* specific app” reasoning lives in the fol
 - [Chapter 2C (media)](Chapter2c-media.md)
 - **Chapter 2D** (`accelerated`) *(planned)*
 
+Stack configuration and deployment (env, compose, bootstrap, deploy) for the core VM: [Chapter 3A (core stack)](Chapter3a-core-stack.md).
+
 > ### 🧠 Philosophy: Boring Infrastructure, Flexible Workloads
 > Foundational services should feel appliance-like: stable, predictable, and rarely changed.
 > Workloads should be easy to iterate on, rebuild, and replace without threatening access to the lab.
@@ -237,7 +239,7 @@ Rather than inventing a new pattern per VM, I’m going to treat these as **univ
 - predictable behavior across VMs
 
 This chapter introduces the concept only.
-The full Compose strategy and a universal snippet live in **Chapter 3** *(planned)*.
+The full Compose strategy and a universal snippet live in **Chapter 3** *(planned)*. For the core stack in detail — `.env`, compose, bootstrap, and deployment — see [Chapter 3A (core stack)](Chapter3a-core-stack.md).
 
 ---
 

@@ -24,6 +24,8 @@ When this VM is healthy, the rest of the system feels coherent. When it isn’t,
 ## Table of contents
 - [Provisioning the Core VM](#provisioning-the-core-vm-from-the-template)
 - [What the Core VM is responsible for](#what-the-core-vm-is-responsible-for)
+  - [Request flow (at a glance)](#request-flow-at-a-glance)
+  - [How the core stack works together](#how-the-core-stack-works-together)
 - [Why these services belong together](#why-these-services-belong-together)
 - [Design constraints](#design-constraints)
 - [App selection](#app-selection)
@@ -36,7 +38,7 @@ When this VM is healthy, the rest of the system feels coherent. When it isn’t,
 
 The Core VM is the only VM that the internet touches. It deserves an intentional baseline.
 
-**Full procedure:** The generic clone steps (template 9000, Cloud-Init, verify, snapshot) live in [Chapter 2 → Spinning Up the VMs](Chapter2-vms.md#the-practical-step-spinning-up-the-vms-from-the-template). Below are the values for **core** only.
+**Full procedure:** The generic clone steps (template 9000, Cloud-Init, verify, snapshot) live in [Chapter 2 → Spinning Up the VMs](Chapter2-vms.md#the-practical-step-spinning-up-the-vms-from-the-template). Below are the values for **core** only. For configuring and deploying the core Docker stack (`.env`, compose, bootstrap, deploy), see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
 
 **VMID + name**
 - `110` → `core`
@@ -58,7 +60,7 @@ The Core VM is the only VM that the internet touches. It deserves an intentional
 
 ## What the Core VM is responsible for
 
-The Core VM concentrates three primitives that everything else depends on:
+The Core VM concentrates three primitives that everything else depends on. The diagrams below ([request flow](#request-flow-at-a-glance) and [how the stack works together](#how-the-core-stack-works-together)) summarize how they interact.
 
 - **Ingress + HTTPS**  
   Terminate TLS and route requests to internal services across VMs.
@@ -68,6 +70,73 @@ The Core VM concentrates three primitives that everything else depends on:
 
 - **Internal naming (DNS)**  
   Stable hostnames for VMs/services so the system doesn’t depend on static IPs.
+
+### Request flow (at a glance)
+
+All public traffic hits the Core VM. The reverse proxy terminates TLS, optionally checks identity, then routes to the right backend (a container on core or a service on another VM).
+
+```mermaid
+flowchart LR
+    subgraph External
+        User[User]
+    end
+    Router[Router 80/443]
+    subgraph Core["Core VM"]
+        Caddy[Caddy]
+        Auth[Authentik]
+    end
+    Backend[Backend or other VMs]
+
+    User --> Router
+    Router --> Caddy
+    Caddy -->|"protected route"| Auth
+    Auth --> Caddy
+    Caddy --> Backend
+```
+
+### How the core stack works together
+
+```mermaid
+flowchart LR
+    Client[Client] -->|"1. request"| Caddy
+    Caddy -->|"2. hostname → upstream"| Config[Caddyfile]
+    Config --> Caddy
+    Caddy -->|"3. resolve hostname"| dnsmasq
+    dnsmasq -->|"IP"| Caddy
+    Caddy -->|"4a. protected"| Authentik
+    Authentik --> Caddy
+    Caddy -->|"4b. direct"| whoami
+    Caddy -->|"5. proxy"| Backends
+
+    subgraph Core["Core VM"]
+        Caddy[Caddy]
+        Config
+        Authentik[Authentik]
+        dnsmasq[dnsmasq]
+        whoami[whoami]
+    end
+
+    subgraph Homelab["Homelab subnet"]
+        Backends[Other VMs]
+    end
+```
+
+**What each step does:**
+
+1. **Request** — Caddy receives the request. The client used a hostname (e.g. `tv.server-name.net`); public DNS already resolved it to your public IP, and the router forwarded 80/443 to the Core VM. Caddy sees the request with that hostname.  
+   *Example:* `tv.server-name.net`
+
+2. **Hostname → upstream** — Caddy looks up the request hostname in its **config** (the Caddyfile). The config is static: it maps each public hostname to an **upstream** (where to send the traffic). The upstream is either a hostname:port (e.g. `media.lan:32400`) or an IP:port. This step is pure config lookup; no DNS is involved yet. Caddy also knows from config whether this route is protected (SSO) or direct.  
+   *Example:* `tv.server-name.net` → `sonarr.homelab.arpa:8989`
+
+3. **Resolve hostname** — If the upstream is a **hostname** (not an IP), Caddy must resolve it to an IP before it can connect. The Core VM uses **dnsmasq** as its DNS resolver. So Caddy asks the system resolver (dnsmasq) “what is `media.lan`?” and dnsmasq returns the VM’s IP. **dnsmasq only answers DNS queries;** it does not route or proxy. Its records are maintained on core (you or your automation configure them). Other VMs’ services do not query dnsmasq; they don’t need to know it exists.  
+   *Example:* `sonarr.homelab.arpa` → `192.168.1.80`
+
+4. **Protected or direct** — **Authentik** is only involved for protected routes. If the config says this hostname is behind SSO, Caddy sends the request to Authentik first (forward auth); Authentik checks the user and returns success or redirect to login; only then does Caddy proxy to the backend. For direct routes (e.g. whoami, a public page), Caddy skips Authentik and proxies straight away.  
+   *Example (if SSO):* request forwarded to Authentik on core (e.g. `192.168.1.50`); after auth OK, Caddy continues. *Example (direct):* skip to step 5.
+
+5. **Proxy** — Caddy forwards the request to the upstream: either the resolved IP:port (another VM) or a local container (e.g. whoami). The actual connection is made by Caddy; dnsmasq only supplied the IP.  
+   *Example:* Caddy sends the request to `192.168.1.80:8989` (the actual service).
 
 ---
 
@@ -203,6 +272,12 @@ It’s also a clean monitoring target for “the access plane is up” without d
 - Small, deterministic, and purpose-built for debugging and health checks.
 - Zero-config startup with predictable output (method, path, headers, remote address), which makes proxy/TLS debugging fast.
 - Widely used in reverse-proxy workflows, so examples and troubleshooting references are easy to find.
+
+**Security note** — whoami is usually left on a **direct** route (no SSO) so health checks and quick “is the front door up?” tests work without logging in. That means anyone who can reach the hostname gets an echo of the request (method, path, headers, remote address). Risk is **low**: no auth bypass, no code execution, and it’s still behind TLS and the single front door. **XSS and injection:** whoami echoes request headers (and other input) into the response body. If that response were served as `text/html` and the echoed content were not escaped, an attacker could send a header like `X-Foo: <script>...</script>` and cause reflected content to run in a victim's browser (XSS). The core stack **hardens** whoami without relying on obscurity: Caddy always forces **`Content-Type: text/plain`** on the response (overwriting any upstream value) so the browser never interprets the body as HTML.
+
+**Access:** By default whoami is **reachable from anywhere** so external uptime checkers (e.g. UptimeRobot, Better Uptime) can verify that the front door and core are up. **Optional IP allowlist:** set **`WHOAMI_ALLOW_CIDRS`** in `.env` (space-separated CIDRs) to restrict whoami to those IPs only (everyone else gets 403). A suggested value is private ranges plus Tailscale: `127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10`. See [Chapter 3A](Chapter3a-core-stack.md) for the env table and Caddyfile generation.
+
+**Rate limiting:** Stock Caddy has no built-in rate limit. To harden whoami further (e.g. limit requests per IP so it stays useful for uptime checks but is harder to abuse), use one of: host-level limits (e.g. `nftables`/`iptables` connlimit, or **fail2ban** on Caddy access logs), or build Caddy with the `rate_limit` plugin (xcaddy) and add a rate_limit block in the Caddyfile. The repo does not ship a custom Caddy image; if you add one, you can wire `WHOAMI_RATE_LIMIT` (or similar) into your Caddyfile generation.
 
 ---
 
