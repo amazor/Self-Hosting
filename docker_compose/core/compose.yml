@@ -29,7 +29,7 @@ services:
       - "443:443/udp"
     environment:
       - TZ=${TZ:-Etc/UTC}
-    command: ["run", "--config", "/etc/caddy-config/Caddyfile", "--adapter", "caddyfile"]
+    command: ["caddy", "run", "--config", "/etc/caddy-config/Caddyfile", "--adapter", "caddyfile"]
     volumes:
       # Mount caddy config dir (avoids file-vs-dir bind-mount issues); Caddyfile lives inside.
       - ${CONFIG_ROOT:-./config}/caddy:/etc/caddy-config:ro

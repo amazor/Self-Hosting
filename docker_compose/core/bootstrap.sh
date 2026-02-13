@@ -147,12 +147,28 @@ ensure_config_directories() {
     "$CONFIG_BASE/caddy/config" \
     "$CONFIG_BASE/caddy/site" \
     "$CONFIG_BASE/authentik/media" \
+    "$CONFIG_BASE/authentik/media/public" \
     "$CONFIG_BASE/authentik/custom-templates" \
     "$CONFIG_BASE/authentik/postgresql" \
     "$CONFIG_BASE/authentik/redis" \
     "$CONFIG_BASE/dnsmasq"
 
   echo "Ensured config directories under: $CONFIG_BASE"
+}
+
+# Authentik runs as UID 1000; migration expects /media/public. Ensure host dirs are writable by that user.
+ensure_authentik_media_permissions() {
+  local media_dir="$CONFIG_BASE/authentik/media"
+  local uid="${AUTHENTIK_UID:-1000}"
+  local gid="${AUTHENTIK_GID:-1000}"
+
+  if chown -R "${uid}:${gid}" "$media_dir" 2>/dev/null; then
+    echo "Set authentik media ownership to ${uid}:${gid}."
+  else
+    echo "Note: Could not chown $media_dir to ${uid}:${gid} (run as root or use sudo)." >&2
+    echo "      If Authentik fails with 'Permission denied: /media/public', run:" >&2
+    echo "      sudo chown -R ${uid}:${gid} $media_dir" >&2
+  fi
 }
 
 ensure_starter_caddyfile() {
@@ -166,6 +182,12 @@ ensure_starter_caddyfile() {
     rmdir "$CADDYFILE_PATH" 2>/dev/null || rm -rf "$CADDYFILE_PATH"
   fi
 
+  # For local/testing: use Caddy's internal CA so we don't try Let's Encrypt for .local or .home.arpa.
+  local tls_line=""
+  if [[ -n "${CADDY_USE_INTERNAL_TLS:-}" ]] && [[ "${CADDY_USE_INTERNAL_TLS}" =~ ^(true|1|yes)$ ]]; then
+    tls_line="  tls internal"
+  fi
+
   cat > "$CADDYFILE_PATH" <<EOF
 {
   # Keep ops noise low while retaining enough detail for troubleshooting.
@@ -174,17 +196,34 @@ ensure_starter_caddyfile() {
 
 # Authentik web UI (proxied to internal Authentik server container).
 ${AUTHENTIK_FQDN} {
+${tls_line}
   encode zstd gzip
   reverse_proxy authentik-server:9000
 }
 
 # whoami debug endpoint (verifies front door, headers, and routing).
 ${WHOAMI_FQDN} {
+${tls_line}
   encode zstd gzip
   reverse_proxy whoami:80
 }
 EOF
   echo "Created starter Caddyfile: $CADDYFILE_PATH"
+}
+
+# Fail fast if Caddyfile is missing or a directory (e.g. Docker created the mount as a dir).
+validate_caddyfile_ready() {
+  local path="${CONFIG_BASE:-$SCRIPT_DIR/config}/caddy/Caddyfile"
+  if [[ -d "$path" ]]; then
+    echo "Error: $path exists as a directory (often from a previous bind-mount before bootstrap)." >&2
+    echo "Remove it and re-run bootstrap: rm -rf '$path'" >&2
+    exit 1
+  fi
+  if [[ ! -f "$path" ]]; then
+    echo "Error: Caddyfile missing: $path" >&2
+    echo "Re-run bootstrap from docker_compose/core (on the same host where you run docker compose)." >&2
+    exit 1
+  fi
 }
 
 ensure_starter_dnsmasq_conf() {
@@ -282,7 +321,9 @@ prepare_env_file
 load_env
 validate_guardrails
 ensure_config_directories
+ensure_authentik_media_permissions
 ensure_starter_caddyfile
+validate_caddyfile_ready
 ensure_starter_dnsmasq_conf
 validate_dnsmasq_conf_ready
 validate_compose
