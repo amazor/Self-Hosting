@@ -1,0 +1,31 @@
+# Recyclarr example configuration for the media stack (Chapter 2C / 3C).
+# Copy to config/recyclarr/recyclarr.yml (bootstrap can do this when ENABLE_BUILDARR_RECYCLARR=1).
+# Syncs TRaSH Guide: Quality Definitions, Custom Formats, Quality Profiles, Naming.
+# Uses secrets for API keys: create config/recyclarr/secrets.yml from recyclarr.secrets.example.yml
+# and fill in API keys (Sonarr/Radarr: Settings -> General -> Security).
+# See: https://recyclarr.dev/reference/config-examples/  https://trash-guides.info/Guide-Sync/
+# List templates: recyclarr config list templates --includes
+
+# yaml-language-server: $schema=https://raw.githubusercontent.com/recyclarr/recyclarr/master/schemas/config-schema.json
+
+sonarr:
+  tv:
+    base_url: "!secret sonarr_url"
+    api_key: "!secret sonarr_apikey"
+    delete_old_custom_formats: true
+    include:
+      - template: sonarr-quality-definition-series
+      # TRaSH 1080p WEB profile (Golden Rule: 720/1080p -> x264; 4K -> x265)
+      - template: sonarr-v4-quality-profile-web-1080p
+      - template: sonarr-v4-custom-formats-web-1080p
+
+radarr:
+  movies:
+    base_url: "!secret radarr_url"
+    api_key: "!secret radarr_apikey"
+    delete_old_custom_formats: true
+    include:
+      - template: radarr-quality-definition-movie
+      # TRaSH HD Bluray + WEB (1080p)
+      - template: radarr-quality-profile-hd-bluray-web
+      - template: radarr-custom-formats-hd-bluray-web

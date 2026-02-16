@@ -27,7 +27,7 @@ We will build something correct, understandable, and isolated.
 
 This chapter assumes the [VM overview (Chapter 2)](Chapter2-vms.md) and, for reverse proxy and SSO, the [Core VM (Chapter 2A)](Chapter2a-core.md).
 
-**Configuration reference:** Paths, categories, naming, and quality in this chapter follow the [TRaSH Guides](https://trash-guides.info/) (file/folder structure, qBittorrent, SABnzbd, Sonarr, Radarr, Prowlarr, Bazarr, Plex). TRaSH is the gold standard for a correct, maintainable pipeline. Actual compose layout, environment variables, deployment workflow, and step-by-step UI configuration are covered in **[Chapter 3c](Chapter3c-media-stack-reference.md)** (media stack deployment).
+**Configuration reference:** Paths, categories, naming, and quality in this chapter follow the [TRaSH Guides](https://trash-guides.info/) (file/folder structure, qBittorrent, SABnzbd, Sonarr, Radarr, Prowlarr, Bazarr, Plex). TRaSH is the gold standard for a correct, maintainable pipeline. Actual compose layout, environment variables, deployment workflow, and step-by-step UI configuration are covered in **[Chapter 3c](Chapter3c-media-stack.md)** (media stack deployment).
 
 ---
 
@@ -82,7 +82,7 @@ This is the minimum viable pipeline.
 | Recyclarr | Quality profile synchronization |
 | Cleanuparr | Automatic queue cleanup |
 
-These tools reduce configuration drift and operational mess. Buildarr and Recyclarr (and alternatives like Configarr) follow the [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/) approach: they sync Custom Formats, Quality Profiles, naming, and quality definitions from TRaSH into Sonarr and Radarr so the pipeline stays aligned with the guides. Cleanuparr handles queue and download hygiene (stalled items, orphans). How to enable and configure them is in [Chapter 3c](Chapter3c-media-stack-reference.md).
+These tools reduce configuration drift and operational mess. Buildarr and Recyclarr (and alternatives like Configarr) follow the [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/) approach: they sync Custom Formats, Quality Profiles, naming, and quality definitions from TRaSH into Sonarr and Radarr so the pipeline stays aligned with the guides. Both are driven by **YAML config** (`buildarr.yml`, `recyclarr.yml`); when enabled and configured, **some of the manual Sonarr/Radarr UI configuration in [Chapter 3c](Chapter3c-media-stack.md) can be skipped** (e.g. quality settings, custom formats, quality profiles, naming—see the Buildarr/Recyclarr section there). Example YAML configs live in `docker_compose/media/` (`buildarr.example.yml`, `recyclarr.example.yml`, `recyclarr.secrets.example.yml`); **bootstrap copies them into the config dirs when enabled and the target is missing** (like `.env` from `.env.example`). Cleanuparr handles queue and download hygiene (stalled items, orphans). How to enable and configure them is in [Chapter 3c](Chapter3c-media-stack.md).
 
 ---
 
@@ -94,7 +94,7 @@ These tools reduce configuration drift and operational mess. Buildarr and Recycl
 | Bazarr | Subtitle automation |
 | ntfy | Lightweight completion notifications |
 
-These add redundancy and quality-of-life improvements. Bazarr uses the **same path root** as Sonarr and Radarr so it can see library paths and write subtitle files (e.g. `.srt`) next to media; that aligns with [TRaSH Bazarr](https://trash-guides.info/Bazarr/) (“paths must match the same root”). Configuration details are in [Chapter 3c](Chapter3c-media-stack-reference.md).
+These add redundancy and quality-of-life improvements. Bazarr uses the **same path root** as Sonarr and Radarr so it can see library paths and write subtitle files (e.g. `.srt`) next to media; that aligns with [TRaSH Bazarr](https://trash-guides.info/Bazarr/) (“paths must match the same root”). Configuration details are in [Chapter 3c](Chapter3c-media-stack.md).
 
 ---
 
@@ -349,7 +349,7 @@ We use one host root (`/mnt/media`) and, in containers, one path root (e.g. `/da
   Keeps each download client’s workspace separate while sharing the same root. TRaSH uses separate top-level `torrents` and `usenet`; we use `downloads/qbittorrent` and `downloads/sabnzbd` so the layout stays flat under one `downloads/` tree.
 
 - **Why category subfolders (tv, movies) under completed?**  
-  So Sonarr only watches `.../completed/tv/` and Radarr only `.../completed/movies/`. That avoids cross-talk, matches what *arrs expect, and aligns with TRaSH’s category-based layout. In qBittorrent you set categories with save paths relative to the default (e.g. `completed/tv`, `completed/movies`); in SABnzbd, categories are relative to the completed folder. Step-by-step configuration is in [Chapter 3c](Chapter3c-media-stack-reference.md).
+  So Sonarr only watches `.../completed/tv/` and Radarr only `.../completed/movies/`. That avoids cross-talk, matches what *arrs expect, and aligns with TRaSH’s category-based layout. In qBittorrent you set categories with save paths relative to the default (e.g. `completed/tv`, `completed/movies`); in SABnzbd, categories are relative to the completed folder. Step-by-step configuration is in [Chapter 3c](Chapter3c-media-stack.md).
 
 ---
 
@@ -357,17 +357,17 @@ We use one host root (`/mnt/media`) and, in containers, one path root (e.g. `/da
 
 If every container that touches media mounts the same host path (e.g. `/mnt/media`) to the **same** path inside the container (e.g. `/data`), then qBittorrent reports “file at `/data/downloads/qbittorrent/completed/tv/ShowName`” and Sonarr sees that exact path. No remote path mapping is needed.
 
-TRaSH recommends this: *“Pick one root and use it for every app.”* Giving every app the same root does not grant “too much” access—it’s the intended design. *arrs need to see both download and library paths to import; the download client only writes under its own directory. The actual compose change (single mount per service) is in [Chapter 3c](Chapter3c-media-stack-reference.md).
+TRaSH recommends this: *“Pick one root and use it for every app.”* Giving every app the same root does not grant “too much” access—it’s the intended design. *arrs need to see both download and library paths to import; the download client only writes under its own directory. The actual compose change (single mount per service) is in [Chapter 3c](Chapter3c-media-stack.md).
 
 ---
 
 ### Naming and quality
 
 **Naming**  
-Sonarr and Radarr must use a naming scheme that includes **non-recoverable information** in filenames: repack/proper, edition (e.g. Director’s Cut), release group, and quality source (HDTV, WEB-DL, Blu-ray, Remux). Without that, the *arrs can’t tell different releases apart and may re-download or re-import the same content, causing loops and duplicate work. We follow the [TRaSH-recommended naming schemes](https://trash-guides.info/) for Sonarr and Radarr; exact templates and where to set them are in [Chapter 3c](Chapter3c-media-stack-reference.md).
+Sonarr and Radarr must use a naming scheme that includes **non-recoverable information** in filenames: repack/proper, edition (e.g. Director’s Cut), release group, and quality source (HDTV, WEB-DL, Blu-ray, Remux). Without that, the *arrs can’t tell different releases apart and may re-download or re-import the same content, causing loops and duplicate work. We follow the [TRaSH-recommended naming schemes](https://trash-guides.info/) for Sonarr and Radarr; exact templates and where to set them are in [Chapter 3c](Chapter3c-media-stack.md).
 
 **Quality settings**  
-TRaSH recommends configuring quality settings (file size), quality profiles, and custom formats in a defined order so low-quality or fake releases are avoided and the right codec/resolution choices are enforced. That configuration is covered in [Chapter 3c](Chapter3c-media-stack-reference.md); the reasoning for the “Golden Rule” is below.
+TRaSH recommends configuring quality settings (file size), quality profiles, and custom formats in a defined order so low-quality or fake releases are avoided and the right codec/resolution choices are enforced. That configuration is covered in [Chapter 3c](Chapter3c-media-stack.md); the reasoning for the “Golden Rule” is below.
 
 ---
 
@@ -378,7 +378,7 @@ TRaSH’s [x265 and 4K Golden Rule](https://trash-guides.info/Misc/x265-4k/) is:
 - **720p and 1080p** → prefer **x264** (AVC).
 - **2160p / 4K** → use **x265** (HEVC).
 
-The reason: many 1080p x265 releases are low-bitrate re-encodes from x264 and look worse. x265 is recommended for 4K and for 1080p when the source is good (e.g. HDR from a remux). We enforce this via Quality Profiles and Custom Formats in Sonarr and Radarr (and optionally via Recyclarr or other Guide Sync tools). How to set that up is in [Chapter 3c](Chapter3c-media-stack-reference.md).
+The reason: many 1080p x265 releases are low-bitrate re-encodes from x264 and look worse. x265 is recommended for 4K and for 1080p when the source is good (e.g. HDR from a remux). We enforce this via Quality Profiles and Custom Formats in Sonarr and Radarr (and optionally via Recyclarr or other Guide Sync tools). How to set that up is in [Chapter 3c](Chapter3c-media-stack.md).
 
 ---
 
@@ -509,7 +509,7 @@ The goal is simplicity without hiding structure.
 
 `.env` is the single place to declare intent: set `ENABLE_BUILDARR_RECYCLARR=1`, `ENABLE_CLEANUPARR=1`, `ENABLE_SABNZBD=1`, `ENABLE_BAZARR=1`, `ENABLE_NTFY=1` as needed. After deploy, a shell helper (`media`) picks the right compose files from these so you don’t type multiple `-f` by hand; the overlays stay visible in the repo.
 
-Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `./deploy.sh media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS and config dirs. **Compose layout, environment variables, and step-by-step UI configuration** (paths, categories, naming, quality, download clients, Bazarr, Recyclarr) are in [Chapter 3c](Chapter3c-media-stack-reference.md) (media stack deployment). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
+Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `./deploy.sh media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS and config dirs. **Compose layout, environment variables, and step-by-step UI configuration** (paths, categories, naming, quality, download clients, Bazarr, Recyclarr) are in [Chapter 3c](Chapter3c-media-stack.md) (media stack deployment). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
 
 ---
 

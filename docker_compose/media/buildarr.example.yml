@@ -1,0 +1,67 @@
+# Buildarr example configuration for the media stack (Chapter 2C / 3C).
+# Copy to config/buildarr/buildarr.yml (bootstrap can do this when ENABLE_BUILDARR_RECYCLARR=1).
+# Aligns with TRaSH Guides and this repo's single-root path layout: /data = MEDIA_ROOT in containers.
+# Replace YOUR_* placeholders with real values (API keys from each app: Settings -> General -> Security).
+# Schema may vary by Buildarr version — see https://buildarr.github.io/configuration/ and plugin docs.
+# TRaSH: https://trash-guides.info/
+
+---
+buildarr:
+  watch_config: false
+  update_days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
+  update_times: ["03:00"]
+
+# Sonarr — hostname must match compose service name for same-network API access
+sonarr:
+  hostname: "sonarr"
+  port: 8989
+  protocol: "http"
+  api_key: "YOUR_SONARR_API_KEY"
+  settings:
+    # Root folders: same paths as in Chapter 3c (single root /data)
+    root_folders:
+      - path: "/data/library/tv"
+      - path: "/data/library/anime"
+    # Download clients: qBittorrent (and optionally SABnzbd) with categories from TRaSH layout
+    download_clients:
+      definitions:
+        qBittorrent:
+          type: "qbittorrent"
+          enable: true
+          host: "qbittorrent"
+          port: 8080
+          category: "tv"
+          recent_priority: 1
+          older_priority: 2
+          initial_state: "start"
+          # url_base: ""  # set if using reverse proxy path
+          # username/password if set in qBittorrent
+
+# Radarr
+radarr:
+  hostname: "radarr"
+  port: 7878
+  protocol: "http"
+  api_key: "YOUR_RADARR_API_KEY"
+  settings:
+    root_folders:
+      - path: "/data/library/movies"
+    download_clients:
+      definitions:
+        qBittorrent:
+          type: "qbittorrent"
+          enable: true
+          host: "qbittorrent"
+          port: 8080
+          category: "movies"
+          recent_priority: 1
+          older_priority: 2
+          initial_state: "start"
+
+# Prowlarr — indexer manager; add indexers and app sync per TRaSH Prowlarr guide
+prowlarr:
+  hostname: "prowlarr"
+  port: 9696
+  protocol: "http"
+  api_key: "YOUR_PROWLARR_API_KEY"
+  settings: {}

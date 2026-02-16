@@ -229,6 +229,23 @@ done
 chown -R "$REAL_USER:" "$CONFIG_BASE" 2>/dev/null || true
 echo "Config directories created under $CONFIG_BASE (base + enabled overlays)."
 
+# Buildarr/Recyclarr: copy example configs when enabled and target missing (same idea as .env from .env.example)
+if [[ "${ENABLE_BUILDARR_RECYCLARR:-0}" = "1" ]]; then
+  if [[ ! -f "$CONFIG_BASE/buildarr/buildarr.yml" ]] && [[ -f "$SCRIPT_DIR/buildarr.example.yml" ]]; then
+    cp "$SCRIPT_DIR/buildarr.example.yml" "$CONFIG_BASE/buildarr/buildarr.yml"
+    echo "Created $CONFIG_BASE/buildarr/buildarr.yml from buildarr.example.yml (edit API keys and settings)."
+  fi
+  if [[ ! -f "$CONFIG_BASE/recyclarr/recyclarr.yml" ]] && [[ -f "$SCRIPT_DIR/recyclarr.example.yml" ]]; then
+    cp "$SCRIPT_DIR/recyclarr.example.yml" "$CONFIG_BASE/recyclarr/recyclarr.yml"
+    echo "Created $CONFIG_BASE/recyclarr/recyclarr.yml from recyclarr.example.yml."
+  fi
+  if [[ ! -f "$CONFIG_BASE/recyclarr/secrets.yml" ]] && [[ -f "$SCRIPT_DIR/recyclarr.secrets.example.yml" ]]; then
+    cp "$SCRIPT_DIR/recyclarr.secrets.example.yml" "$CONFIG_BASE/recyclarr/secrets.yml"
+    echo "Created $CONFIG_BASE/recyclarr/secrets.yml from recyclarr.secrets.example.yml (fill in API keys)."
+  fi
+  chown -R "$REAL_USER:" "$CONFIG_BASE/buildarr" "$CONFIG_BASE/recyclarr" 2>/dev/null || true
+fi
+
 echo ""
 echo "--- Stack summary ---"
 echo "Base: VPN (Gluetun), qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr"

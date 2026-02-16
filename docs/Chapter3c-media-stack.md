@@ -48,6 +48,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 | **compose.yml** | Base services: Gluetun VPN, qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr |
 | **compose.sabnzbd.yml** | Optional Usenet downloader overlay |
 | **compose.bazarr.yml** | Optional subtitle automation overlay |
+| **buildarr.example.yml** / **recyclarr.example.yml** / **recyclarr.secrets.example.yml** | Example YAML configs for Buildarr and Recyclarr; bootstrap copies into `config/buildarr/` and `config/recyclarr/` when enabled and target missing (same idea as `.env` from `.env.example`) |
 | **compose.buildarr-recyclarr.yml** | Optional profile-driven config sync overlay (bootstrap profile) |
 | **compose.cleanuparr.yml** | Optional queue/download hygiene overlay |
 | **compose.ntfy.yml** | Optional lightweight push notifications overlay |
@@ -172,7 +173,8 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 7. Ensure base path strategy is the single `/data` mapping.
 8. Enforce VPN guardrail: qBittorrent must route through `vpn`.
 9. Create config directories for base and enabled overlays.
-10. Print stack summary.
+10. When `ENABLE_BUILDARR_RECYCLARR=1`, copy `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml` into the config dirs **only if the target files do not exist** (same as `.env` from `.env.example`).
+11. Print stack summary.
 
 ### Flags
 
@@ -271,6 +273,8 @@ Recommended order:
 
 Reference: [TRaSH qBittorrent](https://trash-guides.info/Downloaders/qBittorrent/)
 
+**Skip when using Buildarr/Recyclarr:** Buildarr can define qBittorrent as a download client in `buildarr.yml`; you still need to configure **paths and categories in the qBittorrent UI** (or ensure Buildarr applies the same paths). Recyclarr does not manage download clients.
+
 1. Open UI on `http://<media-vm-ip>:8080`.
 2. **Options -> Downloads**:
    - Default save path: `/data/downloads/qbittorrent`
@@ -286,6 +290,8 @@ Reference: [TRaSH qBittorrent](https://trash-guides.info/Downloaders/qBittorrent
 
 Reference: [TRaSH SABnzbd](https://trash-guides.info/Downloaders/SABnzbd/)
 
+**Skip when using Buildarr/Recyclarr:** Not managed by Recyclarr. If you define SABnzbd in Buildarr, you can skip adding it again in Sonarr/Radarr UI; SABnzbd **paths and categories** are still set in the SABnzbd UI.
+
 1. Open `http://<media-vm-ip>:8081`.
 2. **Config -> Folders**:
    - Completed: `/data/downloads/sabnzbd/completed`
@@ -298,6 +304,8 @@ Reference: [TRaSH SABnzbd](https://trash-guides.info/Downloaders/SABnzbd/)
 ### Sonarr
 
 Reference: [TRaSH Sonarr](https://trash-guides.info/Sonarr/)
+
+**Skip when using Buildarr/Recyclarr:** If Buildarr is configured with root folders and download clients in `buildarr.yml`, skip steps 3–4 for those. If Recyclarr is configured with TRaSH templates (quality definitions, custom formats, quality profiles, naming), skip step 5 and run `media boot` to sync instead. You still need Media Management options (Rename Episodes, Analyze video files) unless Buildarr manages them.
 
 1. Open `http://<media-vm-ip>:8989`.
 2. **Settings -> Media Management**:
@@ -318,6 +326,8 @@ Reference: [TRaSH Sonarr](https://trash-guides.info/Sonarr/)
 
 Reference: [TRaSH Radarr](https://trash-guides.info/Radarr/)
 
+**Skip when using Buildarr/Recyclarr:** If Buildarr manages root folders and download clients, skip steps 3–4 for those. If Recyclarr syncs TRaSH (quality definitions, custom formats, quality profiles, naming), skip step 5 and use `media boot` instead. Media Management toggles (Rename Movies, Analyze video files) are still needed unless defined in Buildarr.
+
 1. Open `http://<media-vm-ip>:7878`.
 2. **Settings -> Media Management**:
    - Enable Show Advanced
@@ -334,6 +344,8 @@ Reference: [TRaSH Radarr](https://trash-guides.info/Radarr/)
 
 Reference: [TRaSH Prowlarr](https://trash-guides.info/Prowlarr/)
 
+**Skip when using Buildarr/Recyclarr:** Buildarr can manage Prowlarr (apps, indexers) via `buildarr.yml`; if so, configure those in YAML and run `media boot`. Recyclarr does not manage Prowlarr.
+
 1. Open Prowlarr on `http://<media-vm-ip>:9696`.
 2. Add Sonarr and Radarr under **Settings -> Apps**.
 3. Add indexers and run test.
@@ -344,6 +356,8 @@ Reference: [TRaSH Prowlarr](https://trash-guides.info/Prowlarr/)
 ### Bazarr (optional)
 
 Reference: [TRaSH Bazarr](https://trash-guides.info/Bazarr/)
+
+**Skip when using Buildarr/Recyclarr:** Bazarr is not managed by Buildarr or Recyclarr; configure it in the UI.
 
 1. Open `http://<media-vm-ip>:6767`.
 2. Configure Sonarr and Radarr connections:
@@ -357,10 +371,20 @@ Reference: [TRaSH Bazarr](https://trash-guides.info/Bazarr/)
 
 Reference: [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/)
 
-1. Place config files under:
+Both tools are driven by **YAML configuration**:
+
+- **Buildarr** — `buildarr.yml` (and optional per-instance config) under `${CONFIG_ROOT}/buildarr/`. Declarative *arr configuration: you define Sonarr, Radarr, and Prowlarr settings (root folders, download clients, quality, naming, etc.) in YAML; Buildarr applies them via API. Docs: [Buildarr](https://buildarr.github.io/).
+- **Recyclarr** — `recyclarr.yml` (and optional per-instance overrides) under `${CONFIG_ROOT}/recyclarr/`. Syncs TRaSH Guide content (Custom Formats, Quality Profiles, Quality Settings / file size, Naming Scheme) into Sonarr and Radarr. Docs: [Recyclarr](https://recyclarr.dev/).
+
+**When Buildarr and/or Recyclarr are enabled and configured:** You can skip or reduce the corresponding manual UI steps in this chapter. Recyclarr covers Quality Settings (file size), Custom Formats, Quality Profiles, and Naming in Sonarr/Radarr—so you do not need to configure those in the UI if your Recyclarr YAML is set up. Buildarr covers whatever you define in `buildarr.yml` (e.g. root folders, download clients, quality, naming); for those items, follow Buildarr’s config schema instead of the Sonarr/Radarr/Prowlarr UI steps below. See the "Skip when using Buildarr/Recyclarr" notes in each app section above. qBittorrent/SABnzbd paths and categories are still set in their UIs unless you model them in Buildarr.
+
+**Example configs:** In `docker_compose/media/` you will find `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml`. When `ENABLE_BUILDARR_RECYCLARR=1`, **bootstrap copies these into `config/buildarr/` and `config/recyclarr/` only if the target file does not already exist** (same idea as `.env` from `.env.example`). Edit the copied files to set API keys; do not commit `secrets.yml`.
+
+1. Ensure config files exist (bootstrap creates them from examples when enabled and missing):
    - `${CONFIG_ROOT}/buildarr/buildarr.yml`
    - `${CONFIG_ROOT}/recyclarr/recyclarr.yml`
-2. Run:
+   - `${CONFIG_ROOT}/recyclarr/secrets.yml` (API keys for Recyclarr)
+2. Edit API keys and any settings; then run:
 
    ```bash
    media boot
