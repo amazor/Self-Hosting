@@ -48,6 +48,26 @@ _vpn_guardrail_check() {
   return 0
 }
 
+# Path guardrail: media-touching services should use a single host->container root mapping.
+# We expect `${MEDIA_ROOT:-/mnt/media}:/data` in compose files to avoid remote path mapping.
+_single_root_layout_check() {
+  [[ -f "$COMPOSE_BASE" ]] || return 0
+  local required='${MEDIA_ROOT:-/mnt/media}:/data'
+  local svc
+  for svc in qbittorrent sonarr radarr; do
+    if ! awk -v service="$svc" -v needle="$required" '
+      $0 ~ "^[[:space:]]*"service":" { in_service=1; next }
+      in_service && $0 ~ "^[[:space:]]*[a-zA-Z0-9_-]+:" { in_service=0 }
+      in_service && index($0, needle) > 0 { found=1 }
+      END { exit(found ? 0 : 1) }
+    ' "$COMPOSE_BASE"; then
+      echo -e "\033[31mWARNING: $svc is not using the single-root /data mapping ($required).\033[0m"
+      return 1
+    fi
+  done
+  return 0
+}
+
 # OS: Debian/Ubuntu-ish
 if [[ ! -f /etc/os-release ]]; then
   echo "Cannot detect OS (/etc/os-release missing). Expect Debian or Ubuntu."
@@ -139,10 +159,42 @@ if [[ -f .env ]]; then
     echo "Set OPENVPN_USER and OPENVPN_PASSWORD in .env (required for VPN). Then run: ./bootstrap.sh"
     exit 1
   fi
-  if [[ -n "${MEDIA_ROOT:-}" ]] && [[ -d "$MEDIA_ROOT" ]]; then
-    if ! mountpoint -q "$MEDIA_ROOT" 2>/dev/null; then
-      echo "Note: $MEDIA_ROOT is not a mount point. If you use NFS, ensure it is mounted before starting the stack."
+
+  if [[ -z "${MEDIA_ROOT:-}" ]]; then
+    echo "Set MEDIA_ROOT in .env (example: /mnt/media)."
+    exit 1
+  fi
+  if [[ ! -d "$MEDIA_ROOT" ]]; then
+    echo "MEDIA_ROOT does not exist: $MEDIA_ROOT"
+    echo "Create/mount it first, then re-run bootstrap."
+    exit 1
+  fi
+  if ! sudo -u "$REAL_USER" test -w "$MEDIA_ROOT" 2>/dev/null; then
+    echo "Warning: $REAL_USER cannot write to MEDIA_ROOT ($MEDIA_ROOT). Imports or moves may fail."
+  fi
+  if ! mountpoint -q "$MEDIA_ROOT" 2>/dev/null; then
+    echo "Note: $MEDIA_ROOT is not a mount point. If you use NFS, ensure it is mounted before starting the stack."
+  fi
+  for req_dir in downloads library; do
+    if [[ ! -d "$MEDIA_ROOT/$req_dir" ]]; then
+      echo "Expected directory missing: $MEDIA_ROOT/$req_dir"
+      echo "Chapter 2c layout requires both downloads/ and library/ under MEDIA_ROOT."
+      exit 1
     fi
+  done
+fi
+
+# Path guardrail: avoid path mismatches and remote path mapping.
+if [[ "$FORCE" -ne 1 ]] && ! _single_root_layout_check; then
+  echo -e "\033[31mBootstrap expects qbittorrent/sonarr/radarr to mount MEDIA_ROOT at /data.\033[0m"
+  if [[ $NONINTERACTIVE -eq 1 ]]; then
+    echo "Re-run with --force to skip this check, or fix compose.yml."
+    exit 1
+  fi
+  read -r -p "Type 'yes' to continue anyway (not recommended): " confirm
+  if [[ "$confirm" != "yes" ]]; then
+    echo "Exiting. Fix compose.yml or re-run with --force to skip this check."
+    exit 1
   fi
 fi
 

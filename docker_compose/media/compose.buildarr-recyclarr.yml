@@ -13,7 +13,7 @@ services:
   # Docs: https://buildarr.github.io/  Docker: https://buildarr.github.io/installation/docker/
   buildarr:
     profiles: ["bootstrap"]
-    image: callum027/buildarr:latest
+    image: callum027/buildarr:${BUILDARR_TAG:-latest}
     container_name: buildarr
     environment:
       - PUID=${PUID:-1000}
@@ -28,7 +28,7 @@ services:
   # Docs: https://recyclarr.dev/  Docker: https://recyclarr.dev/wiki/installation/docker/
   recyclarr:
     profiles: ["bootstrap"]
-    image: ghcr.io/recyclarr/recyclarr:latest
+    image: ghcr.io/recyclarr/recyclarr:${RECYCLARR_TAG:-latest}
     container_name: recyclarr
     user: "${PUID:-1000}:${PGID:-1000}"
     environment:

@@ -11,7 +11,7 @@ services:
   # Sonarr/Radarr: Settings → Connect → add ntfy; use base URL http://ntfy:80 or http://<host>:8099 and a topic name.
   # Optional: drop server.yml in CONFIG_ROOT/ntfy/ (e.g. base_url, auth) and mount as /etc/ntfy (read-only).
   ntfy:
-    image: binwiederhier/ntfy:latest
+    image: binwiederhier/ntfy:${NTFY_TAG:-latest}
     container_name: ntfy
     command: ["--cache-file", "/var/cache/ntfy/cache.db", "serve"]
     environment:

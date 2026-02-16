@@ -64,7 +64,8 @@ This journey is written as chronological chapters.
   The access plane: reverse proxy, HTTPS, SSO, DNS.
 
 - **[Chapter 2C: Media VM](docs/Chapter2c-media.md)**  
-  Media automation pipeline: *arr stack, qBittorrent, VPN, storage design, optional layers.
+  Media automation pipeline: *arr stack, qBittorrent, VPN, storage design, optional layers.  
+  **Configuration reference:** [TRaSH Guides](https://trash-guides.info/) are the recommended source for Radarr, Sonarr, Prowlarr, Bazarr, Plex, downloaders, and file/folder structure. Cursor rules in `.cursor/rules/trash-guides-*.mdc` embed this reference for `docker_compose/media/`, `docker_compose/accelerated/`, and `docs/Chapter2c-media.md`.
 
 - **[Chapter 3A: Core Stack](docs/Chapter3a-core-stack.md)**  
   Core VM stack: `.env`, compose, bootstrap, Caddyfile generation, and deploy (`./deploy.sh core`).

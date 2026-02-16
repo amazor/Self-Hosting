@@ -11,7 +11,7 @@ services:
   # Configure in UI at http://<host>:11011: add *arr and download client connections (hostnames: sonarr, radarr, sabnzbd, qbittorrent).
   # Can remove failed/stalled items, enforce seeding time/ratio, trigger replacement searches.
   cleanuparr:
-    image: cleanuparr/cleanuparr:latest
+    image: cleanuparr/cleanuparr:${CLEANUPARR_TAG:-latest}
     container_name: cleanuparr
     environment:
       - TZ=${TZ:-Etc/UTC}
