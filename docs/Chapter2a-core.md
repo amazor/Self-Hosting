@@ -29,6 +29,11 @@ When this VM is healthy, the rest of the system feels coherent. When it isn’t,
 - [Why these services belong together](#why-these-services-belong-together)
 - [Design constraints](#design-constraints)
 - [App selection](#app-selection)
+  - [Reverse proxy: Caddy](#reverse-proxy-caddy)
+  - [Identity / SSO: Authentik](#identity--sso-authentik)
+  - [Internal naming: dnsmasq](#internal-naming-dnsmasq-for-the-homelab-subnet)
+  - [Dynamic DNS: ddclient](#dynamic-dns-ddclient)
+  - [Troubleshooting endpoint: whoami](#troubleshooting-endpoint-whoami--echo-service)
 - [What breaks if the Core VM disappears](#what-breaks-if-the-core-vm-disappears)
 - [FAQ](#faq)
 
@@ -60,7 +65,7 @@ The Core VM is the only VM that the internet touches. It deserves an intentional
 
 ## What the Core VM is responsible for
 
-The Core VM concentrates three primitives that everything else depends on. The diagrams below ([request flow](#request-flow-at-a-glance) and [how the stack works together](#how-the-core-stack-works-together)) summarize how they interact.
+The Core VM concentrates four primitives that everything else depends on. The diagrams below ([request flow](#request-flow-at-a-glance) and [how the stack works together](#how-the-core-stack-works-together)) summarize how they interact.
 
 - **Ingress + HTTPS**  
   Terminate TLS and route requests to internal services across VMs.
@@ -70,6 +75,9 @@ The Core VM concentrates three primitives that everything else depends on. The d
 
 - **Internal naming (DNS)**  
   Stable hostnames for VMs/services so the system doesn’t depend on static IPs.
+
+- **Public DNS (DDNS)**  
+  When your ISP assigns a dynamic public IP, something must tell your domain provider (e.g. Namecheap, Cloudflare) what that IP is so that your domain keeps resolving to the Core VM. DDNS is that "something"; without it, the front door can become unreachable after an IP change.
 
 ### Request flow (at a glance)
 
@@ -123,7 +131,7 @@ flowchart LR
 
 **What each step does:**
 
-1. **Request** — Caddy receives the request. The client used a hostname (e.g. `tv.server-name.net`); public DNS already resolved it to your public IP, and the router forwarded 80/443 to the Core VM. Caddy sees the request with that hostname.  
+1. **Request** — Caddy receives the request. The client used a hostname (e.g. `tv.server-name.net`); public DNS already resolved it to your public IP, and the router forwarded 80/443 to the Core VM. Caddy sees the request with that hostname. (Keeping that public DNS record correct when your IP changes is the job of [DDNS](#dynamic-dns-ddclient), which runs separately on core.)  
    *Example:* `tv.server-name.net`
 
 2. **Hostname → upstream** — Caddy looks up the request hostname in its **config** (the Caddyfile). The config is static: it maps each public hostname to an **upstream** (where to send the traffic). The upstream is either a hostname:port (e.g. `media.lan:32400`) or an IP:port. This step is pure config lookup; no DNS is involved yet. Caddy also knows from config whether this route is protected (SSO) or direct.  
@@ -147,6 +155,7 @@ This VM has a deliberately large blast radius because it owns shared infrastruct
 - If **ingress** is down, most services are unreachable from the outside.
 - If **identity** is down, access control becomes inconsistent or collapses into per-app logins.
 - If **DNS** is down, service discovery and callback flows fail in confusing ways.
+- If **DDNS** is down or unused, your public IP may eventually change and your domain will stop pointing at the lab until you update it (manually or by fixing DDNS).
 
 Keeping these together makes the system easier to reason about: there is one place to debug “access is broken,” and one place where security posture is defined.
 
@@ -179,6 +188,7 @@ Keeping these together makes the system easier to reason about: there is one pla
 | Caddy | Reverse proxy | HTTPS + routing; first-class Let's Encrypt |
 | Authentik | Identity / SSO | One login across many apps |
 | dnsmasq | Internal naming | Local records + upstream forwarding; low churn |
+| ddclient | Dynamic DNS (optional) | Keeps public DNS pointed at your IP; supports Namecheap, Cloudflare, others |
 | whoami | Troubleshooting | Echo endpoint for access-plane validation |
 
 ---
@@ -201,6 +211,38 @@ The reverse proxy is the lab’s front door: it owns HTTPS termination and routi
 - Adding a new externally reachable service usually means touching proxy config in `core`. That friction is acceptable here because it reinforces deliberate change.
 
 > **TODO (cert strategy):** current setup uses HTTP challenge. DNS challenge (e.g., wildcard certs) may become the preferred path later because it makes adding new subdomains/services easier and less brittle.
+
+---
+
+### Dynamic DNS: ddclient
+
+**Why this belongs in `core`**  
+The reverse proxy and TLS stack only work if clients can reach the Core VM. That requires your public domain to resolve to your current public IP. Most home connections get a dynamic IP from the ISP; when it changes, your domain would otherwise point to the old address. A DDNS client on core periodically tells your domain provider (Namecheap, Cloudflare, etc.) what your current IP is, so the "front door" stays reachable without manual updates.
+
+**What ddclient does**  
+ddclient is a small, mature client that detects your public IP (via web check or router) and updates one or more Dynamic DNS providers using their API or HTTP protocol. You configure it once per domain/provider; it then runs on a schedule (e.g. every few minutes) and only sends an update when the IP has changed. It does not participate in request handling—Caddy, Authentik, and dnsmasq are unchanged. It is purely about keeping the A (and optionally AAAA) record for your domain correct at your registrar or DNS host.
+
+**Alternatives considered**
+- **Router built-in DDNS:** many routers support Namecheap or generic DDNS; if that works for you, no container is needed. Running ddclient on core keeps DNS updates under the same VM as the rest of the access plane and avoids depending on router firmware.
+- **Cron + curl script:** a one-liner calling the provider’s HTTP API is possible, but ddclient supports many providers (Namecheap, Cloudflare, No-IP, Duck DNS, etc.) with a single config file and handles retries, caching, and IPv6 where needed.
+
+**Why ddclient won**
+- **Configurable for many providers:** one image and one config format for Namecheap, Cloudflare, and others; easy to switch or add domains later.
+- **Optional and low impact:** the core stack runs without it; you enable it only when you use dynamic DNS. In this repo it is an optional [overlay](Chapter3a-core-stack.md): set **ENABLE_DDNS=1** in `.env`; bootstrap and the **core** alias then include `compose.ddclient.yml` so ddclient is part of the stack when you run `up`, `logs`, etc.
+- **Operationally boring:** set `ddclient.conf` once, then it runs in the background; no ongoing maintenance.
+
+**Configuration**  
+ddclient is configured via a single file, `ddclient.conf`, in the core stack config directory (`CONFIG_ROOT/ddclient/`). You choose a protocol (e.g. `namecheap`, `cloudflare`) and supply the credentials and hostnames to update. See the [ddclient documentation](https://ddclient.net/) and your provider’s DDNS instructions (e.g. Namecheap “Dynamic DNS” in the domain dashboard). When **ENABLE_DDNS=1**, bootstrap creates the ddclient config directory and a commented starter `ddclient.conf`; you edit the file to add your domain and credentials. No secrets in `.env` are required for ddclient—all provider-specific settings live in `ddclient.conf`.
+
+**When using DDNS you must configure ddclient** (provider, domain, credentials in `ddclient.conf`) for it to do anything useful. Choose one of these workflows:
+
+- **Bootstrap → configure → bring up:** Set **ENABLE_DDNS=1** in `.env`, run bootstrap (creates the ddclient dir and starter config), edit `CONFIG_ROOT/ddclient/ddclient.conf` with your provider and credentials, then run deploy or `docker compose up -d`. Deploy also sets up the **core** alias so you can use `core up -d`, `core logs -f`, etc.
+- **Bring up → configure → restart:** Run deploy (or `docker compose up -d`) first; then edit `ddclient.conf`, and restart ddclient so it picks up the config—e.g. `core restart ddclient` (if you use the alias) or `./restart-ddclient.sh` from the stack directory. See [Chapter 3A — ddclient how-to](Chapter3a-core-stack.md#ddclient) for the full procedure.
+
+A small **helper script** `restart-ddclient.sh` in the core stack directory restarts the ddclient container after you change `ddclient.conf`, so you don't have to remember the compose overlay flags. Use it whenever you edit the DDNS config.
+
+> ### 🧠 Design Note: DDNS Is Optional
+> If you have a static public IP or use router-based DDNS, you can leave ddclient disabled. The rest of the access plane does not depend on it.
 
 ---
 
@@ -288,6 +330,7 @@ It’s also a clean monitoring target for “the access plane is up” without d
 - TLS termination and certificate automation
 - SSO flows and centralized access enforcement
 - Internal hostname resolution (for homelab hostnames)
+- DDNS updates (if you used ddclient on core—your domain will keep pointing at the last IP until core is back or you update it elsewhere)
 
 **Should remain intact**
 - Workload data stored on other VMs/NAS

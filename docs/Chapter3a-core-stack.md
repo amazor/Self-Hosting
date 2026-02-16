@@ -27,6 +27,7 @@ You will walk through the environment template (`.env.example`), important parts
   - [Authentik](#authentik)
   - [Caddy](#caddy)
   - [dnsmasq](#dnsmasq)
+  - [ddclient](#ddclient)
   - [whoami](#whoami)
 - [Verification and troubleshooting](#verification-and-troubleshooting)
 - [See also](#see-also)
@@ -37,11 +38,12 @@ You will walk through the environment template (`.env.example`), important parts
 
 | File or script | Purpose |
 |----------------|---------|
-| **compose.yml** | Stack definition: Caddy, Authentik (server + worker), Postgres, Redis, dnsmasq, whoami |
+| **compose.yml** | Stack definition: Caddy, Authentik (server + worker), Postgres, Redis, dnsmasq, whoami. Optional ddclient (DDNS) via overlay **compose.ddclient.yml** when **ENABLE_DDNS=1** in `.env`. |
 | **.env.example** | Template for required and optional env vars (no secrets; copy to `.env` and fill) |
-| **bootstrap.sh** | Idempotent first-run: creates/validates `.env`, config dirs, Caddyfile, dnsmasq.conf, optional `docker compose up` |
+| **bootstrap.sh** | Idempotent first-run: creates/validates `.env`, config dirs, Caddyfile, dnsmasq.conf, optional ddclient starter (when **ENABLE_DDNS=1**), optional `docker compose up` |
 | **gen-caddyfile.sh** | Generates `config/caddy/Caddyfile` from `.env` (used by bootstrap and by [update-caddyfile.sh](#after-first-run)) |
 | **update-caddyfile.sh** | Regenerate Caddyfile from `.env` and reload Caddy without full bootstrap |
+| **restart-ddclient.sh** | Restart the ddclient container after editing `ddclient.conf` (only when **ENABLE_DDNS=1**). Use `core restart ddclient` if you have the alias. |
 
 All paths in the stack are relative to the directory where you run `docker compose` (typically `docker_compose/core` or a symlink like `~/core`). The bootstrap script must be run from that same directory so generated config files land in the right place.
 
@@ -121,6 +123,16 @@ Examples (from `.env.example`):
 
 The Caddyfile is **generated** from `.env` by `gen-caddyfile.sh`; after changing `CADDY_EXTRA_SERVICES`, re-run bootstrap or [update-caddyfile.sh](#after-first-run) and reload Caddy.
 
+### DDNS (optional overlay)
+
+| Variable | Purpose |
+|----------|---------|
+| **ENABLE_DDNS** | Set to `1` to include the **compose.ddclient.yml** overlay. Bootstrap and the **core** alias then use base + overlay for `up`, `logs`, etc. Default: `0`. |
+| **DDCLIENT_TAG** | Image tag for ddclient (optional). |
+| **DDCLIENT_PUID**, **DDCLIENT_PGID** | Optional; default 1000. |
+
+Config lives in `CONFIG_ROOT/ddclient/ddclient.conf`. See [Chapter 2A — Dynamic DNS](Chapter2a-core.md#dynamic-dns-ddclient).
+
 ---
 
 ## Compose file: Notable details
@@ -137,6 +149,7 @@ The full stack is in `docker_compose/core/compose.yml`. Below are the parts that
 | **authentik-server** | Authentik web/API; exposed only internally (9000/9443); Caddy is the public entrypoint. |
 | **authentik-worker** | Authentik background worker; reads bootstrap env on first start. |
 | **dnsmasq** | Internal DNS; config from `CONFIG_ROOT/dnsmasq`; ports 53 (TCP/UDP) bound via **DNS_BIND_IP**. |
+| **ddclient** | Optional DDNS (overlay **compose.ddclient.yml** when **ENABLE_DDNS=1**); config from `CONFIG_ROOT/ddclient/ddclient.conf`. See [Chapter 2A — Dynamic DNS](Chapter2a-core.md#dynamic-dns-ddclient). |
 | **whoami** | Echo endpoint; no published ports; reachable only via Caddy. |
 
 ### Caddy: Config and mounts
@@ -169,16 +182,17 @@ A single **core_internal** bridge network connects all services. Nothing is expo
 1. **Prerequisites** — Docker and Docker Compose v2 installed and reachable.
 2. **Env file** — If `.env` is missing, copy from `.env.example` and exit (you must fill values and re-run).
 3. **Guardrails** — Unless `--force` is used, exit if `AUTHENTIK_SECRET_KEY`, `AUTHENTIK_POSTGRES_PASSWORD`, or `PUBLIC_BASE_DOMAIN` are still placeholders or example values.
-4. **Config directories** — Create `CONFIG_ROOT` tree: `caddy`, `authentik/*`, `dnsmasq`.
+4. **Config directories** — Create `CONFIG_ROOT` tree: `caddy`, `authentik/*`, `dnsmasq`; when **ENABLE_DDNS=1**, also `ddclient`.
 5. **Config writable** — Ensure the current user can write to the config dir (fix ownership if Docker previously created dirs as root).
 6. **Authentik media** — Set ownership of `authentik/media` to the Authentik UID/GID (default 1000) so uploads and migrations work.
 7. **Caddyfile** — Run `gen-caddyfile.sh` to generate `config/caddy/Caddyfile` from `.env`.
 8. **Caddyfile validation** — Fail if Caddyfile is missing or is a directory (e.g. from an old bind-mount).
 9. **dnsmasq.conf** — If missing, write a starter `dnsmasq.conf` from env (upstreams, local domain, optional **DNS_LOCAL_RECORDS**).
 10. **dnsmasq validation** — Fail if the config file is missing or a directory.
-11. **Compose validation** — Run `docker compose config` to check syntax.
-12. **Optional bring-up** — If `--up` was passed, run `docker compose up -d`.
-13. **Caddy reload** — If Caddy is already running, reload config so the new Caddyfile is applied.
+11. **ddclient.conf** — When **ENABLE_DDNS=1**, if missing, create a commented starter at `CONFIG_ROOT/ddclient/ddclient.conf`.
+12. **Compose validation** — Run `docker compose` with base compose and, when **ENABLE_DDNS=1**, the **compose.ddclient.yml** overlay.
+13. **Optional bring-up** — If `--up` was passed, run `docker compose up -d` (overlay included automatically when **ENABLE_DDNS=1**).
+14. **Caddy reload** — If Caddy is already running, reload config so the new Caddyfile is applied.
 
 ### Flags
 
@@ -226,6 +240,7 @@ Assumes the repo is cloned on the VM (e.g. under `~/Self-Hosting` or `/opt/homel
    # Or in one step:
    ./bootstrap.sh --up
    ```
+   **If ENABLE_DDNS=1:** You must configure ddclient before it will update DNS. Either: (a) edit `config/ddclient/ddclient.conf` now, then run `docker compose up -d` (or `./bootstrap.sh --up`); or (b) bring up first, then edit `ddclient.conf` and run `./restart-ddclient.sh` (or `docker compose -f compose.yml -f compose.ddclient.yml restart ddclient`).
 
 4. **Verify** — See [Verification and troubleshooting](#verification-and-troubleshooting).
 
@@ -244,8 +259,10 @@ From the **repo root** on a machine that can run the deploy script (e.g. your la
    - Validate required env vars for `core` (e.g. `AUTHENTIK_SECRET_KEY`, `AUTHENTIK_POSTGRES_PASSWORD`, `PUBLIC_BASE_DOMAIN`, `AUTHENTIK_FQDN`, `WHOAMI_FQDN`).
    - Run `docker_compose/core/bootstrap.sh`.
    - Create a symlink `~/core` → repo’s `docker_compose/core` (if not already installed).
-   - Run `docker compose up -d` in the stack directory.
-   - Update shell helpers (e.g. `core up -d`, `core logs -f`) in `~/.bashrc.d/stack-functions.sh`.
+   - Run `docker compose up -d` in the stack directory (including the ddclient overlay when **ENABLE_DDNS=1**).
+   - Update shell helpers (e.g. `core up -d`, `core logs -f`, `core restart ddclient`) in `~/.bashrc.d/stack-functions.sh`.
+
+   **If ENABLE_DDNS=1:** DDNS will not update your domain until you configure ddclient. Either: (a) before deploy, set **ENABLE_DDNS=1**, run bootstrap once to create the ddclient dir and starter config, edit `config/ddclient/ddclient.conf`, then run deploy; or (b) run deploy first, then edit `ddclient.conf` and run `core restart ddclient` (or `./restart-ddclient.sh` from the stack directory). See [ddclient](#ddclient).
 
 3. **Optional flags**:
    - `./deploy.sh core --force` — Continue even if env validation fails (use only for testing).
@@ -262,6 +279,7 @@ Once the stack is up, do the following (each has a dedicated how-to below):
 - **Authentik** — Log in (or complete the initial setup wizard if you didn’t use bootstrap env vars), then create a Proxy Provider and Application so Caddy can protect backends with SSO. See [Authentik](#authentik).
 - **Caddy** — Add or change routes by editing `.env` and regenerating the Caddyfile. See [Caddy](#caddy).
 - **dnsmasq** — Add local DNS records via `.env` or by editing the config file. See [dnsmasq](#dnsmasq).
+- **ddclient (if ENABLE_DDNS=1)** — You must configure `ddclient.conf` (provider, domain, credentials); then restart ddclient so it picks up the config. See [ddclient](#ddclient).
 - **Pinning image tags** — After validating a specific release (e.g. Authentik), set the tag in `.env` (e.g. `AUTHENTIK_TAG=2024.1.1`) and redeploy so updates are deliberate.
 
 ---
@@ -361,6 +379,28 @@ dnsmasq has no web UI. Local records are set via env (bootstrap) or by editing t
 
 ---
 
+### ddclient
+
+ddclient has no web UI. When **ENABLE_DDNS=1**, you **must** configure `CONFIG_ROOT/ddclient/ddclient.conf` (provider, domain, credentials) for it to update your public DNS. See [Chapter 2A — Dynamic DNS](Chapter2a-core.md#dynamic-dns-ddclient) and the [ddclient documentation](https://ddclient.net/).
+
+#### Setup workflows
+
+- **Configure before first up:** Set **ENABLE_DDNS=1** in `.env`, run bootstrap (creates `config/ddclient/` and a commented starter `ddclient.conf`), edit `config/ddclient/ddclient.conf` with your provider and credentials, then run deploy or `docker compose up -d` (with the overlay: `docker compose -f compose.yml -f compose.ddclient.yml up -d` if not using the **core** alias).
+- **Configure after first up:** Bring up the stack (deploy or `docker compose up -d`). Edit `config/ddclient/ddclient.conf`, then restart ddclient so it picks up the config (see below).
+
+#### After changing ddclient.conf
+
+Restart the ddclient container so it re-reads the config:
+
+- **With the core alias (after deploy):** `core restart ddclient`
+- **From the stack directory:** `./restart-ddclient.sh` (checks **ENABLE_DDNS=1** and runs the correct compose overlay)
+
+If you don't use the alias and don't have the script: `docker compose -f compose.yml -f compose.ddclient.yml restart ddclient` from the stack directory.
+
+**Verify:** Check ddclient logs: `core logs ddclient` (or `docker compose -f compose.yml -f compose.ddclient.yml logs ddclient`). After an IP change, confirm your domain resolves to the new IP (e.g. `dig +short yourhost.yourdomain.com`).
+
+---
+
 ### whoami
 
 whoami is an echo service with no configuration. It is reachable only via Caddy at **WHOAMI_FQDN**. No UI or config steps required. The generated Caddyfile **hardens** it: Caddy always forces `Content-Type: text/plain` on the response. **Optional:** set **WHOAMI_ALLOW_CIDRS** (e.g. private + Tailscale: `127.0.0.0/8 10.0.0.0/8 172.16.0.0/12 192.168.0.0/16 100.64.0.0/10`) to restrict by IP; when unset, whoami is reachable from anywhere (for external uptime checkers). Rate limiting is not built into Caddy; see [Chapter 2A — whoami security](Chapter2a-core.md#troubleshooting-endpoint-whoami--echo-service) for options.
@@ -377,8 +417,8 @@ whoami is an echo service with no configuration. It is reachable only via Caddy 
 
 ### If something fails
 
-- **Compose**: `docker compose -f docker_compose/core/compose.yml config` — validates compose and env resolution.
-- **Logs**: `docker compose -f docker_compose/core/compose.yml logs -f` (or `core logs -f` if deploy script was used).
+- **Compose**: From the stack directory, run `docker compose -f compose.yml config` (or with overlay when **ENABLE_DDNS=1**: `docker compose -f compose.yml -f compose.ddclient.yml config`). Or use `core config` after deploy.
+- **Logs**: `core logs -f` (or from stack dir: `docker compose -f compose.yml -f compose.ddclient.yml logs -f` when **ENABLE_DDNS=1**).
 - **Caddyfile**: Ensure `config/caddy/Caddyfile` exists and is a **file** (not a directory). If it was created as a directory by a previous mount, remove it and re-run bootstrap.
 - **Recovery**: Restore from a Proxmox snapshot or backup of the VM and/or `CONFIG_ROOT`; then re-run bootstrap and `docker compose up -d`. See [Chapter 2A — What breaks if the Core VM disappears](Chapter2a-core.md#what-breaks-if-the-core-vm-disappears) for impact and out-of-band access.
 

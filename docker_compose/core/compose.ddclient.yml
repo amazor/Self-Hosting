@@ -1,0 +1,20 @@
+# Core VM — Optional: ddclient (Dynamic DNS)
+# Use with: docker compose -f compose.yml -f compose.ddclient.yml up -d
+# Enable via ENABLE_DDNS=1 in .env; bootstrap and the core alias include this overlay when enabled.
+#
+# Keeps your public domain pointed at your current IP (Namecheap, Cloudflare, etc.).
+# Configure CONFIG_ROOT/ddclient/ddclient.conf. See docs/Chapter2a-core.md and https://ddclient.net/
+
+services:
+  ddclient:
+    image: lscr.io/linuxserver/ddclient:${DDCLIENT_TAG:-latest}
+    container_name: ddclient
+    environment:
+      - PUID=${DDCLIENT_PUID:-1000}
+      - PGID=${DDCLIENT_PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/ddclient:/config
+    restart: unless-stopped
+    networks:
+      - core_internal

@@ -164,6 +164,7 @@ ensure_config_directories() {
     "$CONFIG_BASE/authentik/postgresql" \
     "$CONFIG_BASE/authentik/redis" \
     "$CONFIG_BASE/dnsmasq"
+  [[ "${ENABLE_DDNS:-0}" = "1" ]] && mkdir -p "$CONFIG_BASE/ddclient"
 
   echo "Ensured config directories under: $CONFIG_BASE"
 }
@@ -292,8 +293,43 @@ validate_dnsmasq_conf_ready() {
   fi
 }
 
+# Optional DDNS: create a commented starter ddclient.conf when ENABLE_DDNS=1 so the container can start.
+ensure_starter_ddclient_conf() {
+  [[ "${ENABLE_DDNS:-0}" != "1" ]] && return 0
+  local ddclient_conf="${CONFIG_BASE:-$SCRIPT_DIR/config}/ddclient/ddclient.conf"
+  if [[ -f "$ddclient_conf" ]]; then
+    return 0
+  fi
+  if [[ -d "$ddclient_conf" ]]; then
+    rmdir "$ddclient_conf" 2>/dev/null || rm -rf "$ddclient_conf"
+  fi
+  mkdir -p "$(dirname "$ddclient_conf")"
+  cat > "$ddclient_conf" << 'DDCLIENT_EOF'
+# ddclient starter config (optional DDNS) — edit with your provider and credentials.
+# Start the container with: docker compose --profile ddns up -d
+# Docs: https://ddclient.net/  and  docs/Chapter2a-core.md
+#
+# Namecheap example (get DDNS password from Namecheap domain list -> Manage -> Dynamic DNS):
+# protocol=namecheap
+# server=dynamicdns.park-your-domain.com
+# login=yourdomain.com
+# password=YOUR_DDNS_PASSWORD
+# yourhost.yourdomain.com
+#
+# Cloudflare example (use API token with Zone:DNS Edit):
+# protocol=cloudflare
+# zone=yourdomain.com
+# password=YOUR_CLOUDFLARE_API_TOKEN
+# yourhost.yourdomain.com
+#
+# Uncomment and fill one block above, then restart ddclient.
+DDCLIENT_EOF
+  echo "Created starter ddclient config: $ddclient_conf"
+}
+
 validate_compose() {
-  if ! docker compose -f "$COMPOSE_FILE" config >/dev/null; then
+  # COMPOSE_FILES is set in main after load_env (base + optional ddclient overlay).
+  if ! (cd "$SCRIPT_DIR" && docker compose $COMPOSE_FILES config) >/dev/null; then
     echo "docker compose config validation failed." >&2
     exit 1
   fi
@@ -303,13 +339,13 @@ validate_compose() {
 maybe_bring_up_stack() {
   if [[ "$BRING_UP" -eq 1 ]]; then
     echo "Starting core stack..."
-    docker compose -f "$COMPOSE_FILE" up -d
+    (cd "$SCRIPT_DIR" && docker compose $COMPOSE_FILES up -d)
     echo "Core stack started."
     if [[ -n "${AUTHENTIK_BOOTSTRAP_EMAIL:-}" ]] && [[ -n "${AUTHENTIK_BOOTSTRAP_PASSWORD:-}" ]]; then
       echo "Authentik: AUTHENTIK_BOOTSTRAP_* set — initial akadmin user will be created on first start (no UI setup needed)."
     fi
   else
-    echo "Bootstrap complete. Run 'docker compose up -d' when ready."
+    echo "Bootstrap complete. Run 'docker compose up -d' (or use the core alias) when ready."
   fi
   echo ""
   echo "Config is under: $CONFIG_BASE (relative to this directory: $SCRIPT_DIR)"
@@ -317,6 +353,11 @@ maybe_bring_up_stack() {
   echo "If Caddy reports 'Caddyfile: no such file or directory' or dnsmasq fails to read config,"
   echo "run this bootstrap from the same directory where you run docker compose:"
   echo "  cd $SCRIPT_DIR && ./bootstrap.sh"
+  if [[ "${ENABLE_DDNS:-0}" = "1" ]]; then
+    echo "DDNS: enabled (ddclient overlay). Edit config/ddclient/ddclient.conf with your provider and credentials."
+  else
+    echo "DDNS: disabled."
+  fi
 }
 
 # Reload Caddy so it picks up the generated Caddyfile (no container restart).
@@ -339,6 +380,9 @@ parse_args "$@"
 require_prereqs
 prepare_env_file
 load_env
+# Compose file list: base + optional ddclient overlay (when ENABLE_DDNS=1). Used by validate_compose and maybe_bring_up_stack.
+COMPOSE_FILES="-f $SCRIPT_DIR/compose.yml"
+[[ "${ENABLE_DDNS:-0}" = "1" ]] && COMPOSE_FILES="$COMPOSE_FILES -f $SCRIPT_DIR/compose.ddclient.yml"
 validate_guardrails
 ensure_config_directories
 ensure_config_writable
@@ -347,6 +391,7 @@ generate_caddyfile
 validate_caddyfile_ready
 ensure_starter_dnsmasq_conf
 validate_dnsmasq_conf_ready
+ensure_starter_ddclient_conf
 validate_compose
 maybe_bring_up_stack
 reload_caddy_if_running

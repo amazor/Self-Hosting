@@ -237,10 +237,23 @@ _build_media_compose_files() {
   echo "$files"
 }
 
+_build_core_compose_files() {
+  local dir="$1"
+  local env_file="$dir/.env"
+  local files="-f $dir/compose.yml"
+  local enable_ddns
+  if [[ -f "$env_file" ]]; then
+    enable_ddns="$(_env_var_from_file "$env_file" "ENABLE_DDNS")"
+  fi
+  [[ "${enable_ddns:-0}" = "1" ]] && files="$files -f $dir/compose.ddclient.yml"
+  echo "$files"
+}
+
 _build_stack_compose_files() {
   local stack="$1"
   local dir="$2"
   case "$stack" in
+    core) _build_core_compose_files "$dir" ;;
     media) _build_media_compose_files "$dir" ;;
     *) echo "-f $dir/compose.yml" ;;
   esac
@@ -308,6 +321,23 @@ media() {
 MEDIAEOF
 }
 
+_append_core_helper() {
+  local dir="$1"
+  cat >> "$STACK_FUNCTIONS" <<'COREEOF'
+
+core() {
+  local dir="DIR_PLACEHOLDER"
+  local compose_files="-f $dir/compose.yml"
+  if [[ -f "$dir/.env" ]]; then
+    source "$dir/.env" 2>/dev/null
+    [[ "${ENABLE_DDNS:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.ddclient.yml"
+  fi
+  (cd "$dir" && docker compose $compose_files "$@")
+}
+COREEOF
+  sed -i "s|DIR_PLACEHOLDER|$dir|g" "$STACK_FUNCTIONS"
+}
+
 _append_generic_helper() {
   local name="$1"
   local dir="$2"
@@ -332,6 +362,7 @@ STACKFUNCEOF
     name="$(basename "$marker_file")"
     dir="$REAL_HOME/$name"
     case "$name" in
+      core) _append_core_helper "$dir" ;;
       media) _append_media_helper "$dir" ;;
       *) _append_generic_helper "$name" "$dir" ;;
     esac
