@@ -241,7 +241,7 @@ Torrenting without a VPN is strongly discouraged.
 
 ## Storage Design
 
-Media storage is structured around a single root directory:
+Storage follows the lab rule: each VM mounts only what it needs (see [Chapter 2 — Boundary rules](Chapter2-vms.md#vm-by-vm-the-boundary-rules-the-important-part)). For the media VM, that means a single root directory:
 
 ```text
 /mnt/media

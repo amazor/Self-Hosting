@@ -4,6 +4,12 @@
 # Replace YOUR_* placeholders with real values (API keys from each app: Settings -> General -> Security).
 # Schema may vary by Buildarr version — see https://buildarr.github.io/configuration/ and plugin docs.
 # TRaSH: https://trash-guides.info/
+#
+# Workflow: First-time setup — start with this example (or minimal settings), configure apps in UI
+# and/or add to YAML as you go. Once happy, dump config from each *arr and save under config/buildarr/
+# (or version-control a copy). On VM rebuild, restore that saved buildarr.yml so the stack comes back
+# from a known state (cattle, not pets). You can also sanitize a saved config (remove API keys, secrets,
+# replace with YOUR_* placeholders) and contribute it as an example so others can copy your exact setup.
 
 ---
 buildarr:
@@ -59,9 +65,41 @@ radarr:
           initial_state: "start"
 
 # Prowlarr — indexer manager; add indexers and app sync per TRaSH Prowlarr guide
+# Dump current config: buildarr prowlarr dump-config http://prowlarr:9696 (paste API key when prompted)
+# Docs: https://buildarr.github.io/plugins/prowlarr/
 prowlarr:
   hostname: "prowlarr"
   port: 9696
   protocol: "http"
   api_key: "YOUR_PROWLARR_API_KEY"
-  settings: {}
+  settings:
+    # Apps: sync indexers to Sonarr/Radarr (TRaSH: Settings -> Apps). Use instance_name to link
+    # Buildarr-defined instances (then api_key can be omitted); or set api_key per app and omit instance_name.
+    # Single-instance Buildarr often uses instance name "default" — if link fails, try that or set api_key.
+    apps:
+      applications:
+        definitions:
+          Sonarr:
+            type: "sonarr"
+            instance_name: "default"  # or "Sonarr" if you use sonarr.instances."Sonarr"; else set api_key
+            prowlarr_url: "http://prowlarr:9696"
+            base_url: "http://sonarr:8989"
+            sync_level: "add-and-remove-only"  # full-sync | add-and-remove-only | disable
+            sync_categories: ["tv/web-dl", "tv/foreign", "tv/sd", "tv/hd", "tv/uhd", "tv/other"]
+            anime_sync_categories: ["tv/anime"]
+            # tags: []
+          Radarr:
+            type: "radarr"
+            instance_name: "default"  # or "Radarr" if you use radarr.instances."Radarr"; else set api_key
+            prowlarr_url: "http://prowlarr:9696"
+            base_url: "http://radarr:7878"
+            sync_level: "add-and-remove-only"
+            sync_categories: ["movies/foreign", "movies/other", "movies/sd", "movies/hd", "movies/uhd", "movies/bluray", "movies/3d", "movies/dvd", "movies/web-dl"]
+            # tags: []
+    # Optional: general (instance name, backup, analytics), indexers, proxies, tags, ui — add after dump or from docs
+    # general:
+    #   host:
+    #     instance_name: "Prowlarr"
+    #   backup:
+    #     interval: 7
+    #     retention: 28

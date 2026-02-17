@@ -45,6 +45,18 @@ Build a robust, scalable, and automated home server environment that can host:
 - **Workloads:** Docker Compose (per-VM stacks)
 - **Automation:** Cloud-Init + repo-driven bootstrap scripts (described in Chapter 3)
 
+### Application stack (at a glance)
+
+| VM | Core apps | Optional apps |
+|----|-----------|----------------|
+| `core` | Caddy, Authentik, dnsmasq, whoami | ddclient |
+| `monitoring` | Grafana, Uptime Kuma, Komodo | — |
+| `apps` | Homepage / Homarr / Dashy, Mealie | — |
+| `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Buildarr, Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
+| `accelerated` | Plex, Immich | — |
+
+Full list, tiers, and reasoning: [Chapter 2 — What runs where](docs/Chapter2-vms.md#apps-at-a-glance).
+
 ---
 
 ## Where to Start (The Chapters)
@@ -74,45 +86,9 @@ This journey is written as chronological chapters.
 
 ---
 
-## The Workflow (How this repo is meant to be used)
+## How to Run This Stack
 
-### 1) Build the factory (template)
-Follow **Chapter 1** to create a Cloud-Init Docker template (VMID `9000`).
-
-### 2) Clone real VMs from the template
-Follow **Chapter 2** to clone and size VMs (e.g., `110 core`, `120 monitoring`, etc.).
-
-### 3) Role-specific “first run” setup inside each VM (deploy + bootstrap)
-I keep the template generic. Anything role-specific is done *per VM*.
-
-The intended first-time flow inside a VM (repo is already at `/opt/self-hosting` via Cloud-Init; see Chapter 1):
-
-1. Create `.env` from `.env.example` in the stack directory (e.g. `docker_compose/media/`). Configure required vars and optional `ENABLE_*` as needed. Deploy does **not** copy `.env` for you — you create it explicitly.
-2. From the repo root: `./deploy.sh <stack>` (e.g. `./deploy.sh media`). Deploy runs the stack’s bootstrap, creates a symlink (e.g. `~/media`), starts the stack, and installs shell helpers (`media`, `stack`).
-3. Source `~/.bashrc` or open a new shell; use `media up -d`, `media logs -f`, or `media boot` (Buildarr/Recyclarr) as needed.
-
-The **bootstrap** script (invoked by deploy) handles VM-specific setup such as optional **NFS mounts** and config dirs. Deploy owns symlinks, state, validation, and shell UX. Full deploy/bootstrap flow will be documented in Chapter 3.
-
-✅ The template stays boring.  
-✅ The VM role provisioning stays explicit and reproducible.
-
-> Full bootstrap design and the Compose workflow live in the Docker/Compose chapter (planned).
-
----
-
-## Important Architecture Notes (High-level)
-
-### VM boundaries include storage boundaries
-Separation isn’t only about containers and networking — it’s also about **what data each VM can see**.
-
-Rule of thumb:
-- each VM mounts only what it needs
-- mounts are scoped to a subfolder/export
-- `core` stays minimal and typically mounts nothing
-
-### Only one VM is public
-The router forwards **only ports 80/443** to the `core` VM.
-Everything else stays private and is reachable through the reverse proxy (and admin access paths like Tailscale).
+To run this stack: build the template ([Chapter 1](docs/Chapter1-proxmox.md)), clone VMs ([Chapter 2](docs/Chapter2-vms.md)), then deploy and bootstrap per VM. **Step-by-step: [Deploy guide](DEPLOY.md).**
 
 ---
 
@@ -163,6 +139,7 @@ This repo is intentionally split between:
 │       ├── .env.example
 │       └── bootstrap.sh
 │
+├── DEPLOY.md                          # how to use the repo: template → clone → deploy
 └── README.md
 ```
 ## Roadmap (Short)
@@ -185,7 +162,3 @@ This lab is a work in progress. Future expansions include:
 * **UPS + Graceful Shutdown:** Battery backup + automated shutdown (especially for NAS + Proxmox).
 * **3-2-1 Backups:** Encrypted local + offsite backups (and a tested restore path).
 * **Security VM:** A dedicated security/host-insight layer (e.g., Wazuh) kept out of the `core` access plane.
-
----
-
-> "A homelab is never finished; it just reaches a stable state before the next upgrade."

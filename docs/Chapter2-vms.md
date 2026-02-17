@@ -31,6 +31,7 @@ Stack configuration and deployment (env, compose, bootstrap, deploy) for the cor
 - [VM Inventory (At a Glance)](#-vm-inventory-at-a-glance)
 - [VMID Naming & Numbering Scheme (Proxmox)](#vmid-naming--numbering-scheme-proxmox)
 - [What Runs Where (Quick Reference)](#-what-runs-where-quick-reference)
+  - [Apps at a glance](#apps-at-a-glance)
 - [VM-by-VM: The Boundary Rules](#vm-by-vm-the-boundary-rules-the-important-part)
 - [Universal Sidecar Pattern](#a-small-preview-the-universal-sidecar-pattern)
 - [The Practical Step: Spinning Up the VMs](#the-practical-step-spinning-up-the-vms-from-the-template)
@@ -93,54 +94,83 @@ I use a simple VMID range scheme so the Proxmox UI stays readable over time.
 ## 🧩 What Runs Where (Quick Reference)
 
 This section is intentionally compact: **what the app is + what it contributes**.
-Full app-by-app reasoning belongs in the Chapter 2X files (2a, 2b, 2c, 2d).
+Full app-by-app reasoning belongs in the Chapter 2X files: [Chapter 2A (core)](Chapter2a-core.md#app-selection), [Chapter 2C (media)](Chapter2c-media.md#media-stack-overview-quick-reference).
+
+### Apps at a glance
+
+One table to see every app in the lab. *Optional* apps can be skipped or added later; they do not affect the minimum viable setup.
+
+| VM | Core apps | Optional apps |
+|----|-----------|----------------|
+| `core` | Caddy, Authentik, dnsmasq, whoami | ddclient |
+| `monitoring` | Grafana, Uptime Kuma, Komodo | — |
+| `apps` | Homepage / Homarr / Dashy, Mealie | — |
+| `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Buildarr, Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
+| `accelerated` | Plex, Immich | — |
+
+---
 
 ### `core` — Access & Naming Foundation
 
-| App | What it is | What it gives the lab |
-|-----|------------|------------------------|
-| Reverse Proxy | the traffic router | a single front door for all services |
-| ACME / Let’s Encrypt | certificate automation | HTTPS everywhere without manual cert work |
-| SSO (Authentik / Authelia) | identity layer | one login across many apps |
-| DNS (internal) | local name resolution | stable hostnames and clean routing |
+Current choices (from [Chapter 2A](Chapter2a-core.md#app-selection)): Caddy, Authentik, dnsmasq, whoami; ddclient is optional.
+
+| App | Tier | What it gives the lab |
+|-----|------|------------------------|
+| Caddy | Core | Reverse proxy: HTTPS + routing, first-class Let's Encrypt |
+| Authentik | Core | Identity / SSO: one login across many apps |
+| dnsmasq | Core | Internal naming: local records + upstream forwarding; low churn |
+| whoami | Core | Troubleshooting: echo endpoint for access-plane validation |
+| ddclient | *Optional* | Dynamic DNS: keeps public DNS pointed at your IP (Namecheap, Cloudflare, etc.) |
 
 ### `monitoring` — Observability & Operations
 
-| App | What it is | What it gives the lab |
-|-----|------------|------------------------|
-| Grafana | dashboards | a unified view of metrics/logs over time |
-| Uptime Kuma | uptime checks | “is it up?” + practical alerting |
-| Komodo | stack management UI | centralized visibility & basic control |
+| App | Tier | What it gives the lab |
+|-----|------|------------------------|
+| Grafana | Core | Dashboards: unified view of metrics/logs over time |
+| Uptime Kuma | Core | Uptime checks: "is it up?" + practical alerting |
+| Komodo | Core | Stack management UI: centralized visibility & basic control |
 
 ### `apps` — General-purpose Applications
 
-| App | What it is | What it gives the lab |
-|-----|------------|------------------------|
-| Homepage / Homarr / Dashy | dashboard / launcher | friendly landing page + service index (e.g. [gethomepage.dev](https://gethomepage.dev), Homarr, Dashy) |
-| Mealie | recipes & meal planning | a real “daily-use” app that benefits from self-hosting |
-| (more later) | misc apps | a clean home for non-infra services |
+| App | Tier | What it gives the lab |
+|-----|------|------------------------|
+| Homepage / Homarr / Dashy | Core | Dashboard / launcher: friendly landing page + service index |
+| Mealie | Core | Recipes & meal planning: daily-use app that benefits from self-hosting |
+| (more later) | — | Misc apps: clean home for non-infra services |
 
 ### `media` — Automation & Acquisition
 
-| App | What it is | What it gives the lab |
-|-----|------------|------------------------|
-| Sonarr / Radarr / etc. | automation managers | hands-off acquisition + organization |
-| qBittorrent | download client | moves content into the pipeline |
-| VPN (for qBittorrent) | network isolation | download traffic routed safely |
-| FlareSolverr | anti-bot helper | keeps indexers working when they get annoying |
+Current choices (from [Chapter 2C](Chapter2c-media.md#media-stack-overview-quick-reference)): core pipeline required; configuration discipline and enhancements are optional.
+
+| App | Tier | What it gives the lab |
+|-----|------|------------------------|
+| Sonarr | Core | TV automation |
+| Radarr | Core | Movie automation |
+| Prowlarr | Core | Centralized indexer management |
+| qBittorrent | Core | Torrent download engine |
+| VPN container | Core | Network isolation for torrent traffic |
+| FlareSolverr | Core | Anti-bot helper for protected indexers |
+| Buildarr | *Optional* | Declarative *arr configuration (TRaSH sync) |
+| Recyclarr | *Optional* | Quality profile synchronization (TRaSH sync) |
+| Cleanuparr | *Optional* | Automatic queue cleanup |
+| SABnzbd | *Optional* | Usenet download client |
+| Bazarr | *Optional* | Subtitle automation |
+| ntfy | *Optional* | Lightweight completion notifications |
 
 ### `accelerated` — GPU Workloads
 
-| App | What it is | What it gives the lab |
-|-----|------------|------------------------|
-| Plex | media server | playback + optional transcoding |
-| Immich | photo/video platform | personal photo/video cloud with acceleration support |
+| App | Tier | What it gives the lab |
+|-----|------|------------------------|
+| Plex | Core | Media server: playback + optional transcoding |
+| Immich | Core | Photo/video platform with acceleration support |
 
 ---
 
 ## VM-by-VM: The Boundary Rules (The Important Part)
 
 This is the heart of the chapter: **what separates each VM from the others**.
+
+Two architecture rules apply across the lab. **Only one VM is public:** the router forwards only ports 80/443 to `core`; everything else is reachable through the reverse proxy (and admin paths like Tailscale). **VM boundaries are storage boundaries:** each VM mounts only what it needs, mounts are scoped to subfolders/exports, and `core` stays minimal and typically mounts nothing. The per-VM rules below refine what "belongs" in each place.
 
 ### `core` — The Front Door (Infrastructure, Not “Apps”)
 

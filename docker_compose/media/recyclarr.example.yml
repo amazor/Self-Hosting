@@ -5,6 +5,7 @@
 # and fill in API keys (Sonarr/Radarr: Settings -> General -> Security).
 # See: https://recyclarr.dev/reference/config-examples/  https://trash-guides.info/Guide-Sync/
 # List templates: recyclarr config list templates --includes
+# Shareable as-is (no secrets in this file); keep API keys in secrets.yml and use recyclarr.secrets.example.yml for examples.
 
 # yaml-language-server: $schema=https://raw.githubusercontent.com/recyclarr/recyclarr/master/schemas/config-schema.json
 

@@ -170,6 +170,7 @@ Keeping these together makes the system easier to reason about: there is one pla
 
 - **Only VM exposed publicly:** ports 80/443 terminate here, nowhere else.
 - **Port forwarding is narrow by design:** only ports 80/443 are forwarded to `core`. The reverse proxy terminates TLS, upgrades HTTP → HTTPS, and forwards internally based on the requested hostname.
+- **Minimal storage:** `core` typically mounts nothing; VM boundaries double as storage boundaries (see [Chapter 2 — Boundary rules](Chapter2-vms.md#vm-by-vm-the-boundary-rules-the-important-part)).
 - **Stable by intent:** changes are infrequent and deliberate.
 - **Recoverable:** restore should be straightforward (backup/snapshot + minimal state).
 - **Security-first defaults:** consistent HTTPS and sane headers everywhere.
