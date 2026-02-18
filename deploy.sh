@@ -136,6 +136,7 @@ _is_placeholder_value() {
   [[ "$val" == CHANGE_ME* ]] && return 0
   [[ "$val" == "example.com" ]] && return 0
   [[ "$val" == *.example.com ]] && return 0
+  [[ "$val" == "0.0.0.0" ]] && return 0
   return 1
 }
 
@@ -143,7 +144,7 @@ _required_vars_for_stack() {
   local stack="$1"
   case "$stack" in
     media) echo "OPENVPN_USER OPENVPN_PASSWORD MEDIA_ROOT CONFIG_ROOT" ;;
-    core) echo "AUTHENTIK_SECRET_KEY AUTHENTIK_POSTGRES_PASSWORD PUBLIC_BASE_DOMAIN AUTHENTIK_FQDN WHOAMI_FQDN" ;;
+    core) echo "AUTHENTIK_SECRET_KEY AUTHENTIK_POSTGRES_PASSWORD PUBLIC_BASE_DOMAIN AUTHENTIK_FQDN WHOAMI_FQDN DNS_BIND_IP" ;;
     *) echo "" ;;
   esac
 }
@@ -168,6 +169,7 @@ _validate_stack_env() {
   local env_file="$dir/.env"
   local var
   local val
+  local errors=()
 
   if [[ ! -f "$env_file" ]]; then
     echo "Missing .env for $stack. Create from $dir/.env.example, configure it, then re-run deploy." >&2
@@ -177,35 +179,32 @@ _validate_stack_env() {
   for var in $(_required_vars_for_stack "$stack"); do
     val="$(_env_var_from_file "$env_file" "$var")"
     if [[ -z "$val" ]]; then
-      echo "Required var $var is unset in $env_file for stack $stack." >&2
-      return 1
+      errors+=("Required var $var is unset in $env_file for stack $stack.")
+    elif _is_placeholder_value "$val"; then
+      errors+=("Required var $var is placeholder or invalid in $env_file (e.g. CHANGE_ME, example.com, 0.0.0.0 for DNS_BIND_IP).")
     fi
   done
 
-  case "$stack" in
-    core)
-      for var in AUTHENTIK_SECRET_KEY AUTHENTIK_POSTGRES_PASSWORD PUBLIC_BASE_DOMAIN AUTHENTIK_FQDN WHOAMI_FQDN; do
-        val="$(_env_var_from_file "$env_file" "$var")"
-        if _is_placeholder_value "$val"; then
-          echo "Required var $var is placeholder-like in $env_file for stack $stack." >&2
-          return 1
-        fi
-      done
-      ;;
-    *) ;;
-  esac
+  if [[ ${#errors[@]} -gt 0 ]]; then
+    echo "Required .env changes for $stack:" >&2
+    for msg in "${errors[@]}"; do
+      echo "  - $msg" >&2
+    done
+    echo "Edit $env_file then re-run deploy." >&2
+    return 1
+  fi
 }
 
 _validate_all_envs() {
   local failed=()
   local stack
   for stack in "${STACKS[@]}"; do
-    if ! _validate_stack_env "$stack" >/dev/null 2>&1; then
+    if ! _validate_stack_env "$stack"; then
       failed+=("$stack")
     fi
   done
   if [[ ${#failed[@]} -gt 0 ]]; then
-    echo "Missing or invalid .env for: ${failed[*]}. Configure each stack .env and re-run deploy." >&2
+    echo "Fix the required .env changes above for: ${failed[*]}, then re-run deploy." >&2
     return 1
   fi
 }
@@ -470,7 +469,10 @@ _deploy_one() {
   _set_default_stack_if_needed "$stack"
 
   echo "Starting $stack stack..."
-  _run_stack_up "$stack" "$stack_dir"
+  if ! _run_stack_up "$stack" "$stack_dir"; then
+    echo "Compose up failed for $stack. Fix the error above and re-run deploy." >&2
+    return 1
+  fi
   _write_stack_functions
 }
 

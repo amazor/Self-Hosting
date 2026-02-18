@@ -66,6 +66,10 @@ parse_args() {
         FORCE=1
         shift
         ;;
+      --non-interactive|-y)
+        # Accepted for compatibility with deploy.sh (update/non-interactive mode). No-op; this script has no prompts.
+        shift
+        ;;
       --help|-h)
         usage
         exit 0
