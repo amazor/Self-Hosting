@@ -440,16 +440,22 @@ def main(argv: list[str] | None = None) -> None:
     ensure_starter_ddclient_conf(config_base, enable_ddns)
     validate_compose(compose_files)
 
+    deploy_mode = bool(os.environ.get("HOMELAB_DEPLOY"))
+
     if args.up:
         bring_up_stack(compose_files, env)
     else:
-        log.info(
-            "Bootstrap complete. Run 'docker compose up -d' "
-            "(or use the core alias) when ready."
-        )
+        if deploy_mode:
+            log.info("Bootstrap complete.")
+        else:
+            log.info(
+                "Bootstrap complete. Run 'docker compose up -d' "
+                "(or use the core alias) when ready."
+            )
 
     reload_caddy_if_running(env)
-    print_summary(config_base, enable_ddns)
+    if not deploy_mode:
+        print_summary(config_base, enable_ddns)
 
 
 if __name__ == "__main__":

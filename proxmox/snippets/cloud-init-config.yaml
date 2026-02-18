@@ -5,14 +5,24 @@ package_update: true
 package_upgrade: true
 
 # 2. User Configuration
-users: 
-  - name: mazora 
-    groups: sudo, docker 
-    shell: /bin/bash 
-    sudo: ALL=(ALL) NOPASSWD:ALL 
-    lock_passwd: true
-    # ssh_authorized_keys:
-    #   - "ssh-ed25519 AAAA... your-public-key-here"
+# This section is overridden by Proxmox's --ciuser flag (set in create_template.sh),
+# which generates its own user-data with higher priority than this vendor snippet.
+# We use --ciuser because it keeps the user visible in Proxmox's GUI Cloud-Init tab
+# and enables SSH key injection via the GUI — worth the trade-off over Cloud-Init
+# best practice (using the users: list below). Proxmox is expected to update their
+# Cloud-Init generation before the deprecated 'user' string is removed in 27.2.
+#
+# To inspect what Proxmox actually generates:
+#   qm cloudinit dump <VMID> user
+#
+# users:
+#   - name: mazora
+#     groups: sudo, docker
+#     shell: /bin/bash
+#     sudo: ALL=(ALL) NOPASSWD:ALL
+#     lock_passwd: true
+#     ssh_authorized_keys:
+#       - "ssh-ed25519 AAAA... your-public-key-here"
 
 # 3. Official Docker Repo Setup
 apt:
@@ -55,7 +65,8 @@ runcmd:
   - systemctl enable --now qemu-guest-agent
   - systemctl enable --now avahi-daemon
 
-  # Ensure default user is in docker group (idempotent; fixes clones from older templates)
+  # --ciuser creates the user from Proxmox's default template, which doesn't include
+  # the docker group. This adds it back.
   - usermod -aG docker mazora
 
   # Homelab repo: first boot only → latest at provision time

@@ -406,21 +406,24 @@ def main(argv: list[str] | None = None) -> None:
 
     real_user, real_home = get_real_user()
 
+    deploy_mode = bool(os.environ.get("HOMELAB_DEPLOY"))
+
     log.info("--- Media VM bootstrap ---")
-    log.info("This script will (idempotent, safe to re-run):")
-    log.info(
-        "  1. Optionally add NFS mount to /etc/fstab "
-        "(interactive only; skipped with --non-interactive)"
-    )
-    log.info(
-        "  2. Require .env; create config dirs under CONFIG_ROOT "
-        "(base + enabled overlays)"
-    )
-    log.info(
-        "  3. Run guardrails (e.g. VPN check; use --force to skip "
-        "overridable checks)"
-    )
-    log.info("")
+    if not deploy_mode:
+        log.info("This script will (idempotent, safe to re-run):")
+        log.info(
+            "  1. Optionally add NFS mount to /etc/fstab "
+            "(interactive only; skipped with --non-interactive)"
+        )
+        log.info(
+            "  2. Require .env; create config dirs under CONFIG_ROOT "
+            "(base + enabled overlays)"
+        )
+        log.info(
+            "  3. Run guardrails (e.g. VPN check; use --force to skip "
+            "overridable checks)"
+        )
+        log.info("")
 
     # Phase 1: NFS
     if not args.non_interactive:
@@ -461,7 +464,10 @@ def main(argv: list[str] | None = None) -> None:
     ensure_config_directories(config_base, env, real_user)
     copy_example_configs(config_base, env, real_user)
 
-    print_summary(env)
+    if not deploy_mode:
+        print_summary(env)
+    else:
+        log.info("Bootstrap complete.")
 
 
 if __name__ == "__main__":

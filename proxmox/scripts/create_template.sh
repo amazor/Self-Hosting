@@ -39,9 +39,10 @@ Options:
   -s, --storage NAME  Proxmox storage backend   (default: $DEFAULT_STORAGE)
   -h, --help          Show this help message
 
-The script copies the Cloud-Init vendor snippet into Proxmox's local
-snippet storage (/var/lib/vz/snippets/), substituting the username
-throughout if --user differs from the default.
+The script looks for the Cloud-Init vendor snippet in Proxmox's local
+snippet storage (/var/lib/vz/snippets/) first, then falls back to the
+repo-relative path (proxmox/snippets/). If --user is provided, the
+installed snippet is updated with the custom username.
 
 Examples:
   $(basename "$0")                              # all defaults
@@ -101,7 +102,7 @@ mkdir -p "$(dirname "$SNIPPET_DEST")"
 if [ "$USER_NAME" = "$DEFAULT_USER" ]; then
     cp "$SNIPPET_SRC" "$SNIPPET_DEST"
 else
-    sed "s|mazora|$USER_NAME|g" "$SNIPPET_SRC" > "$SNIPPET_DEST"
+    sed "s|$DEFAULT_USER|$USER_NAME|g" "$SNIPPET_SRC" > "$SNIPPET_DEST"
 fi
 echo "Installed vendor snippet → $SNIPPET_DEST (user: $USER_NAME)"
 
@@ -153,6 +154,9 @@ qm set "$VM_ID" --cicustom "vendor=local:snippets/$SNIPPET_NAME"
 #    removal planned for 27.2); Proxmox is expected to update before then.
 # ---------------------------------------------------------------------------
 qm set "$VM_ID" --ciuser "$USER_NAME" --ipconfig0 ip=dhcp,ip6=dhcp
+
+# TODO: Uncomment once template is finalized to reclaim disk space
+# rm -f "$IMG_FILE"
 
 echo ""
 echo "VM $VM_ID created. One-time setup before converting to template:"
