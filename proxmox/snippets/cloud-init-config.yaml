@@ -3,7 +3,6 @@
 # 1. Automatic Package Updates on first boot
 package_update: true
 package_upgrade: true
-package_reboot_if_required: true
 
 # 2. User Configuration
 users: 
@@ -12,6 +11,8 @@ users:
     shell: /bin/bash 
     sudo: ALL=(ALL) NOPASSWD:ALL 
     lock_passwd: true
+    # ssh_authorized_keys:
+    #   - "ssh-ed25519 AAAA... your-public-key-here"
 
 # 3. Official Docker Repo Setup
 apt:
@@ -57,9 +58,10 @@ runcmd:
   # Ensure default user is in docker group (idempotent; fixes clones from older templates)
   - usermod -aG docker mazora
 
-  # Homelab repo: first boot only → latest at provision time. Symlink in home so it's visible when you log in.
+  # Homelab repo: first boot only → latest at provision time
   - mkdir -p /opt
   - |
+    set -e
     if [ ! -d /opt/self-hosting/.git ]; then
       git clone --depth 1 "https://github.com/amazor/Self-Hosting.git" /opt/self-hosting
       chown -R mazora:mazora /opt/self-hosting
@@ -84,3 +86,9 @@ runcmd:
   # Set swappiness to 10 (Last Resort mode)
   - sysctl vm.swappiness=10
   - echo 'vm.swappiness=10' >> /etc/sysctl.conf
+
+# 7. Reboot only if a kernel upgrade requires it (runs AFTER all Cloud-Init stages complete)
+power_state:
+  mode: reboot
+  message: "Rebooting — kernel upgrade requires it"
+  condition: test -f /var/run/reboot-required

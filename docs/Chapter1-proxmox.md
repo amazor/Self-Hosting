@@ -129,9 +129,9 @@ Our specific snippet handles the "boring" parts of server setup so you can get s
 
 ---
 
-### 📝 The Blueprint (`common-config.yaml`)
+### 📝 The Blueprint (`cloud-init-config.yaml`)
 
-Create a file called **common-config.yaml** in `/var/lib/vz/snippets/` through your **Proxmox Shell** to create the blueprint file. This is the directory we enabled in step 2.
+Create a file called **cloud-init-config.yaml** in `/var/lib/vz/snippets/` through your **Proxmox Shell** to create the blueprint file. This is the directory we enabled in step 2.
 ```yaml
 #cloud-config
 
@@ -253,7 +253,7 @@ Now that we have our Cloud-Init "blueprint" ready, we need a VM to use it. While
 ### ❓ Why a script instead of the GUI?
 You might wonder why we’re heading back to the terminal. There are three critical reasons:
 1. **Cloud-Image Support:** We are using official Cloud-Init images (`.qcow2` files). The Proxmox GUI is designed to mount ISOs; it actually doesn't have a button to "Import Disk" for these cloud-ready images. That must be done via the `qm importdisk` command.
-2. **Custom Snippet Mapping:** Attaching our `common-config.yaml` as a "vendor" configuration is a specialized command (`--cicustom`) that isn't exposed in the standard Proxmox web interface.
+2. **Custom Snippet Mapping:** Attaching our `cloud-init-config.yaml` as a "vendor" configuration is a specialized command (`--cicustom`) that isn't exposed in the standard Proxmox web interface.
 3. **Consistency:** This script ensures that hardware optimizations—like **SSD Emulation**, **Discard (TRIM)**, and the **QEMU Agent**—are set perfectly every time.
     
 > ### ⚠️ Hardware Note: x86 Only
@@ -313,7 +313,7 @@ qm set $VM_ID --boot c --bootdisk scsi0
 qm set $VM_ID --serial0 socket --vga serial0
 
 # 5. Attach the Custom Vendor Snippet
-qm set $VM_ID --cicustom "vendor=local:snippets/common-config.yaml"
+qm set $VM_ID --cicustom "vendor=local:snippets/cloud-init-config.yaml"
 
 # 6. Basic Cloud-Init Network Config
 qm set $VM_ID --ciuser $USER_NAME --ipconfig0 ip=dhcp,ip6=dhcp
@@ -366,7 +366,7 @@ Use the **Name** of the storage that holds VM disks (e.g. `local-lvm` or `local-
 The script checks that the chosen storage exists before creating the VM; if it doesn’t, it exits with a clear message.
 
 #### Tips for this script:
-- **The Snippet Requirement:** This script explicitly looks for `/var/lib/vz/snippets/common-config.yaml`. If you haven't created that file yet (following Step 3 of our journey), the script will finish, but the VM won't auto-install Docker when it boots.
+- **The Snippet Requirement:** This script explicitly looks for `/var/lib/vz/snippets/cloud-init-config.yaml`. If you haven't created that file yet (following Step 3 of our journey), the script will finish, but the VM won't auto-install Docker when it boots.
 - **Cleaning Up:** The script downloads the Debian image to your current folder (`debian-13-temp.qcow2`). Once your template is created, you can safely delete this file to save space: `rm debian-13-temp.qcow2`.
 
 
@@ -444,7 +444,7 @@ In any homelab journey, the "Hardcoded Defaults" are rarely accidental. They rep
 ### ❓ Frequently Asked Questions
 
 **Q: Can I change the username `mazora`?**
-* **A:** Yes, but you must change it in **both** the `common-config.yaml` snippet AND the `create_template.sh` script. If they don't match, you'll be trying to SSH into a user that doesn't exist on the system.
+* **A:** Yes — pass `-u yourname` to `create_template.sh` and the script will substitute the username throughout the Cloud-Init snippet automatically.
 
 **Q: Why is the disk size set to 32GB?**
 * **A:** 32GB is plenty for the OS and Docker engine. We keep the "OS Drive" small so that backups and snapshots are lightning-fast. For large data (like media libraries), we will attach separate virtual disks in later chapters.
