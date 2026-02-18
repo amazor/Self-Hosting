@@ -4,7 +4,7 @@
 
 **Prerequisites:** [Chapter 2C (Media VM)](Chapter2c-media.md) (VM purpose, storage model, access model), [Chapter 2](Chapter2-vms.md) (VM overview), and [Chapter 3A (Core stack)](Chapter3a-core-stack.md) (deploy pattern).
 
-Chapter 2C explains why the media VM is shaped the way it is. This chapter is the operational guide: what is inside `docker_compose/media/`, how `.env` drives overlays, how to deploy with `deploy.sh`, and how to configure each UI so imports work without remote path mappings.
+Chapter 2C explains why the media VM is shaped the way it is. This chapter is the operational guide: what is inside `docker_compose/media/`, how `.env` drives overlays, how to deploy with `deploy.py`, and how to configure each UI so imports work without remote path mappings.
 
 The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped as one container root (`/data`) so every app sees the same filesystem view.
 
@@ -25,7 +25,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 - [Bootstrap script: What it does](#bootstrap-script-what-it-does)
 - [Deploying the media stack](#deploying-the-media-stack)
   - [Path 1: Manual (on the Media VM)](#path-1-manual-on-the-media-vm)
-  - [Path 2: Repo deploy script (`deploy.sh`)](#path-2-repo-deploy-script-deploysh)
+  - [Path 2: Repo deploy script (`deploy.py`)](#path-2-repo-deploy-script-deploypy)
 - [After first run](#after-first-run)
 - [UI configuration how-tos](#ui-configuration-how-tos)
   - [qBittorrent](#qbittorrent)
@@ -53,9 +53,9 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 | **compose.cleanuparr.yml** | Optional queue/download hygiene overlay |
 | **compose.ntfy.yml** | Optional lightweight push notifications overlay |
 | **.env.example** | Template for required values and optional feature toggles |
-| **bootstrap.sh** | Idempotent first-run checks: env validation, mount checks, config directory creation, VPN guardrail |
+| **bootstrap.py** | Idempotent first-run checks: env validation, mount checks, config directory creation, VPN guardrail |
 
-All overlays are selected from `.env` by `ENABLE_*` flags and are automatically included by `deploy.sh` and the generated `media` shell helper.
+All overlays are selected from `.env` by `ENABLE_*` flags and are automatically included by `deploy.py` and the generated `media` shell helper.
 
 ---
 
@@ -103,7 +103,7 @@ Use `id your_user` on the host to get `PUID` and `PGID`.
 | **OPENVPN_PASSWORD** | VPN password. |
 | **SERVER_COUNTRIES / SERVER_CITIES** | Optional narrowing of endpoint selection. |
 
-`OPENVPN_USER` and `OPENVPN_PASSWORD` are required and validated by `bootstrap.sh` and `deploy.sh`.
+`OPENVPN_USER` and `OPENVPN_PASSWORD` are required and validated by `bootstrap.py` and `deploy.py`.
 
 ### Optional overlays
 
@@ -160,7 +160,7 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 
 ## Bootstrap script: What it does
 
-`bootstrap.sh` is safe to rerun. It prepares the stack and guardrails, but it does not run `docker compose up -d` by itself.
+`bootstrap.py` is safe to rerun. It prepares the stack and guardrails, but it does not run `docker compose up -d` by itself.
 
 ### Order of operations
 
@@ -180,7 +180,7 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 
 | Flag | Effect |
 |------|--------|
-| **--non-interactive** | Skip prompts (used by `deploy.sh`). |
+| **--non-interactive** | Skip prompts (used by `deploy.py`). |
 | **--force** | Continue despite overridable guardrails. |
 
 ---
@@ -206,7 +206,7 @@ You can deploy directly on the Media VM or use the repo deploy workflow.
 3. Run bootstrap:
 
    ```bash
-   ./bootstrap.sh
+   python3 bootstrap.py
    ```
 
 4. Start services (base only, or base + overlays):
@@ -215,7 +215,7 @@ You can deploy directly on the Media VM or use the repo deploy workflow.
    docker compose -f compose.yml up -d
    ```
 
-### Path 2: Repo deploy script (`deploy.sh`)
+### Path 2: Repo deploy script (`deploy.py`)
 
 From repo root:
 
@@ -223,13 +223,13 @@ From repo root:
 2. Deploy:
 
    ```bash
-   ./deploy.sh media
+   python3 deploy.py media
    ```
 
-`deploy.sh media` will:
+`python3 deploy.py media` will:
 
 - validate required env vars for media
-- run `docker_compose/media/bootstrap.sh` in deploy mode
+- run `docker_compose/media/bootstrap.py` in deploy mode
 - include overlay compose files based on `ENABLE_*` flags
 - create/update `~/media` symlink to this stack
 - install shell helpers so you can run media commands from any directory
@@ -249,8 +249,8 @@ media boot
 
 Optional deploy flags:
 
-- `./deploy.sh media --force` for testing or temporary bypass of guardrails.
-- `./deploy.sh media --non-interactive` for automation.
+- `python3 deploy.py media --force` for testing or temporary bypass of guardrails.
+- `python3 deploy.py media --non-interactive` for automation.
 
 ---
 

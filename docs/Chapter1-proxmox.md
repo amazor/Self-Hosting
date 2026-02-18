@@ -122,7 +122,7 @@ Our specific snippet handles the "boring" parts of server setup so you can get s
 
 - **Security & Users:** It creates a user named `mazora`, grants them `sudo` privileges without requiring a password for commands, and locks the default root account for better security.
 - **The Docker Engine:** It adds the official Docker repository (rather than the older versions found in default Linux repos) and installs the latest version of Docker CE and Docker Compose.
-- **Homelab Repo:** On first boot it clones this homelab repository to `/opt/self-hosting` (latest at provision time) and creates a symlink `~/self-hosting` in your home directory so the repo is visible as soon as you log in. No manual `git clone` per VM—you can go straight to `cd ~/self-hosting/docker_compose/<vm>` and run `./bootstrap.sh`.
+- **Homelab Repo:** On first boot it clones this homelab repository to `/opt/self-hosting` (latest at provision time) and creates a symlink `~/self-hosting` in your home directory so the repo is visible as soon as you log in. No manual `git clone` per VM—you can go straight to `cd ~/self-hosting/docker_compose/<vm>` and run `python3 bootstrap.py`.
 - **System Health:** * **QEMU Guest Agent:** Vital for Proxmox to "talk" to the VM (reporting IP addresses and allowing graceful shutdowns).
     - **Log Rotation:** We limit Docker logs to **50MB**. Without this, runaway logs can eventually fill your entire virtual disk and crash the VM.
     - **Swap File:** We create a **2GB swap file**. This acts as a "safety net" for memory; if a Docker build suddenly spikes in RAM usage, the VM will use the swap space instead of crashing.

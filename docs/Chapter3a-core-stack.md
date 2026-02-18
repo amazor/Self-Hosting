@@ -6,7 +6,7 @@
 
 Chapter 2A explains *why* the Core VM exists and *what* runs there (Caddy, Authentik, dnsmasq, whoami). This chapter is the **hands-on guide**: the contents of `docker_compose/core/`, how to configure them, and how to deploy the stack.
 
-You will walk through the environment template (`.env.example`), important parts of the Compose file, the bootstrap script, and two deployment paths — manual (on the VM) and repo-driven (`deploy.sh`).
+You will walk through the environment template (`.env.example`), important parts of the Compose file, the bootstrap script, and two deployment paths — manual (on the VM) and repo-driven (`deploy.py`).
 
 > ### 🧠 Philosophy: One Stack, One Directory
 > The core stack is self-contained under `docker_compose/core/`. Compose file, env template, and bootstrap script live together so that cloning the repo and filling `.env` is enough to get a repeatable, documentable deployment.
@@ -21,7 +21,7 @@ You will walk through the environment template (`.env.example`), important parts
 - [Bootstrap script: What it does](#bootstrap-script-what-it-does)
 - [Deploying the core stack](#deploying-the-core-stack)
   - [Path 1: Manual (on the Core VM)](#path-1-manual-on-the-core-vm)
-  - [Path 2: Repo deploy script (`deploy.sh`)](#path-2-repo-deploy-script-deploysh)
+  - [Path 2: Repo deploy script (`deploy.py`)](#path-2-repo-deploy-script-deploypy)
 - [After first run](#after-first-run)
 - [UI configuration how-tos](#ui-configuration-how-tos)
   - [Authentik](#authentik)
@@ -40,8 +40,8 @@ You will walk through the environment template (`.env.example`), important parts
 |----------------|---------|
 | **compose.yml** | Stack definition: Caddy, Authentik (server + worker), Postgres, Redis, dnsmasq, whoami. Optional ddclient (DDNS) via overlay **compose.ddclient.yml** when **ENABLE_DDNS=1** in `.env`. |
 | **.env.example** | Template for required and optional env vars (no secrets; copy to `.env` and fill) |
-| **bootstrap.sh** | Idempotent first-run: creates/validates `.env`, config dirs, Caddyfile, dnsmasq.conf, optional ddclient starter (when **ENABLE_DDNS=1**), optional `docker compose up` |
-| **gen-caddyfile.sh** | Generates `config/caddy/Caddyfile` from `.env` (used by bootstrap and by [update-caddyfile.sh](#after-first-run)) |
+| **bootstrap.py** | Idempotent first-run: creates/validates `.env`, config dirs, Caddyfile, dnsmasq.conf, optional ddclient starter (when **ENABLE_DDNS=1**), optional `docker compose up` |
+| **gen_caddyfile.py** | Generates `config/caddy/Caddyfile` from `.env` (used by bootstrap and by [update-caddyfile.sh](#after-first-run)) |
 | **update-caddyfile.sh** | Regenerate Caddyfile from `.env` and reload Caddy without full bootstrap |
 | **restart-ddclient.sh** | Restart the ddclient container after editing `ddclient.conf` (only when **ENABLE_DDNS=1**). Use `core restart ddclient` if you have the alias. |
 
@@ -121,7 +121,7 @@ Examples (from `.env.example`):
 # CADDY_EXTRA_SERVICES=sonarr.example.com/api:192.168.1.130:8989
 ```
 
-The Caddyfile is **generated** from `.env` by `gen-caddyfile.sh`; after changing `CADDY_EXTRA_SERVICES`, re-run bootstrap or [update-caddyfile.sh](#after-first-run) and reload Caddy.
+The Caddyfile is **generated** from `.env` by `gen_caddyfile.py`; after changing `CADDY_EXTRA_SERVICES`, re-run bootstrap or [update-caddyfile.sh](#after-first-run) and reload Caddy.
 
 ### DDNS (optional overlay)
 
@@ -175,7 +175,7 @@ A single **core_internal** bridge network connects all services. Nothing is expo
 
 ## Bootstrap script: What it does
 
-`bootstrap.sh` is **idempotent**: safe to run multiple times. It prepares the stack so `docker compose up` can succeed.
+`bootstrap.py` is **idempotent**: safe to run multiple times. It prepares the stack so `docker compose up` can succeed.
 
 ### Order of operations
 
@@ -185,7 +185,7 @@ A single **core_internal** bridge network connects all services. Nothing is expo
 4. **Config directories** — Create `CONFIG_ROOT` tree: `caddy`, `authentik/*`, `dnsmasq`; when **ENABLE_DDNS=1**, also `ddclient`.
 5. **Config writable** — Ensure the current user can write to the config dir (fix ownership if Docker previously created dirs as root).
 6. **Authentik media** — Set ownership of `authentik/media` to the Authentik UID/GID (default 1000) so uploads and migrations work.
-7. **Caddyfile** — Run `gen-caddyfile.sh` to generate `config/caddy/Caddyfile` from `.env`.
+7. **Caddyfile** — Run `gen_caddyfile.py` to generate `config/caddy/Caddyfile` from `.env`.
 8. **Caddyfile validation** — Fail if Caddyfile is missing or is a directory (e.g. from an old bind-mount).
 9. **dnsmasq.conf** — If missing, write a starter `dnsmasq.conf` from env (upstreams, local domain, optional **DNS_LOCAL_RECORDS**).
 10. **dnsmasq validation** — Fail if the config file is missing or a directory.
@@ -204,7 +204,7 @@ A single **core_internal** bridge network connects all services. Nothing is expo
 
 ### Common errors (from script help)
 
-- **Caddy: "Caddyfile: no such file or directory"** — Run bootstrap from the same directory where you run `docker compose`: `cd docker_compose/core && ./bootstrap.sh`.
+- **Caddy: "Caddyfile: no such file or directory"** — Run bootstrap from the same directory where you run `docker compose`: `cd docker_compose/core && python3 bootstrap.py`.
 - **Authentik: "Permission denied: /media/public"** — Run once: `sudo chown -R 1000:1000 <CONFIG_ROOT>/authentik/media`.
 - **dnsmasq: "failed to read configuration file"** — Same as Caddy; run bootstrap from the stack directory so the config file is created there.
 
@@ -234,17 +234,17 @@ Assumes the repo is cloned on the VM (e.g. under `~/Self-Hosting` or `/opt/homel
 
 3. **Run bootstrap** (and optionally start the stack):
    ```bash
-   ./bootstrap.sh
+   python3 bootstrap.py
    # If all checks pass, start the stack:
    docker compose up -d
    # Or in one step:
-   ./bootstrap.sh --up
+   python3 bootstrap.py --up
    ```
-   **If ENABLE_DDNS=1:** You must configure ddclient before it will update DNS. Either: (a) edit `config/ddclient/ddclient.conf` now, then run `docker compose up -d` (or `./bootstrap.sh --up`); or (b) bring up first, then edit `ddclient.conf` and run `./restart-ddclient.sh` (or `docker compose -f compose.yml -f compose.ddclient.yml restart ddclient`).
+   **If ENABLE_DDNS=1:** You must configure ddclient before it will update DNS. Either: (a) edit `config/ddclient/ddclient.conf` now, then run `docker compose up -d` (or `python3 bootstrap.py --up`); or (b) bring up first, then edit `ddclient.conf` and run `./restart-ddclient.sh` (or `docker compose -f compose.yml -f compose.ddclient.yml restart ddclient`).
 
 4. **Verify** — See [Verification and troubleshooting](#verification-and-troubleshooting).
 
-### Path 2: Repo deploy script (`deploy.sh`)
+### Path 2: Repo deploy script (`deploy.py`)
 
 From the **repo root** on a machine that can run the deploy script (e.g. your laptop or the VM):
 
@@ -252,12 +252,12 @@ From the **repo root** on a machine that can run the deploy script (e.g. your la
 
 2. **Run deploy**:
    ```bash
-   ./deploy.sh core
+   python3 deploy.py core
    ```
 
    Deploy will:
    - Validate required env vars for `core` (e.g. `AUTHENTIK_SECRET_KEY`, `AUTHENTIK_POSTGRES_PASSWORD`, `PUBLIC_BASE_DOMAIN`, `AUTHENTIK_FQDN`, `WHOAMI_FQDN`).
-   - Run `docker_compose/core/bootstrap.sh`.
+   - Run `docker_compose/core/bootstrap.py`.
    - Create a symlink `~/core` → repo’s `docker_compose/core` (if not already installed).
    - Run `docker compose up -d` in the stack directory (including the ddclient overlay when **ENABLE_DDNS=1**).
    - Update shell helpers (e.g. `core up -d`, `core logs -f`, `core restart ddclient`) in `~/.bashrc.d/stack-functions.sh`.
@@ -265,8 +265,8 @@ From the **repo root** on a machine that can run the deploy script (e.g. your la
    **If ENABLE_DDNS=1:** DDNS will not update your domain until you configure ddclient. Either: (a) before deploy, set **ENABLE_DDNS=1**, run bootstrap once to create the ddclient dir and starter config, edit `config/ddclient/ddclient.conf`, then run deploy; or (b) run deploy first, then edit `ddclient.conf` and run `core restart ddclient` (or `./restart-ddclient.sh` from the stack directory). See [ddclient](#ddclient).
 
 3. **Optional flags**:
-   - `./deploy.sh core --force` — Continue even if env validation fails (use only for testing).
-   - `./deploy.sh core --default core` — Set `core` as the default stack for the `stack` helper.
+   - `python3 deploy.py core --force` — Continue even if env validation fails (use only for testing).
+   - `python3 deploy.py core --default core` — Set `core` as the default stack for the `stack` helper.
 
 After a successful deploy, you can use `core ps`, `core logs -f`, `core up -d`, etc., from any directory (after sourcing your shell rc or opening a new session).
 
@@ -350,7 +350,7 @@ Caddy has no web UI. Routes are defined in the generated Caddyfile, which is bui
    - Whole site, no SSO: `FQDN:host:port`
    - Path-only: `FQDN/path:host:port` or `FQDN/path:host:port:sso`
 2. From `docker_compose/core`, either:
-   - Run **bootstrap** (or **deploy**): `./bootstrap.sh` or `./deploy.sh core` — regenerates Caddyfile and reloads Caddy, or
+   - Run **bootstrap** (or **deploy**): `python3 bootstrap.py` or `python3 deploy.py core` — regenerates Caddyfile and reloads Caddy, or
    - Run **update-caddyfile only**: `./update-caddyfile.sh` (or `./update-caddyfile.sh --no-reload` to only write the file).
 
 **Verify:** `curl -k https://<FQDN>` (or open in a browser). For SSO routes, you should be redirected to Authentik if not logged in.
@@ -367,7 +367,7 @@ dnsmasq has no web UI. Local records are set via env (bootstrap) or by editing t
 
 **Option A — Via `.env` (recommended for a small set of static records)**  
 1. Edit `docker_compose/core/.env` and set **DNS_LOCAL_RECORDS** to a comma-separated list of `hostname:ip` (e.g. `core:192.168.1.110,apps:192.168.1.120`).  
-2. Re-run bootstrap so dnsmasq.conf is regenerated: `./bootstrap.sh` (from `docker_compose/core`).  
+2. Re-run bootstrap so dnsmasq.conf is regenerated: `python3 bootstrap.py` (from `docker_compose/core`).  
 3. Restart dnsmasq: `docker compose restart dnsmasq` (or `core restart dnsmasq` if using deploy helpers).
 
 **Option B — Edit config directly**  

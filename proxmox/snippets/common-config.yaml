@@ -25,6 +25,7 @@ packages:
   - git
   - curl
   - jq
+  - python3
   - nfs-common
   - docker-ce
   - docker-ce-cli
@@ -69,6 +70,8 @@ runcmd:
       fi
       ln -sfn /opt/self-hosting /home/mazora/self-hosting
       chown -h mazora:mazora /home/mazora/self-hosting
+      # Pre-fill .env.example files with auto-detected values (LAN IP, secret key, UID/GID)
+      sudo -u mazora python3 /opt/self-hosting/scripts/setup_env.py
     fi
 
   # Set up a 2GB Swap file to prevent crashes during heavy builds

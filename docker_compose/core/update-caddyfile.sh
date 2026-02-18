@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Regenerate Caddyfile from .env and reload Caddy.
 #
-# Bootstrap (and deploy) already run gen-caddyfile.sh and reload Caddy, so
-# re-running ./deploy.sh core or ./bootstrap.sh applies CADDY_EXTRA_SERVICES.
+# Bootstrap (and deploy) already run gen_caddyfile.py and reload Caddy, so
+# re-running python3 deploy.py core or python3 bootstrap.py applies CADDY_EXTRA_SERVICES.
 # This script is for when you only want to regenerate + reload without
 # running the full bootstrap (e.g. after editing .env by hand).
 #
@@ -22,7 +22,7 @@ Usage: ./update-caddyfile.sh [--no-reload]
 Regenerates Caddyfile from .env (CADDY_EXTRA_SERVICES) and reloads Caddy.
 
 Normally you can just re-run bootstrap or deploy to apply .env changes:
-  ./deploy.sh core   # or: ./bootstrap.sh
+  python3 deploy.py core   # or: python3 bootstrap.py
 
 Flags:
   --no-reload   Only write the Caddyfile; do not run 'caddy reload'.
@@ -38,7 +38,7 @@ for arg in "$@"; do
   esac
 done
 
-"$SCRIPT_DIR/gen-caddyfile.sh"
+python3 "$SCRIPT_DIR/gen_caddyfile.py"
 
 if [[ "$NO_RELOAD" -eq 1 ]]; then
   echo "Skipping reload (--no-reload). Run: docker exec $CADDY_CONTAINER caddy reload --config /etc/caddy-config/Caddyfile"

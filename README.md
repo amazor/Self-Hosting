@@ -43,7 +43,7 @@ Build a robust, scalable, and automated home server environment that can host:
 - **Storage:** Synology NAS
 - **VM OS baseline:** Debian (Cloud-Init template, Docker host)
 - **Workloads:** Docker Compose (per-VM stacks)
-- **Automation:** Cloud-Init + repo-driven bootstrap scripts (described in Chapter 3)
+- **Automation:** Cloud-Init + repo-driven bootstrap/deploy scripts (described in Chapter 3)
 
 ### Application stack (at a glance)
 
@@ -80,9 +80,9 @@ This journey is written as chronological chapters.
   **Configuration reference:** [TRaSH Guides](https://trash-guides.info/) are the recommended source for Radarr, Sonarr, Prowlarr, Bazarr, Plex, downloaders, and file/folder structure. Cursor rules in `.cursor/rules/trash-guides-*.mdc` embed this reference for `docker_compose/media/`, `docker_compose/accelerated/`, and `docs/Chapter2c-media.md`.
 
 - **[Chapter 3A: Core Stack](docs/Chapter3a-core-stack.md)**  
-  Core VM stack: `.env`, compose, bootstrap, Caddyfile generation, and deploy (`./deploy.sh core`).
+  Core VM stack: `.env`, compose, bootstrap, Caddyfile generation, and deploy (`python3 deploy.py core`).
 
-> **Chapter 3 (WIP):** Full deploy design — deploy script (`./deploy.sh`), bootstrap, per-stack `.env`, and shell helpers (`media`, `stack`). Upcoming chapters will cover Docker Compose workflow, storage mounts (NFS), and the per-VM bootstrap approach in detail.
+> **Chapter 3 (WIP):** Full deploy design — deploy script (`python3 deploy.py`), bootstrap, per-stack `.env`, and shell helpers (`media`, `stack`). Upcoming chapters will cover Docker Compose workflow, storage mounts (NFS), and the per-VM bootstrap approach in detail.
 
 ---
 
@@ -116,28 +116,28 @@ This repo is intentionally split between:
 │   └── snippets/
 │       └── ... (Cloud-Init snippets / common config)
 │
-├── deploy.sh                            # stack deploy: ./deploy.sh core | media | ...
+├── deploy.py                            # stack deploy: python3 deploy.py core | media | ...
 ├── docker_compose/                     # per-VM stacks (core, media, etc.)
 │   ├── core/
 │   │   ├── compose.yml
 │   │   ├── .env.example
-│   │   └── bootstrap.sh                # role provisioner: mounts, helpers, validation
+│   │   └── bootstrap.py                # role provisioner: mounts, helpers, validation
 │   ├── monitoring/
 │   │   ├── compose.yml
 │   │   ├── .env.example
-│   │   └── bootstrap.sh
+│   │   └── bootstrap.py
 │   ├── apps/
 │   │   ├── compose.yml
 │   │   ├── .env.example
-│   │   └── bootstrap.sh
+│   │   └── bootstrap.py
 │   ├── media/
 │   │   ├── compose.yml
 │   │   ├── .env.example
-│   │   └── bootstrap.sh
+│   │   └── bootstrap.py
 │   └── accelerated/
 │       ├── compose.yml
 │       ├── .env.example
-│       └── bootstrap.sh
+│       └── bootstrap.py
 │
 ├── DEPLOY.md                          # how to use the repo: template → clone → deploy
 └── README.md
@@ -149,7 +149,7 @@ This repo is intentionally split between:
 ✅ VM architecture (Chapter 2)
 ✅ Core VM design (Chapter 2A)
 ✅ Media VM design (Chapter 2C)
-✅ Core stack deploy (Chapter 3A: .env, compose, bootstrap, deploy.sh)
+✅ Core stack deploy (Chapter 3A: .env, compose, bootstrap, deploy.py)
 🔜 Full Docker Compose workflow doc (Chapter 3) + bootstrap scripts
 🔜 Storage strategy (NFS mounts, permissions, boundaries)
 🔜 Monitoring (Chapter 2B), accelerated workloads (Chapter 2D)

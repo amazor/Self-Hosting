@@ -8,7 +8,7 @@ For the big picture (mission, principles, VM layout), see the [README](README.md
 
 ## Two ways to run
 
-**You don’t need Proxmox.** You can run everything on a **single host**: clone this repo to `/opt/self-hosting`, create `.env` from the `.env.example` in each stack directory you care about (see the example files and chapter docs for what each variable does), then run `./deploy.sh all`. That deploys all stacks and creates shell helpers (e.g. `media`, `core`) on one machine. Use `--default <stack>` if you want the generic `stack` command to target a specific stack.
+**You don’t need Proxmox.** You can run everything on a **single host**: clone this repo to `/opt/self-hosting`, create `.env` from the `.env.example` in each stack directory you care about (see the example files and chapter docs for what each variable does), then run `python3 deploy.py all`. That deploys all stacks and creates shell helpers (e.g. `media`, `core`) on one machine. Use `--default <stack>` if you want the generic `stack` command to target a specific stack.
 
 **The rest of this guide** describes the **usual flow**: Proxmox + one VM per role. If you followed that path, parts 1 and 2 give you the template and VMs; part 3 below is the concrete per-VM deploy step (with snippets). If you’re on a single host, the “all at once” approach above is enough; you can still use the `.env` and UI-config docs referenced below.
 
@@ -33,9 +33,9 @@ Follow **[Chapter 2](docs/Chapter2-vms.md)** to clone and size VMs (e.g., `110 c
 
 ### 3) Role-specific first run inside each VM (deploy + bootstrap)
 
-If you followed parts 1 and 2, each VM has the repo at `/opt/self-hosting`. On **each VM**, run deploy for **that VM’s stack only** (e.g. on the media VM run `./deploy.sh media`). Deploy creates a **symlink** in your home directory (e.g. `~/media`) and **shell helpers** (`media`, `core`, …). You don’t need to work from `/opt/self-hosting` after that — use the symlinked directory as your default user (e.g. `cd ~/media`).
+If you followed parts 1 and 2, each VM has the repo at `/opt/self-hosting`. On **each VM**, run deploy for **that VM’s stack only** (e.g. on the media VM run `python3 deploy.py media`). Deploy creates a **symlink** in your home directory (e.g. `~/media`) and **shell helpers** (`media`, `core`, …). You don’t need to work from `/opt/self-hosting` after that — use the symlinked directory as your default user (e.g. `cd ~/media`).
 
-**.env** is documented in each stack’s `.env.example` and in the chapter docs (Chapter 3A, 3c). Create `.env` from `.env.example` in the stack directory; deploy does **not** copy it for you.
+**.env** is documented in each stack’s `.env.example` and in the chapter docs (Chapter 3A, 3c). Create `.env` from `.env.example` in the stack directory; deploy does **not** copy it for you (unless you pass `--init-env`; you still need to fill required vars).
 
 **UI config** is required after deploy: proxy routes, *arr settings, quality profiles, etc. See the **specific docs** for what to do in each app’s UI ([Chapter 3A](docs/Chapter3a-core-stack.md) for core, [Chapter 3c](docs/Chapter3c-media-stack.md) for media).
 
@@ -45,7 +45,7 @@ If you followed parts 1 and 2, each VM has the repo at `/opt/self-hosting`. On *
 cd /opt/self-hosting
 cp docker_compose/media/.env.example docker_compose/media/.env
 # Edit docker_compose/media/.env (see .env.example and Chapter 3c for options)
-./deploy.sh media
+python3 deploy.py media
 source ~/.bashrc   # or open a new shell
 cd ~/media         # work from the symlink as your default user
 media up -d
@@ -53,7 +53,30 @@ media up -d
 
 Then do the **UI configuration** for Sonarr, Radarr, Prowlarr, qBittorrent, etc. as described in [Chapter 3c](docs/Chapter3c-media-stack.md).
 
-Bootstrap (invoked by deploy) handles VM-specific setup: optional NFS mounts, config dirs, validation. Full deploy script usage: `./deploy.sh --help`.
+Bootstrap (invoked by deploy) handles VM-specific setup: optional NFS mounts, config dirs, validation. Full deploy script usage: `python3 deploy.py --help`.
 
 ✅ Template stays boring.  
 ✅ Per-VM provisioning stays explicit and reproducible.
+
+---
+
+## First-time setup (after a fresh clone)
+
+After cloning the repo on a new machine or VM, an optional setup script can pre-fill auto-detectable values in the `.env.example` files (e.g. generate `AUTHENTIK_SECRET_KEY`, detect `DNS_BIND_IP`, set `PUID`/`PGID`). This saves manual work while keeping "verify config before use" as the default flow.
+
+```bash
+# 1. Pre-fill .env.example files with auto-detected values
+python3 scripts/setup_env.py
+
+# 2. Copy .env.example to .env for each stack you want to deploy
+cp docker_compose/core/.env.example docker_compose/core/.env
+cp docker_compose/media/.env.example docker_compose/media/.env
+
+# 3. Review and fill remaining required vars (secrets, domain, etc.)
+#    See .env.example comments and chapter docs for what each variable does.
+
+# 4. Deploy
+python3 deploy.py core          # or: python3 deploy.py all
+```
+
+**Convenience:** Pass `--init-env` to have deploy copy `.env.example` to `.env` automatically when `.env` is missing. Required vars must still be filled — validation is unchanged even with `--force`.
