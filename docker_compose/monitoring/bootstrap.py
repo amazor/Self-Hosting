@@ -380,6 +380,8 @@ discovery.docker "local" {{
 
 // Rules only (targets = []); loki.source.docker gets raw discovery targets.
 // Container regex extracts compose service name: /project-service-1 -> service.
+// We also set container_name, service_name, instance so Grafana Loki dashboards
+// (e.g. built-in Loki v3 dashboards) work: they expect those label names.
 // https://github.com/grafana/alloy-scenarios/blob/main/self-monitoring/config.alloy
 discovery.relabel "docker" {{
   targets = []
@@ -393,6 +395,25 @@ discovery.relabel "docker" {{
   rule {{
     target_label = "host"
     replacement  = "{hostname}"
+  }}
+
+  // Dashboard compatibility: instance = VM/host, container_name/service_name/job = service.
+  // job is used by "Logs / App" style dashboards (e.g. gnetId 24866) for the App dropdown.
+  rule {{
+    target_label  = "instance"
+    replacement   = "{hostname}"
+  }}
+  rule {{
+    source_labels = ["container"]
+    target_label  = "container_name"
+  }}
+  rule {{
+    source_labels = ["container"]
+    target_label  = "service_name"
+  }}
+  rule {{
+    source_labels = ["container"]
+    target_label  = "job"
   }}
 }}
 
