@@ -147,15 +147,11 @@ def main() -> None:
         log.warning(f"Media .env.example not found: {media_example}")
 
     # -- Monitoring stack --
+    # Grafana admin password is not pre-filled; user sets it in .env. Bootstrap
+    # verifies it is changed (or use --force for local testing).
     mon_example = REPO_ROOT / "docker_compose" / "monitoring" / ".env.example"
     if mon_example.is_file():
         mon_updates: dict[str, tuple[str, str]] = {}
-
-        secret = _generate_secret_key()
-        mon_updates["GRAFANA_ADMIN_PASSWORD"] = (
-            secret,
-            "random secret via os.urandom; verify before use",
-        )
 
         updated = _update_env_example(mon_example, mon_updates)
         if updated:
