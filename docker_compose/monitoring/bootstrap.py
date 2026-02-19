@@ -389,6 +389,15 @@ discovery.docker "local" {{
 discovery.relabel "docker" {{
   targets = []
 
+  rule {{
+    target_label = "host"
+    replacement  = "{hostname}"
+  }}
+  rule {{
+    target_label  = "instance"
+    replacement   = "{hostname}"
+  }}
+
   // 1) Prefer docker-compose service label (most reliable)
   rule {{
     source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
