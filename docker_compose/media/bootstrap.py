@@ -231,6 +231,14 @@ def _single_root_guardrail(compose_file: Path) -> bool:
     return True
 
 
+def _env_path_display(env_file: Path) -> str:
+    """Return the .env path relative to current working directory (e.g. deploy vs bootstrap)."""
+    try:
+        return str(env_file.resolve().relative_to(Path.cwd().resolve()))
+    except ValueError:
+        return str(env_file.resolve())
+
+
 def _ask_continue(non_interactive: bool) -> None:
     """Prompt the user to confirm; exit if declined."""
     if non_interactive:
@@ -246,17 +254,20 @@ def _ask_continue(non_interactive: bool) -> None:
         raise SystemExit(1)
 
 
-def validate_env(env: dict[str, str], real_user: str) -> None:
+def validate_env(env: dict[str, str], real_user: str, env_file: Path) -> None:
     """Validate required .env variables for the media stack."""
+    env_loc = _env_path_display(env_file)
     if not env.get("OPENVPN_USER") or not env.get("OPENVPN_PASSWORD"):
         log.error(
             "Set OPENVPN_USER and OPENVPN_PASSWORD in .env (required for VPN)."
         )
+        log.error(f"Update: {env_loc}")
         raise SystemExit(1)
 
     media_root_str = env.get("MEDIA_ROOT", "")
     if not media_root_str:
         log.error("Set MEDIA_ROOT in .env (example: /mnt/media).")
+        log.error(f"Update: {env_loc}")
         raise SystemExit(1)
 
     media_root = Path(media_root_str)
@@ -265,6 +276,7 @@ def validate_env(env: dict[str, str], real_user: str) -> None:
             f"MEDIA_ROOT does not exist: {media_root}\n"
             "Create/mount it first, then re-run bootstrap."
         )
+        log.error(f"Update: {env_loc}")
         raise SystemExit(1)
 
     result = subprocess.run(
@@ -293,6 +305,7 @@ def validate_env(env: dict[str, str], real_user: str) -> None:
                 "Chapter 2c layout requires both downloads/ and library/ "
                 "under MEDIA_ROOT."
             )
+            log.error(f"Update: {env_loc}")
             raise SystemExit(1)
 
 
@@ -433,13 +446,14 @@ def main(argv: list[str] | None = None) -> None:
     env_file = SCRIPT_DIR / ".env"
     if not env_file.is_file():
         log.error(
-            f"No .env found. Create .env from .env.example in {SCRIPT_DIR}, "
-            "set required vars, then re-run bootstrap or deploy."
+            "No .env found. Copy .env.example to .env, set required vars, "
+            "then re-run bootstrap or deploy."
         )
+        log.error(f"Create/edit: {_env_path_display(env_file)}")
         raise SystemExit(1)
 
     env = load_env(env_file)
-    validate_env(env, real_user)
+    validate_env(env, real_user, env_file)
 
     compose_file = SCRIPT_DIR / "compose.yml"
 
