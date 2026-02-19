@@ -389,34 +389,45 @@ discovery.docker "local" {{
 discovery.relabel "docker" {{
   targets = []
 
+  // 1) Prefer docker-compose service label (most reliable)
   rule {{
-    source_labels = ["__meta_docker_container_name"]
-    regex         = "^/(?:.+?-)?([^-]+)-(?:\\\\d+)$"
-    target_label  = "container"
-  }}
-
-  rule {{
-    target_label = "host"
-    replacement  = "{hostname}"
-  }}
-
-  // Dashboard compatibility: instance = VM/host, container_name/service_name/job = service.
-  // job is used by "Logs / App" style dashboards (e.g. gnetId 24866) for the App dropdown.
-  rule {{
-    target_label  = "instance"
-    replacement   = "{hostname}"
-  }}
-  rule {{
-    source_labels = ["container"]
-    target_label  = "container_name"
-  }}
-  rule {{
-    source_labels = ["container"]
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(.+)"
     target_label  = "service_name"
   }}
   rule {{
-    source_labels = ["container"]
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(.+)"
     target_label  = "job"
+  }}
+  rule {{
+    source_labels = ["__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "(.+)"
+    target_label  = "container"
+  }}
+
+  // 2) Fallback: parse from container name: /project-service-1  OR /project_service_1
+  rule {{
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "^/(.+?)[-_]([^-_]+(?:[-_][^-_]+)*)[-_](\\\\d+)$"
+    replacement   = "$2"
+    target_label  = "service_name"
+  }}
+  rule {{
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "^/(.+?)[-_]([^-_]+(?:[-_][^-_]+)*)[-_](\\\\d+)$"
+    replacement   = "$2"
+    target_label  = "job"
+  }}
+  rule {{
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "^/(.+?)[-_]([^-_]+(?:[-_][^-_]+)*)[-_](\\\\d+)$"
+    replacement   = "$2"
+    target_label  = "container"
+  }}
+  rule {{
+    source_labels = ["service_name"]
+    target_label  = "container_name"
   }}
 }}
 
