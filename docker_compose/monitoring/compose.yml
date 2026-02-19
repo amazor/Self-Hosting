@@ -114,13 +114,13 @@ services:
 
   # --- Uptime Kuma: uptime checks + alerting ---
   # HTTP/TCP/HTTP(s) keyword checks with built-in notifications. Data is a
-  # small SQLite DB — NFS not supported. Run as root so the app can create
-  # data/upload/ on any bind mount; caps are dropped and no-new-privileges set.
+  # small SQLite DB — NFS not supported. Runs as VM user (PUID:PGID) so the app
+  # can write to the bind mount; bootstrap chowns config/uptime-kuma and sets permissions.
   # Docs: https://github.com/louislam/uptime-kuma
   uptime-kuma:
     image: louislam/uptime-kuma:${UPTIME_KUMA_TAG:-2}
     container_name: uptime-kuma
-    user: "0"
+    user: "${PUID:-1000}:${PGID:-1000}"
     volumes:
       - ${CONFIG_ROOT:-./config}/uptime-kuma:/app/data
     ports:
@@ -179,26 +179,27 @@ services:
 
   # --- Alloy: log shipper (Docker logs → Loki) ---
   # Replaces Promtail (deprecated, EOL March 2026). Discovers containers via
-  # Docker socket, ships stdout/stderr to Loki with labels. Per grafana/alloy-scenarios
-  # (docker-monitoring, self-monitoring) Alloy needs Docker socket access; we run
-  # without user override so the default image user can read the socket (or set
-  # ALLOY_RUN_AS_USER=473 and add that UID to the host's docker group).
-  # Bootstrap creates config.alloy and chowns config/alloy/data to Alloy's UID when used.
+  # Docker socket, ships stdout/stderr to Loki with labels. Runs as VM user
+  # (PUID:PGID) with group_add so it can read the Docker socket; bootstrap
+  # chowns config/alloy/data to that user. Set DOCKER_GID to host docker group GID.
   # Docs: https://grafana.com/docs/alloy/latest/get-started/install/docker/
   alloy:
     image: grafana/alloy:${ALLOY_TAG:-latest}
     container_name: alloy
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "${DOCKER_GID:-989}"
     command:
       - run
       - "--server.http.listen-addr=0.0.0.0:12345"
-      - "--storage.path=/var/lib/alloy/data"
+      - "--storage.path=/tmp/alloy-data"
       - /etc/alloy/config.alloy
     environment:
       - ALLOY_DEPLOY_MODE=docker
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
       - ${CONFIG_ROOT:-./config}/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - ${CONFIG_ROOT:-./config}/alloy/data:/var/lib/alloy/data
+      - ${CONFIG_ROOT:-./config}/alloy/data:/tmp/alloy-data
     ports:
       - "12345:12345"
     security_opt:

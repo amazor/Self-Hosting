@@ -176,29 +176,32 @@ def ensure_config_directories(config_base: Path) -> None:
     log.info(f"Ensured config directories under: {config_base}")
 
 
-def _chown_dir(path: Path, uid: int, label: str) -> None:
+def _chown_dir(path: Path, uid: int, gid: int, label: str) -> None:
     """Set ownership on a directory, trying without sudo first."""
-    if try_chown(path, uid, uid, recursive=True):
-        log.info(f"Set {label} ownership to {uid}:{uid}.")
-    elif try_sudo_chown(path, uid, uid, recursive=True):
-        log.info(f"Set {label} ownership to {uid}:{uid} (via sudo).")
+    if try_chown(path, uid, gid, recursive=True):
+        log.info(f"Set {label} ownership to {uid}:{gid}.")
+    elif try_sudo_chown(path, uid, gid, recursive=True):
+        log.info(f"Set {label} ownership to {uid}:{gid} (via sudo).")
     else:
         log.warning(
-            f"Could not chown {path} to {uid}:{uid}.\n"
+            f"Could not chown {path} to {uid}:{gid}.\n"
             f"If {label} fails with permission errors, run once:\n"
-            f"  sudo chown -R {uid}:{uid} {path}"
+            f"  sudo chown -R {uid}:{gid} {path}"
         )
 
 
 def fix_ownership(config_base: Path) -> None:
-    """Set ownership on data directories per official image UIDs."""
+    """Set ownership on data directories. Image UIDs for Prom/Loki/Grafana; host user for Alloy and Uptime Kuma."""
+    host_uid = os.getuid()
+    host_gid = os.getegid()
+
     _chown_dir(
-        config_base / "prometheus" / "data", _PROMETHEUS_UID, "Prometheus data"
+        config_base / "prometheus" / "data", _PROMETHEUS_UID, _PROMETHEUS_UID, "Prometheus data"
     )
-    _chown_dir(config_base / "loki" / "data", _LOKI_UID, "Loki data")
-    _chown_dir(config_base / "grafana" / "data", _GRAFANA_UID, "Grafana data")
-    _chown_dir(config_base / "alloy" / "data", _ALLOY_UID, "Alloy data")
-    _chown_dir(config_base / "uptime-kuma", _UPTIME_KUMA_UID, "Uptime Kuma data")
+    _chown_dir(config_base / "loki" / "data", _LOKI_UID, _LOKI_UID, "Loki data")
+    _chown_dir(config_base / "grafana" / "data", _GRAFANA_UID, _GRAFANA_UID, "Grafana data")
+    _chown_dir(config_base / "alloy" / "data", host_uid, host_gid, "Alloy data")
+    _chown_dir(config_base / "uptime-kuma", host_uid, host_gid, "Uptime Kuma data")
 
 
 # ---------------------------------------------------------------------------
