@@ -146,6 +146,27 @@ def main() -> None:
     else:
         log.warning(f"Media .env.example not found: {media_example}")
 
+    # -- Monitoring stack --
+    mon_example = REPO_ROOT / "docker_compose" / "monitoring" / ".env.example"
+    if mon_example.is_file():
+        mon_updates: dict[str, tuple[str, str]] = {}
+
+        secret = _generate_secret_key()
+        mon_updates["GRAFANA_ADMIN_PASSWORD"] = (
+            secret,
+            "random secret via os.urandom; verify before use",
+        )
+
+        updated = _update_env_example(mon_example, mon_updates)
+        if updated:
+            log.info(
+                f"Monitoring .env.example: pre-filled {', '.join(updated)}"
+            )
+        else:
+            log.info("Monitoring .env.example: nothing to update")
+    else:
+        log.warning(f"Monitoring .env.example not found: {mon_example}")
+
     log.info("")
     log.info(
         "Done. Review the updated .env.example files, then copy to .env "
@@ -154,6 +175,10 @@ def main() -> None:
     log.info("  cp docker_compose/core/.env.example docker_compose/core/.env")
     log.info(
         "  cp docker_compose/media/.env.example docker_compose/media/.env"
+    )
+    log.info(
+        "  cp docker_compose/monitoring/.env.example "
+        "docker_compose/monitoring/.env"
     )
 
 

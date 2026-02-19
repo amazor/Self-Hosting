@@ -50,7 +50,7 @@ Build a robust, scalable, and automated home server environment that can host:
 | VM | Core apps | Optional apps |
 |----|-----------|----------------|
 | `core` | Caddy, Authentik, dnsmasq, whoami | ddclient |
-| `monitoring` | Grafana, Uptime Kuma, Komodo | — |
+| `monitoring` | Grafana, Prometheus, Loki, Uptime Kuma | node_exporter + Alloy (per-VM sidecars) |
 | `apps` | Homepage / Homarr / Dashy, Mealie | — |
 | `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Buildarr, Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
 | `accelerated` | Plex, Immich | — |
@@ -74,6 +74,9 @@ This journey is written as chronological chapters.
 
 - **[Chapter 2A: Core VM](docs/Chapter2a-core.md)**  
   The access plane: reverse proxy, HTTPS, SSO, DNS.
+
+- **[Chapter 2B: Monitoring VM](docs/Chapter2b-monitoring.md)**  
+  Observability stack: Grafana, Prometheus, Loki, Uptime Kuma — purpose, app selection, and debugging scenarios.
 
 - **[Chapter 2C: Media VM](docs/Chapter2c-media.md)**  
   Media automation pipeline: *arr stack, qBittorrent, VPN, storage design, optional layers.  
@@ -106,6 +109,7 @@ This repo is intentionally split between:
 │   ├── Chapter1-proxmox.md
 │   ├── Chapter2-vms.md
 │   ├── Chapter2a-core.md
+│   ├── Chapter2b-monitoring.md
 │   ├── Chapter2c-media.md
 │   ├── Chapter3a-core-stack.md
 │   └── ... (more chapters as the journey continues)
@@ -152,7 +156,8 @@ This repo is intentionally split between:
 ✅ Core stack deploy (Chapter 3A: .env, compose, bootstrap, deploy.py)
 🔜 Full Docker Compose workflow doc (Chapter 3) + bootstrap scripts
 🔜 Storage strategy (NFS mounts, permissions, boundaries)
-🔜 Monitoring (Chapter 2B), accelerated workloads (Chapter 2D)
+✅ Monitoring VM design (Chapter 2B)
+🔜 Accelerated workloads (Chapter 2D)
 
 ## 🔮 The Future
 This lab is a work in progress. Future expansions include:

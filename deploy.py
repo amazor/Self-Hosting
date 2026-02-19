@@ -62,6 +62,9 @@ REQUIRED_VARS: dict[str, list[str]] = {
         "MEDIA_ROOT",
         "CONFIG_ROOT",
     ],
+    "monitoring": [
+        "GRAFANA_ADMIN_PASSWORD",
+    ],
 }
 
 
@@ -490,9 +493,10 @@ def _print_deploy_summary(stacks: list[str]) -> None:
         "Deploy done. Source your shell rc file (e.g. ~/.bashrc or ~/.zshrc), "
         "or open a new shell."
     )
+    helpers = " | ".join(f"{s} ps" for s in stacks)
     log.info(
-        "Then use stack helpers: core up -d | logs -f | down, "
-        "media up -d, stack ps."
+        f"Then use stack helpers: {helpers}, "
+        "or <stack> up -d | logs -f | down."
     )
 
 

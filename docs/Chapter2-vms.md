@@ -15,11 +15,11 @@ This chapter is meant to be a **one-stop reference**:
 
 The deeper “why did I choose *this* specific app” reasoning lives in the follow-ups:
 - [Chapter 2A (core)](Chapter2a-core.md)
-- **Chapter 2B** (`monitoring`) *(planned)*
+- [Chapter 2B (monitoring)](Chapter2b-monitoring.md)
 - [Chapter 2C (media)](Chapter2c-media.md)
 - **Chapter 2D** (`accelerated`) *(planned)*
 
-Stack configuration and deployment (env, compose, bootstrap, deploy) for the core VM: [Chapter 3A (core stack)](Chapter3a-core-stack.md).
+Stack configuration and deployment (env, compose, bootstrap, deploy): [Chapter 3A (core stack)](Chapter3a-core-stack.md), [Chapter 3B (monitoring stack)](Chapter3b-monitoring-stack.md), [Chapter 3C (media stack)](Chapter3c-media-stack.md).
 
 > ### 🧠 Philosophy: Boring Infrastructure, Flexible Workloads
 > Foundational services should feel appliance-like: stable, predictable, and rarely changed.
@@ -82,7 +82,7 @@ I use a simple VMID range scheme so the Proxmox UI stays readable over time.
 |----|------|------|
 | `debian-13-docker-cloudinit` | 9000 | Cloud-Init Docker host template (do not run directly) |
 | `core` | 110 | reverse proxy, SSO, DNS |
-| `monitoring` | 120 | Grafana, Uptime Kuma, etc. |
+| `monitoring` | 120 | Grafana, Prometheus, Loki, Uptime Kuma |
 | `apps` | 210 | general user apps |
 | `media` | 220 | *arr + download pipeline |
 | `accelerated` | 230 | GPU / transcoding / CV workloads |
@@ -94,7 +94,7 @@ I use a simple VMID range scheme so the Proxmox UI stays readable over time.
 ## 🧩 What Runs Where (Quick Reference)
 
 This section is intentionally compact: **what the app is + what it contributes**.
-Full app-by-app reasoning belongs in the Chapter 2X files: [Chapter 2A (core)](Chapter2a-core.md#app-selection), [Chapter 2C (media)](Chapter2c-media.md#media-stack-overview-quick-reference).
+Full app-by-app reasoning belongs in the Chapter 2X files: [Chapter 2A (core)](Chapter2a-core.md#app-selection), [Chapter 2B (monitoring)](Chapter2b-monitoring.md#app-selection), [Chapter 2C (media)](Chapter2c-media.md#media-stack-overview-quick-reference).
 
 ### Apps at a glance
 
@@ -103,7 +103,7 @@ One table to see every app in the lab. *Optional* apps can be skipped or added l
 | VM | Core apps | Optional apps |
 |----|-----------|----------------|
 | `core` | Caddy, Authentik, dnsmasq, whoami | ddclient |
-| `monitoring` | Grafana, Uptime Kuma, Komodo | — |
+| `monitoring` | Grafana, Prometheus, Loki, Uptime Kuma | node_exporter + Alloy (per-VM sidecars) |
 | `apps` | Homepage / Homarr / Dashy, Mealie | — |
 | `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Buildarr, Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
 | `accelerated` | Plex, Immich | — |
@@ -124,11 +124,16 @@ Current choices (from [Chapter 2A](Chapter2a-core.md#app-selection)): Caddy, Aut
 
 ### `monitoring` — Observability & Operations
 
+Current choices (from [Chapter 2B](Chapter2b-monitoring.md#app-selection)): Grafana, Prometheus, Loki, Uptime Kuma on the monitoring VM; node_exporter + Alloy as per-VM sidecars.
+
 | App | Tier | What it gives the lab |
 |-----|------|------------------------|
-| Grafana | Core | Dashboards: unified view of metrics/logs over time |
+| Grafana | Core | Dashboards + log search: unified view of metrics and logs over time |
+| Prometheus | Core | Metrics store: scrapes host and service exporters across VMs |
+| Loki | Core | Log aggregation: centralized, searchable container and host logs |
 | Uptime Kuma | Core | Uptime checks: "is it up?" + practical alerting |
-| Komodo | Core | Stack management UI: centralized visibility & basic control |
+| node_exporter | Core (sidecar) | Host metrics: CPU, RAM, disk, network — runs on every VM |
+| Alloy | Core (sidecar) | Log shipping: discovers Docker containers and pushes logs to Loki — runs on every VM |
 
 ### `apps` — General-purpose Applications
 
@@ -289,7 +294,7 @@ Use this table when cloning. Each row gives the exact VMID, name, and resources;
 | VM | VMID | Clone as (name) | vCPU | RAM | Disk (default) | After cloning |
 |----|------|-----------------|------|-----|----------------|----------------|
 | `core` | 110 | `110 core` | 2 | 4GB | 32GB | [Chapter 2A (core)](Chapter2a-core.md#provisioning-the-core-vm-from-the-template) |
-| `monitoring` | 120 | `120 monitoring` | 2 | 6GB | 32GB | *(Chapter 2B planned)* |
+| `monitoring` | 120 | `120 monitoring` | 2 | 6GB | 32GB | [Chapter 2B (monitoring)](Chapter2b-monitoring.md#provisioning-the-monitoring-vm-from-the-template) |
 | `apps` | 210 | `210 apps` | 2 | 4GB | 32GB | — |
 | `media` | 220 | `220 media` | 4 | 8GB | 32GB | [Chapter 2C (media)](Chapter2c-media.md) |
 | `accelerated` | 230 | `230 accelerated` | 4 | 8GB | 32GB | *(Chapter 2D planned)* |
