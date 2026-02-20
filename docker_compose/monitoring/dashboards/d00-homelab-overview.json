@@ -249,14 +249,14 @@
       "id": 3,
       "type": "stat",
       "title": "Restarts",
-      "description": "Fleet-wide container restarts detected. Sparkline shows restart distribution over the time range — a spike indicates a crash loop.",
+      "description": "Fleet-wide count of containers that started within the last 5 minutes (evaluated at each step for the sparkline). Detects restarts by checking whether container_start_time_seconds is recent — unlike changes(), this works even when cAdvisor drops and recreates the series after a stop+start event.",
       "gridPos": { "x": 10, "y": 0, "w": 5, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "sum(changes(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[5m]))",
+          "expr": "count(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"} > (time() - 300)) OR on() vector(0)",
           "instant": false,
           "range": true,
           "legendFormat": "",
@@ -301,17 +301,17 @@
     {
       "id": 12,
       "type": "stat",
-      "title": "Stopped Containers",
-      "description": "Fleet-wide count of containers in a stopped/exited state that are not restarting. A stopped container won't increment the Restarts counter — this is the only panel that catches it. Zero is the only healthy value.",
+      "title": "Containers",
+      "description": "Fleet-wide count of running containers. cAdvisor only reports container_start_time_seconds for containers that are currently running — counting this metric gives the true running container count. The sparkline reveals drops: a sudden decrease means a container stopped or crashed. Complements the per-VM breakdown in the Resource Saturation row.",
       "gridPos": { "x": 15, "y": 0, "w": 4, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "sum(container_tasks_state{state=\"stopped\", name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) OR on() vector(0)",
-          "instant": true,
-          "range": false,
+          "expr": "count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) OR on() vector(0)",
+          "instant": false,
+          "range": true,
           "legendFormat": "",
           "refId": "A"
         }
@@ -322,18 +322,11 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
             ]
           },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "All Running", "index": 0 }
-              }
-            }
-          ],
+          "mappings": [],
           "noValue": "N/A",
           "links": [
             {
@@ -347,7 +340,7 @@
       },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "none",
+        "graphMode": "area",
         "colorMode": "background",
         "justifyMode": "center",
         "textMode": "auto",
@@ -473,11 +466,345 @@
     },
 
     {
+      "id": 7,
+      "type": "bargauge",
+      "title": "CPU",
+      "description": "Current CPU utilization per VM. Based on the idle rate over the last 2 minutes.",
+      "gridPos": { "x": 0, "y": 7, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "(1 - avg by (host, vm_role) (rate(node_cpu_seconds_total{mode=\"idle\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[2m]))) * 100",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "mappings": [],
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "noValue": "N/A",
+          "links": [
+            {
+              "title": "\u2192 Infra Workbench",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 25
+      }
+    },
+
+    {
+      "id": 8,
+      "type": "bargauge",
+      "title": "Memory",
+      "description": "Current memory utilization per VM. Based on MemAvailable vs MemTotal. Aggregated with max to prevent duplicate series from multiple scrape paths.",
+      "gridPos": { "x": 6, "y": 7, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "(1 - (max by (host, vm_role) (node_memory_MemAvailable_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) / max by (host, vm_role) (node_memory_MemTotal_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))) * 100",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "mappings": [],
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "noValue": "N/A",
+          "links": [
+            {
+              "title": "\u2192 Infra Workbench",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 25
+      }
+    },
+
+    {
+      "id": 9,
+      "type": "bargauge",
+      "title": "Disk",
+      "description": "Root filesystem utilization per VM. Aggregated with max to prevent duplicate series when multiple devices share the same mountpoint.",
+      "gridPos": { "x": 12, "y": 7, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "max by (host, vm_role) ((1 - (node_filesystem_avail_bytes{mountpoint=\"/\", fstype!=\"tmpfs\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} / node_filesystem_size_bytes{mountpoint=\"/\", fstype!=\"tmpfs\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})) * 100)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 70 },
+              { "color": "red", "value": 85 }
+            ]
+          },
+          "mappings": [],
+          "unit": "percent",
+          "min": 0,
+          "max": 100,
+          "decimals": 1,
+          "noValue": "N/A",
+          "links": [
+            {
+              "title": "\u2192 Infra Workbench",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 25
+      }
+    },
+
+    {
+      "id": 13,
+      "type": "bargauge",
+      "title": "Containers Running",
+      "description": "Number of running containers per VM. cAdvisor only exports container_start_time_seconds for running containers, so counting the series gives the true running count. A drop from the prior value indicates a container was stopped or crashed — complements the fleet-wide Containers and Restarts panels in the top row. Click to drill into the Infra Workbench.",
+      "gridPos": { "x": 18, "y": 7, "w": 6, "h": 5 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "count by (host, vm_role) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [],
+          "unit": "short",
+          "decimals": 0,
+          "noValue": "0",
+          "links": [
+            {
+              "title": "\u2192 Infra Workbench",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "orientation": "horizontal",
+        "displayMode": "gradient",
+        "showUnfilled": true,
+        "sizing": "auto",
+        "minVizWidth": 8,
+        "minVizHeight": 25
+      }
+    },
+
+    {
+      "id": 10,
+      "type": "stat",
+      "title": "Scrape Staleness",
+      "description": "Seconds since the last successful Prometheus scrape per VM. High values indicate collection problems.",
+      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "time() - max by (host) (timestamp(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 300 }
+            ]
+          },
+          "mappings": [],
+          "unit": "s",
+          "decimals": 0,
+          "noValue": "N/A",
+          "links": [
+            {
+              "title": "\u2192 Infra Workbench",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "orientation": "auto"
+      }
+    },
+
+    {
+      "id": 11,
+      "type": "stat",
+      "title": "Log Freshness (5m)",
+      "description": "Log lines received per VM in the last 5 minutes. Zero or missing means the Alloy log pipeline may be broken even if the VM is up.",
+      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 4 },
+      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "targets": [
+        {
+          "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+          "editorMode": "code",
+          "expr": "sum by (host) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m]))",
+          "queryType": "instant",
+          "legendFormat": "{{host}}",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "green", "value": 1 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "STALE", "index": 0 }
+              }
+            }
+          ],
+          "noValue": "NO DATA",
+          "links": [
+            {
+              "title": "\u2192 Infra Workbench",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "graphMode": "none",
+        "colorMode": "value",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "orientation": "auto"
+      }
+    },
+
+    {
       "id": 6,
       "type": "table",
       "title": "Top Offenders",
-      "description": "Services producing the most errors in the selected time range, ranked by error count with restart context. A service with errors AND restarts is more urgent than one with only errors.",
-      "gridPos": { "x": 0, "y": 7, "w": 24, "h": 6 },
+      "description": "Services producing the most errors in the selected time range, ranked by error count with restart context. Restarts are detected via the recency method (container_start_time_seconds within the time window) — consistent with the fleet Restarts panel and immune to cAdvisor series drops during stop+start cycles. Empty when healthy — that's by design.",
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 6 },
       "datasource": { "type": "datasource", "uid": "-- Mixed --" },
       "targets": [
         {
@@ -491,7 +818,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "sum by (node, host, service) (changes(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service!=\"\", name!=\"\", image!=\"\"}[$__range]))",
+          "expr": "count by (node, host, service) (container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service!=\"\", name!=\"\", image!=\"\"} > (time() - $__range_s))",
           "instant": true,
           "range": false,
           "legendFormat": "",
@@ -500,29 +827,18 @@
       ],
       "transformations": [
         {
-          "id": "joinByField",
-          "options": {
-            "byField": "service",
-            "mode": "outer"
-          }
+          "id": "merge",
+          "options": {}
         },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "Time 1": true,
-              "Time 2": true,
-              "node 2": true,
-              "host 2": true
-            },
-            "renameByName": {
-              "node 1": "node",
-              "host 1": "host"
+              "Time": true
             },
             "indexByName": {
-              "node 1": 0,
-              "host 1": 1,
+              "node": 0,
+              "host": 1,
               "service": 2,
               "Value #A": 3,
               "Value #B": 4
@@ -616,287 +932,6 @@
         "sortBy": [{ "displayName": "Errors", "desc": true }],
         "cellHeight": "sm",
         "footer": { "show": false }
-      }
-    },
-
-    {
-      "id": 7,
-      "type": "bargauge",
-      "title": "CPU",
-      "description": "Current CPU utilization per VM. Based on the idle rate over the last 5 minutes.",
-      "gridPos": { "x": 0, "y": 13, "w": 8, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "(1 - avg by (host, vm_role) (rate(node_cpu_seconds_total{mode=\"idle\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m]))) * 100",
-          "instant": true,
-          "range": false,
-          "legendFormat": "{{host}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 85 }
-            ]
-          },
-          "mappings": [],
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "sizing": "auto",
-        "minVizWidth": 8,
-        "minVizHeight": 25
-      }
-    },
-
-    {
-      "id": 8,
-      "type": "bargauge",
-      "title": "Memory",
-      "description": "Current memory utilization per VM. Based on MemAvailable vs MemTotal.",
-      "gridPos": { "x": 8, "y": 13, "w": 8, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "(1 - (node_memory_MemAvailable_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} / node_memory_MemTotal_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})) * 100",
-          "instant": true,
-          "range": false,
-          "legendFormat": "{{host}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 85 }
-            ]
-          },
-          "mappings": [],
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "sizing": "auto",
-        "minVizWidth": 8,
-        "minVizHeight": 25
-      }
-    },
-
-    {
-      "id": 9,
-      "type": "bargauge",
-      "title": "Disk",
-      "description": "Root filesystem utilization per VM.",
-      "gridPos": { "x": 16, "y": 13, "w": 8, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "(1 - (node_filesystem_avail_bytes{mountpoint=\"/\", fstype!=\"tmpfs\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} / node_filesystem_size_bytes{mountpoint=\"/\", fstype!=\"tmpfs\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})) * 100",
-          "instant": true,
-          "range": false,
-          "legendFormat": "{{host}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 85 }
-            ]
-          },
-          "mappings": [],
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "sizing": "auto",
-        "minVizWidth": 8,
-        "minVizHeight": 25
-      }
-    },
-
-    {
-      "id": 10,
-      "type": "stat",
-      "title": "Scrape Staleness",
-      "description": "Seconds since the last successful Prometheus scrape per VM. High values indicate collection problems.",
-      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "time() - max by (host) (timestamp(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))",
-          "instant": true,
-          "range": false,
-          "legendFormat": "{{host}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 60 },
-              { "color": "red", "value": 300 }
-            ]
-          },
-          "mappings": [],
-          "unit": "s",
-          "decimals": 0,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "none",
-        "colorMode": "value",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
-      "id": 11,
-      "type": "stat",
-      "title": "Log Freshness (5m)",
-      "description": "Log lines received per VM in the last 5 minutes. Zero or missing means the Alloy log pipeline may be broken even if the VM is up.",
-      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 4 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-          "editorMode": "code",
-          "expr": "sum by (host) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m]))",
-          "queryType": "instant",
-          "legendFormat": "{{host}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "STALE", "index": 0 }
-              }
-            }
-          ],
-          "noValue": "NO DATA",
-          "links": [
-            {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "none",
-        "colorMode": "value",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
       }
     }
 

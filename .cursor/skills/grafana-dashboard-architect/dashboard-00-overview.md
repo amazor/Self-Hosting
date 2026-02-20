@@ -52,28 +52,31 @@ If a signal on the overview makes you want to "zoom in" or "scroll through", it 
 
 ## Layout — Section by Section
 
-Five sections, top to bottom. Each answers one question.
+Five sections, top to bottom. Each answers one question. Top Offenders is at the bottom — its empty state when healthy should not interrupt triage panels above.
 
 ### Section 1 — Fleet Pulse (Row 0)
 
 **Question:** "Do I need to pay attention right now?"
 
-The 2-second glance row. Four compact stat panels, full width. Green = walk away.
+The 2-second glance row. Five compact stat panels, full width. Green = walk away.
 
 | Panel | What It Shows | Sparkline | Threshold Logic |
 |-------|--------------|-----------|-----------------|
 | **Host Status** | "5/5 UP" — single merged panel; turns red if any host is down | No | Green at full count, red if any down |
 | **Error Rate** | Fleet-wide errors/min (rate, not accumulated count) | Yes — shows direction | Green at 0, yellow at low rate, red at high rate |
 | **Restarts** | Fleet-wide container restart count in window | Yes — shows if ongoing | Green at 0, yellow >=1, red >=5 |
+| **Containers** | Fleet-wide running container count | Yes — reveals drops | Red at 0, green at >=1 |
 | **Scrape Health** | Percentage of Prometheus targets currently UP | No | Red <90%, yellow <99%, green >=99% |
 
 **Design decisions:**
 - **Merged Host Status** replaces separate Hosts Up + Hosts Down panels. Two panels for a binary signal wastes status bar space.
 - **Error Rate replaces Error Count.** Raw count over a range is meaningless without baseline. Rate shows magnitude; sparkline shows direction. "3/min and rising" is actionable. "47 errors" is not.
+- **Restarts uses `container_start_time_seconds > (time() - 300)`, not `changes()`.** `changes([5m])` is broken for Docker stop+start: when a container stops, cAdvisor drops its time series; when it starts again, cAdvisor creates a brand-new series with a single data point. A series with one point has no history for `changes()` to compare, so it always returns 0. The recency check `> (time() - 300)` evaluates the *current value* of the metric — if the start time is within the last 5 minutes, the container recently started, regardless of whether the series is new or old.
+- **Containers uses `count(container_start_time_seconds)`, not `container_tasks_state`.** `container_tasks_state` measures Linux cgroup process states (sleeping, running, stopped, zombie), NOT Docker container lifecycle states. A healthy container has most processes in `sleeping` — querying `state!="running"` to detect stopped Docker containers actually counts sleeping processes from running containers and always returns a large positive number. Worse, cAdvisor drops all metrics for a container that exits, so `container_tasks_state` never has series for truly stopped containers. `container_start_time_seconds` exists exactly once per running container and is dropped by cAdvisor when the container exits — `count()` gives the true running count. The sparkline reveals drops: a sudden decrease means something crashed or was stopped.
 - **Sparklines are not time series graphs.** A stat panel sparkline is a trend indicator — it answers "up or down?" not "when exactly?" The operator never zooms into a sparkline. This is not an anti-pattern; it's directional context.
 - **Warnings are absent.** Warning-level logs are not actionable at fleet level. A fleet with 500 warnings and zero errors is healthy. Warnings compete for attention with actual problems and win by volume. They belong on D02 Log Workbench.
 
-**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Restarts → D01 Infra Workbench. Scrape Health → scrolls to Section 5.
+**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Restarts → D01 Infra Workbench. Containers → D01 Infra Workbench. Scrape Health → scrolls to Section 5.
 
 **Must NOT include:** Per-VM breakdown, service names, log text, any number that requires careful reading.
 
@@ -91,11 +94,11 @@ Per-VM stat panels showing UP or DOWN. Colored backgrounds. One panel per host, 
 
 ---
 
-### Section 3 — Top Offenders (Row 2)
+### Section 3 — Top Offenders (Row 5, bottom)
 
 **Question:** "Where should I click next?"
 
-This is the primary routing surface — the reason the dashboard exists.
+This is the primary routing surface — the reason the dashboard exists. It lives at the **bottom** of the dashboard so that its empty state (blank when healthy) does not interrupt the resource saturation and freshness rows above it.
 
 A single **table panel**, full width, ranked descending by error count.
 
@@ -112,6 +115,7 @@ A single **table panel**, full width, ranked descending by error count.
 - **Zero-error entries are hidden.** When healthy, this section shows an empty-state message. Boring when healthy, loud when broken.
 - **Service-level attribution as output, not input.** The table query groups `by (node, host, service)`. The overview tells you "sonarr is the problem" but does NOT expose `$service` as a filter variable. Filtering to only sonarr is a workbench action. This distinction preserves the overview's VM-level filter contract while giving the operator the routing precision they need.
 - **Restarts as a column, not a separate section.** Restarts next to error counts give the operator a two-signal view: "is it noisy?" (errors) and "is it unstable?" (restarts). A service with errors AND restarts is more urgent than one with only errors.
+- **Restarts use the recency method, not `changes()`.** Consistent with the fleet Restarts panel: `container_start_time_seconds > (time() - $__range_s)` detects containers that started within the dashboard time window. `changes()` is unreliable for the same reason documented in Section 1 — cAdvisor drops the series on container stop, and a recreated series with one data point returns `changes() == 0`. The recency method works regardless of series continuity. Trade-off: it shows 1 per restarted service (boolean "did it restart?") rather than a restart count. For triage, this is sufficient — the workbench owns restart timelines and counts.
 
 **Links:** Each row → D02 Log Workbench with `$host`, `$service` (via `${__data.fields.service}`), and `level=error` pre-set. This is the most specific drilldown on the overview — one click to the error stream for that exact service.
 
@@ -119,7 +123,7 @@ A single **table panel**, full width, ranked descending by error count.
 
 **Replaces:** The previous "Error Rates by VM" stat panel and the bottom "Container Restarts by VM" stat panel. Both are absorbed into this ranked table with better attribution and routing.
 
-**Cross-datasource join:** The table uses two queries (Loki for errors, Prometheus/cAdvisor for restarts) joined on the `service` label via a `joinByField` transformation. This join is possible because `bootstrap.py` adds `service` to cAdvisor metrics via `metric_relabel_configs`, mirroring the same priority chain Alloy uses for logs.
+**Cross-datasource join:** The table uses two queries (Loki for errors, Prometheus/cAdvisor for restarts) combined via a `merge` transformation. The `merge` matches rows by ALL shared label fields (`node`, `host`, `service`), not a single field — this correctly pairs error counts with restart counts even when the same service name exists on multiple hosts (e.g., `alloy` as a sidecar on every VM). A previous `joinByField` on `service` alone was ambiguous for multi-host services. The join is possible because `bootstrap.py` adds `service` to cAdvisor metrics via `metric_relabel_configs`, mirroring the same priority chain Alloy uses for logs.
 
 ---
 
@@ -127,15 +131,23 @@ A single **table panel**, full width, ranked descending by error count.
 
 **Question:** "Is anything running out of headroom?"
 
-Three gauge panels: CPU, Memory, Disk. Per-VM, with thresholds at 70% (yellow) and 85% (red).
+Four bar gauge panels: **CPU**, **Memory**, **Disk**, **Containers Running** — all per-VM, full width at equal widths.
 
-**Refinements from previous design:**
-- **Sorted by utilization descending.** The VM closest to its limit appears first. Previously sorted alphabetically by host — fine when everything is green, unhelpful when something is saturated.
-- **Bar gauge preferred over radial gauge at scale.** Radial gauges are clean with 3-4 VMs but become cluttered at 6+. Bar gauges are more scannable. This is a visual judgment call, not a structural rule.
+| Panel | Query basis | Thresholds |
+|-------|-------------|------------|
+| CPU | `1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m]))` | 70% yellow, 85% red |
+| Memory | `1 - (max(MemAvailable) / max(MemTotal))` | 70% yellow, 85% red |
+| Disk | `max(1 - (avail / size))` on `mountpoint="/"` | 70% yellow, 85% red |
+| Containers Running | `count(container_start_time_seconds)` per VM | 0 = red, ≥1 = green |
+
+**Design decisions:**
+- **CPU uses `[2m]` rate window** (not `[5m]`). The 5-minute window made CPU feel slow to respond — a brief spike would stay elevated for 5 minutes after clearing. 2 minutes balances responsiveness with noise suppression.
+- **Memory and Disk use `max by (host, vm_role)`** to deduplicate. Without this, node_exporter can return multiple series per host (different scrape instances or device labels), producing phantom duplicate bars in the gauge.
+- **Containers Running uses `count(container_start_time_seconds)`, not `container_tasks_state`.** `container_tasks_state` measures Linux cgroup process states — `state="running"` counts processes executing on CPU (typically 0–2 per container), not the number of Docker containers. `container_start_time_seconds` exists exactly once per running container and is dropped by cAdvisor when the container exits, making `count()` the true running container count. This is the per-VM complement to the fleet-wide Containers panel in the top row. A VM that drops from 8 to 7 running containers is visible here even if the container was restarted before the next scrape, because the fleet Restarts sparkline captures the event. Threshold: red at 0 (no containers at all), green at ≥1.
 
 **Links:** Each gauge → D01 Infra Workbench with `$vm_role` and `$host`.
 
-**Must NOT include:** Per-mount filesystem breakdown, per-core CPU, swap details, network I/O, per-container resource usage.
+**Must NOT include:** Per-mount filesystem breakdown, per-core CPU, swap details, network I/O, per-container resource breakdown.
 
 ---
 
