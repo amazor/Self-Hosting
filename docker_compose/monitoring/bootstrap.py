@@ -411,15 +411,33 @@ prometheus.exporter.self "alloy_health" {{}}
 discovery.relabel "alloy_health" {{
   targets = prometheus.exporter.self.alloy_health.targets
 
-  rule {{ target_label = "instance" replacement = "{hostname}" }}
+  rule {{
+    target_label = "instance"
+    replacement  = "{hostname}"
+  }}
 
   // Align with contract for metrics too (helps join concepts across signals)
-  rule {{ target_label = "host"    replacement = "{hostname}" }}
-  rule {{ target_label = "vm_role" replacement = "{vm_role}" }}
-  rule {{ target_label = "node"    replacement = "{node}" }}
-  rule {{ target_label = "env"     replacement = "prod" }}
+  rule {{
+    target_label = "host"
+    replacement  = "{hostname}"
+  }}
+  rule {{
+    target_label = "vm_role"
+    replacement  = "{vm_role}"
+  }}
+  rule {{
+    target_label = "node"
+    replacement  = "{node}"
+  }}
+  rule {{
+    target_label = "env"
+    replacement  = "prod"
+  }}
 
-  rule {{ target_label = "container" replacement = "alloy" }}
+  rule {{
+    target_label = "container"
+    replacement  = "alloy"
+  }}
 }}
 
 prometheus.scrape "alloy_health" {{
@@ -458,14 +476,32 @@ discovery.relabel "docker_contract" {{
   targets = discovery.docker.local.targets
 
   // --- Contract base labels (always present) ---
-  rule {{ target_label = "node"    replacement = "{node}" }}
-  rule {{ target_label = "host"    replacement = "{hostname}" }}
-  rule {{ target_label = "vm_role" replacement = "{vm_role}" }}
-  rule {{ target_label = "env"     replacement = "prod" }}
-  rule {{ target_label = "source"  replacement = "docker" }}
+  rule {{
+    target_label = "node"
+    replacement  = "{node}"
+  }}
+  rule {{
+    target_label = "host"
+    replacement  = "{hostname}"
+  }}
+  rule {{
+    target_label = "vm_role"
+    replacement  = "{vm_role}"
+  }}
+  rule {{
+    target_label = "env"
+    replacement  = "prod"
+  }}
+  rule {{
+    target_label = "source"
+    replacement  = "docker"
+  }}
 
   // Compatibility: many Loki dashboards expect these
-  rule {{ target_label = "instance" replacement = "{hostname}" }}
+  rule {{
+    target_label = "instance"
+    replacement  = "{hostname}"
+  }}
 
   // --- Strongly recommended metadata ---
   // Compose project (stack-ish)
@@ -554,7 +590,10 @@ discovery.relabel "docker_contract" {{
   }}
 
   // Compatibility alias (DO NOT use as canonical in new dashboards)
-  rule {{ source_labels = ["service"] target_label = "job" }}
+  rule {{
+    source_labels = ["service"]
+    target_label  = "job"
+  }}
 }}
 
 // Use relabeled output targets rather than raw discovery targets.
