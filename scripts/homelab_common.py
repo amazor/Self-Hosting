@@ -560,8 +560,15 @@ def setup_observability_config(
     alloy_dir.mkdir(parents=True, exist_ok=True)
     alloy_data.mkdir(parents=True, exist_ok=True)
 
-    host_uid = os.getuid()
-    host_gid = os.getegid()
+    # Use PUID/PGID from the stack env so ownership matches the container user.
+    # os.getuid() would return 0 when bootstrap re-execs via sudo, leaving
+    # alloy/data owned by root and causing Alloy's "permission denied" on startup.
+    try:
+        host_uid = int(env.get("PUID", "") or os.getuid())
+        host_gid = int(env.get("PGID", "") or os.getgid())
+    except ValueError:
+        host_uid = os.getuid()
+        host_gid = os.getgid()
     if not try_chown(alloy_data, host_uid, host_gid, recursive=True):
         try_sudo_chown(alloy_data, host_uid, host_gid, recursive=True)
 

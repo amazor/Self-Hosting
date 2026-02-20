@@ -13,6 +13,13 @@ Owns:
 Does NOT own:
   - symlinks, shell helper functions, or cross-stack orchestration (deploy.py)
 
+# TODO(NFS): If monitoring ever needs NFS mounts (e.g. for long-term metric
+#   storage on the NAS), add a _reexec_as_root() call at the top of main() —
+#   same pattern as docker_compose/media/bootstrap.py. When doing so, ensure
+#   setup_observability_config() reads PUID/PGID from env (already fixed in
+#   homelab_common.py) and not os.getuid(), or alloy/data will be chowned to
+#   root and Alloy will fail to start.
+
 Usage:
   cd docker_compose/monitoring && python3 bootstrap.py
   cd docker_compose/monitoring && python3 bootstrap.py --up
