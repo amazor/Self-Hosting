@@ -1,0 +1,42 @@
+---
+description: Bootstrap and deploy script conventions for VM provisioning
+globs: "**/bootstrap.py","docker_compose/**/*.py","scripts/**/*.py","proxmox/**/*.sh"
+alwaysApply: false
+---
+
+# Bootstrap & Deploy Scripts
+
+Bootstrap scripts are the "first run" provisioners for each VM (or per-role automation). They run after cloning the repo and `cd`-ing into the VM folder. Keep them explicit, reproducible, and safe.
+
+## Purpose of bootstrap.py (per VM)
+
+- **Optional NFS mounts** — Scoped to this VM only; never mount the entire NAS. Document required exports.
+- **Environment file** — Create or validate `.env` from `.env.example`; prompt or exit if required values are missing.
+- **Quality-of-life helpers** — Deploy generates shell functions; bootstrap focuses on stack readiness.
+- **Optional "bring stack up"** — Some bootstraps may run `docker compose up -d` after checks; document this behavior.
+
+## Python Script Conventions
+
+- **Shebang:** `#!/usr/bin/env python3`.
+- **Stdlib first:** `argparse`, `logging`, `subprocess`, `pathlib`, `os`. No pip deps unless absolutely necessary.
+- **Shared helpers:** Common utilities live in `scripts/homelab_common.py` (placeholder checks, env loading, Docker checks, chown helpers). Import via `from scripts.homelab_common import ...` after adding repo root to `sys.path`.
+- **Fail fast:** Use `raise SystemExit(1)` with a clear log message when prerequisites are missing. Use `argparse` for flags.
+- **Idempotency:** Where possible, make re-running the script safe (e.g. create dir if not exists, skip mount if already mounted). Avoid destructive overwrites without confirmation.
+- **No secrets in repo:** Do not commit `.env` or secrets. Bootstrap may copy `.env.example` to `.env` and remind the user to fill values.
+- **Logging:** Use the shared `log` logger from `homelab_common`. INFO for progress, WARNING/ERROR for issues. Print a "service status" summary block at the end (not mixed with progress output).
+
+## Structure (typical order)
+
+1. Prerequisite checks (docker, compose, required dirs).
+2. Env file: copy example if no `.env`, then validate required vars.
+3. NFS (if any): create mount points, check/create fstab entries, mount. Prefer explicit paths and exports.
+4. Config generation (Caddyfile, dnsmasq.conf, etc.).
+5. Optional: `docker compose up -d` after validation.
+6. Print summary block (enabled/disabled services).
+
+## Shell scripts (remaining)
+
+- **proxmox/scripts/** — Run on the Proxmox host; create VMs, attach Cloud-Init. Use `qm` and minimal deps.
+- **docker_compose/core/update-caddyfile.sh** — Thin wrapper that calls `gen_caddyfile.py` and reloads Caddy.
+
+Keep script behavior aligned with what the docs describe (e.g. README "first-time flow": clone → cd → `python3 bootstrap.py`).

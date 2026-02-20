@@ -1,0 +1,46 @@
+---
+description: Homelab project context, principles, and architecture
+alwaysApply: true
+---
+
+# Homelab Project — Context & Principles
+
+This repo is a **field manual** and **source of truth** for a self-hosted homelab: part journal, part technical guide, part Infrastructure-as-Code.
+
+## Mission
+
+Build a robust, scalable, automated home server hosting:
+- core infra (ingress, auth, DNS)
+- monitoring/observability
+- media automation pipelines
+- general apps
+- GPU workloads (transcoding/CV)
+
+## Guiding Principles
+
+- **Boring Core, Flexible Workloads** — Access plane is stable and predictable; workloads can churn and be rebuilt.
+- **Cattle, Not Pets** — VMs are disposable. Redeploy from a known baseline instead of snowflake fixing.
+- **Decoupled Compute and Data** — Proxmox provides compute; NAS provides storage. Data survives VM rebuilds.
+- **Documentation-first** — Decisions include "why" notes so future-me and readers can follow the logic.
+
+## Tech Stack
+
+- **Hypervisor:** Proxmox VE
+- **Compute:** Beelink EQi13 (Debian Cloud-Init template, Docker host)
+- **Storage:** Synology NAS
+- **Workloads:** Docker Compose per-VM stacks
+- **Automation:** Cloud-Init + repo-driven bootstrap scripts
+
+## Repo Structure
+
+- **docs/** — Journey chapters + reasoning (Chapter0, Chapter1, Chapter2, Chapter2a, Chapter2c, …)
+- **proxmox/** — Template automation: `scripts/`, `snippets/` (Cloud-Init)
+- **docker_compose/** — Per-VM stacks: `core/`, `monitoring/`, `apps/`, `media/`, `accelerated/` (each with compose.yml, .env.example, bootstrap.py)
+
+## Architecture Rules
+
+- **Only one VM is public** — Router forwards only 80/443 to `core`. Everything else is reachable via reverse proxy or Tailscale.
+- **VM boundaries = storage boundaries** — Each VM mounts only what it needs; mounts are scoped to subfolders/exports. `core` stays minimal and typically mounts nothing.
+- **Template stays boring** — Role-specific setup lives in per-VM bootstrap scripts, not in the golden image.
+
+When editing any part of this project, keep these principles and structure in mind.

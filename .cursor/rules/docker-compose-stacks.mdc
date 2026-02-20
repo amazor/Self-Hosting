@@ -1,0 +1,49 @@
+---
+description: Docker Compose per-VM stack layout and conventions
+globs: docker_compose/**/*
+alwaysApply: false
+---
+
+# Docker Compose — Per-VM Stacks
+
+The `docker_compose/` tree holds one directory per VM role. Each directory is self-contained: compose file, env example, and a bootstrap script for first-run setup.
+
+## Directory Layout (per VM)
+
+```
+docker_compose/<vm>/
+  compose.yml      # Stack definition
+  .env.example     # Required env vars (no secrets; copy to .env and fill)
+  bootstrap.py     # Role provisioner: mounts, helpers, validation, optional "bring up"
+```
+
+VM names align with Chapter 2: `core`, `monitoring`, `apps`, `media`, `accelerated`.
+
+## compose.yml
+
+- Use the Compose V2 format (version 2 or 3 as needed; prefer current stable).
+- One stack per VM; no cross-VM Compose dependencies. Cross-VM communication is via network (e.g. reverse proxy on core).
+- Prefer explicit image tags over `latest` for reproducibility.
+- Document any required env vars in comments or in `.env.example`.
+
+## .env.example
+
+- List every variable the stack needs, with placeholder or example values.
+- No real secrets. Use placeholders like `YOUR_TZ`, `YOUR_PUID`, or `CHANGE_ME`.
+- Bootstrap or docs should describe how to copy to `.env` and fill values.
+
+## Bootstrap Script (bootstrap.py)
+
+- Invoked once (or idempotently) after clone: `git clone … && cd docker_compose/<vm>/ && python3 bootstrap.py`
+- Responsibilities: optional NFS mounts (scoped to this VM only), env file init/validation, quality-of-life helpers (e.g. deploy/update/logs), optional `docker compose up`.
+- See the bash bootstrap rule for script conventions.
+
+## Storage & Boundaries
+
+- Each VM mounts only what it needs; never mount "the whole NAS" everywhere.
+- Mounts are scoped to subfolders/exports. `core` stays minimal and typically has no NFS mounts.
+- Document required NFS exports and paths in the chapter for that VM (e.g. Chapter 2c for media).
+
+## Naming and Consistency
+
+- Folder names = VM hostnames (lowercase, short). Keep compose service names and env var names consistent with docs and README.

@@ -1,5 +1,5 @@
 # --- IDE / Editor ---
-.cursor/
+# .cursor/ — tracked so rules/skills follow the repo for remote dev
 .idea/
 .vscode/
 *.swp
