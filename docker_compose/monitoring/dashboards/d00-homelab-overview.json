@@ -138,7 +138,7 @@
       "type": "stat",
       "title": "Host Status",
       "description": "Number of VMs with a failed node_exporter scrape. Zero means all hosts are reachable. Click to investigate in the Infra Workbench.",
-      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 3 },
+      "gridPos": { "x": 0, "y": 0, "w": 5, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -197,7 +197,7 @@
       "type": "stat",
       "title": "Errors /min",
       "description": "Fleet-wide error + fatal log rate per minute. Sparkline shows trend direction — rising means the situation is getting worse.",
-      "gridPos": { "x": 6, "y": 0, "w": 6, "h": 3 },
+      "gridPos": { "x": 5, "y": 0, "w": 5, "h": 3 },
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
       "targets": [
         {
@@ -250,7 +250,7 @@
       "type": "stat",
       "title": "Restarts",
       "description": "Fleet-wide container restarts detected. Sparkline shows restart distribution over the time range — a spike indicates a crash loop.",
-      "gridPos": { "x": 12, "y": 0, "w": 6, "h": 3 },
+      "gridPos": { "x": 10, "y": 0, "w": 5, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -299,11 +299,70 @@
     },
 
     {
+      "id": 12,
+      "type": "stat",
+      "title": "Stopped Containers",
+      "description": "Fleet-wide count of containers in a stopped/exited state that are not restarting. A stopped container won't increment the Restarts counter — this is the only panel that catches it. Zero is the only healthy value.",
+      "gridPos": { "x": 15, "y": 0, "w": 4, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "sum(container_tasks_state{state=\"stopped\", name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) OR on() vector(0)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "red", "value": 1 }
+            ]
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": { "text": "All Running", "index": 0 }
+              }
+            }
+          ],
+          "noValue": "N/A",
+          "links": [
+            {
+              "title": "\u2192 Infra Workbench",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
+              "targetBlank": false
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "graphMode": "none",
+        "colorMode": "background",
+        "justifyMode": "center",
+        "textMode": "auto",
+        "wideLayout": true,
+        "showPercentChange": false,
+        "orientation": "auto"
+      }
+    },
+
+    {
       "id": 4,
       "type": "stat",
       "title": "Scrape Health",
       "description": "Percentage of Prometheus scrape targets currently UP. Below 100% means at least one target is unreachable. Click to investigate in the Infra Workbench.",
-      "gridPos": { "x": 18, "y": 0, "w": 6, "h": 3 },
+      "gridPos": { "x": 19, "y": 0, "w": 5, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -473,7 +532,7 @@
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Value" },
+            "matcher": { "id": "byName", "options": "Value #A" },
             "properties": [
               { "id": "displayName", "value": "Errors" },
               { "id": "custom.cellOptions", "value": { "type": "color-background" } },
