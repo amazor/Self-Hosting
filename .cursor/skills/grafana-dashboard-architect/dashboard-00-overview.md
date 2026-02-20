@@ -101,8 +101,8 @@ A single **table panel**, full width, ranked descending by error count.
 
 | Column | Label Source | Purpose |
 |--------|-------------|---------|
-| **Host** | `host` | VM identification |
-| **VM Role** | `vm_role` | Stack context |
+| **Node** | `node` | Proxmox host (e.g. `pve1`) — physical machine context |
+| **Host** | `host` | VM hostname — the thing you SSH into and the identity used in drilldowns |
 | **Service** | `service` | Attribution — who is noisy |
 | **Errors** | Loki count, `level=~"error\|fatal"` | Severity ranking |
 | **Restarts** | cAdvisor restart counter | Instability signal alongside errors |
@@ -110,7 +110,7 @@ A single **table panel**, full width, ranked descending by error count.
 **Design decisions:**
 - **Sorted descending by error count.** The noisiest offender is always the first row.
 - **Zero-error entries are hidden.** When healthy, this section shows an empty-state message. Boring when healthy, loud when broken.
-- **Service-level attribution as output, not input.** The table query groups `by (host, vm_role, service)`. The overview tells you "sonarr is the problem" but does NOT expose `$service` as a filter variable. Filtering to only sonarr is a workbench action. This distinction preserves the overview's VM-level filter contract while giving the operator the routing precision they need.
+- **Service-level attribution as output, not input.** The table query groups `by (node, host, service)`. The overview tells you "sonarr is the problem" but does NOT expose `$service` as a filter variable. Filtering to only sonarr is a workbench action. This distinction preserves the overview's VM-level filter contract while giving the operator the routing precision they need.
 - **Restarts as a column, not a separate section.** Restarts next to error counts give the operator a two-signal view: "is it noisy?" (errors) and "is it unstable?" (restarts). A service with errors AND restarts is more urgent than one with only errors.
 
 **Links:** Each row → D02 Log Workbench with `$host`, `$service` (via `${__data.fields.service}`), and `level=error` pre-set. This is the most specific drilldown on the overview — one click to the error stream for that exact service.

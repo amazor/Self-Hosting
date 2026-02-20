@@ -84,7 +84,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Node"
@@ -98,7 +98,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "VM Role"
@@ -112,7 +112,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Host"
@@ -423,7 +423,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}",
+          "expr": "max by (host, vm_role) (up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
           "instant": true,
           "range": false,
           "legendFormat": "{{host}}",
@@ -476,17 +476,58 @@
       "id": 6,
       "type": "table",
       "title": "Top Offenders",
-      "description": "Services producing the most errors in the selected time range, ranked. Click any row to open the Log Workbench pre-filtered to that host and service.",
+      "description": "Services producing the most errors in the selected time range, ranked by error count with restart context. A service with errors AND restarts is more urgent than one with only errors.",
       "gridPos": { "x": 0, "y": 7, "w": 24, "h": 6 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "${datasource_loki}" },
           "editorMode": "code",
-          "expr": "sum by (host, vm_role, service) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", level=~\"error|fatal\"}[$__range]))",
+          "expr": "sum by (node, host, service) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", level=~\"error|fatal\"}[$__range]))",
           "queryType": "instant",
           "legendFormat": "",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "sum by (node, host, service) (changes(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service!=\"\", name!=\"\", image!=\"\"}[$__range]))",
+          "instant": true,
+          "range": false,
+          "legendFormat": "",
+          "refId": "B"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "joinByField",
+          "options": {
+            "byField": "service",
+            "mode": "outer"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "Time 1": true,
+              "Time 2": true,
+              "node 2": true,
+              "host 2": true
+            },
+            "renameByName": {
+              "node 1": "node",
+              "host 1": "host"
+            },
+            "indexByName": {
+              "node 1": 0,
+              "host 1": 1,
+              "service": 2,
+              "Value #A": 3,
+              "Value #B": 4
+            }
+          }
         }
       ],
       "fieldConfig": {
@@ -501,7 +542,7 @@
           "links": [
             {
               "title": "\u2192 Log Workbench",
-              "url": "/d/homelab-log-workbench?from=${__from}&to=${__to}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error",
+              "url": "/d/homelab-log-workbench?from=${__from}&to=${__to}&var-node=${__data.fields.node}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error",
               "targetBlank": false
             }
           ]
@@ -514,15 +555,15 @@
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "host" },
+            "matcher": { "id": "byName", "options": "node" },
             "properties": [
-              { "id": "displayName", "value": "Host" }
+              { "id": "displayName", "value": "Node" }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "vm_role" },
+            "matcher": { "id": "byName", "options": "host" },
             "properties": [
-              { "id": "displayName", "value": "VM Role" }
+              { "id": "displayName", "value": "Host" }
             ]
           },
           {
@@ -544,6 +585,25 @@
                     { "color": "yellow", "value": null },
                     { "color": "orange", "value": 10 },
                     { "color": "red", "value": 50 }
+                  ]
+                }
+              }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Value #B" },
+            "properties": [
+              { "id": "displayName", "value": "Restarts" },
+              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "text", "value": null },
+                    { "color": "yellow", "value": 1 },
+                    { "color": "orange", "value": 3 },
+                    { "color": "red", "value": 5 }
                   ]
                 }
               }

@@ -490,13 +490,55 @@ loki.process "normalize" {{
     }}
   }}
 
-  // --- (2) Try logfmt parsing ---
-  stage.logfmt {{
-    mapping = {{
-      level    = "level",
-      lvl      = "lvl",
-      severity = "severity",
-      // future: trace_id = "trace_id", span_id = "span_id", request_id = "request_id"
+  // --- (2) Try logfmt parsing (skip JSON / bare-equals lines to suppress parser noise) ---
+  // Lines starting with {{ " [ or = are not logfmt — guard prevents noisy decode errors.
+  stage.match {{
+    selector = `{{container=~".+"}} !~ "^[{{\\\"=\\[]"`
+    stage.logfmt {{
+      mapping = {{
+        level    = "level",
+        lvl      = "lvl",
+        severity = "severity",
+        // future: trace_id = "trace_id", span_id = "span_id", request_id = "request_id"
+      }}
+    }}
+  }}
+
+  // --- (2a) Per-container level extraction ---
+  // These run before level_raw consolidation so their extracted `level` feeds step (3).
+  // Each stage.match is a no-op on VMs where that container doesn't exist.
+
+  // Postgres: "... [1] LOG:  message" / "FATAL:  ..." / "WARNING:  ..." etc.
+  // Captures the severity word directly into `level`.
+  stage.match {{
+    selector = `{{service="authentik-postgresql"}}`
+    stage.regex {{
+      expression = `(?i)\\b(?P<level>log|fatal|warning|notice|debug|panic)\\s*:`
+    }}
+  }}
+
+  // Redis: sigil-based levels in "PID:Role DD Mon YYYY HH:MM:SS.mmm <sigil> message"
+  //   * = info (notice/ready), # = warn, . = debug, - = debug (verbose)
+  // Regex extracts the sigil into redis_sig; template maps it to a level word.
+  // Falls back to preserving any existing level if the sigil is absent.
+  stage.match {{
+    selector = `{{service="authentik-redis"}}`
+    stage.regex {{
+      expression = `\\d{{2}}:\\d{{2}}:\\d{{2}}\\.\\d{{3}} (?P<redis_sig>[*#.\\-]) `
+    }}
+    stage.template {{
+      source   = "level"
+      template = `{{{{ if .redis_sig }}}}{{{{ if eq .redis_sig "*" }}}}info{{{{ else if eq .redis_sig "#" }}}}warn{{{{ else }}}}debug{{{{ end }}}}{{{{ else }}}}{{{{ .level }}}}{{{{ end }}}}`
+    }}
+  }}
+
+  // Gluetun (vpn): plain-text "2006-01-02T15:04:05Z INFO [module] message"
+  // ISO timestamp anchor prevents false positives; no-op for JSON-format Gluetun logs
+  // since stage.json already extracted level from those in step (1).
+  stage.match {{
+    selector = `{{service="vpn"}}`
+    stage.regex {{
+      expression = `(?i)T\\d{{2}}:\\d{{2}}:\\d{{2}}Z (?P<level>info|warn|warning|error|debug|fatal) `
     }}
   }}
 
@@ -523,9 +565,10 @@ loki.process "normalize" {{
   }}
 
   // --- (5) Canonical mapping with safe default (never empty) ---
+  // Aliases: warning→warn, err→error, critical/panic→fatal, log/notice→info (Postgres)
   stage.template {{
     source   = "level"
-    template = `{{{{ if eq .level_raw "warning" }}}}warn{{{{ else if eq .level_raw "err" }}}}error{{{{ else if or (eq .level_raw "critical") (eq .level_raw "panic") }}}}fatal{{{{ else if or (eq .level_raw "trace") (eq .level_raw "debug") (eq .level_raw "info") (eq .level_raw "warn") (eq .level_raw "error") (eq .level_raw "fatal") }}}}{{{{ .level_raw }}}}{{{{ else }}}}unknown{{{{ end }}}}`
+    template = `{{{{ if eq .level_raw "warning" }}}}warn{{{{ else if eq .level_raw "err" }}}}error{{{{ else if or (eq .level_raw "critical") (eq .level_raw "panic") }}}}fatal{{{{ else if or (eq .level_raw "log") (eq .level_raw "notice") }}}}info{{{{ else if or (eq .level_raw "trace") (eq .level_raw "debug") (eq .level_raw "info") (eq .level_raw "warn") (eq .level_raw "error") (eq .level_raw "fatal") }}}}{{{{ .level_raw }}}}{{{{ else }}}}unknown{{{{ end }}}}`
   }}
 
   // --- (6) Attach canonical level as a label (now always non-empty) ---
