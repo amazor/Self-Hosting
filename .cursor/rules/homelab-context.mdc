@@ -43,4 +43,11 @@ Build a robust, scalable, automated home server hosting:
 - **VM boundaries = storage boundaries** — Each VM mounts only what it needs; mounts are scoped to subfolders/exports. `core` stays minimal and typically mounts nothing.
 - **Template stays boring** — Role-specific setup lives in per-VM bootstrap scripts, not in the golden image.
 
+## Planned additions (post–current implementation)
+
+Apps/services to add once the current implementation is done:
+
+- **Fail2ban** — Host/access-plane protection (e.g. rate limiting whoami, SSH, Caddy logs); likely on `core` or a dedicated security layer.
+- **PaperlessNGX** — Document management (scan, OCR, tag, search); planned for the `apps` VM.
+
 When editing any part of this project, keep these principles and structure in mind.

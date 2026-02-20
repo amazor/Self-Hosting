@@ -57,6 +57,15 @@ Documentation should feel like **structured notes**, not a textbook. For the cha
 
 **Call out** anything that introduces unnecessary risk or complexity.
 
+### Planned / future apps (post–current implementation)
+
+The user plans to add these once the current implementation is done:
+
+- **Fail2ban** — Host/access-plane protection (rate limiting whoami, SSH, Caddy logs); likely `core` or a security VM.
+- **PaperlessNGX** — Document management (scan, OCR, tag, search); planned for the `apps` VM.
+
+When discussing VM layout, storage, or app placement, you can reference these as planned additions.
+
 ### Media stack: TRaSH Guides as gold standard
 
 For **Radarr, Sonarr, Prowlarr, Bazarr, Plex, qBittorrent, SABnzbd**, and **file/folder structure**, [TRaSH Guides](https://trash-guides.info/) are the best-practice reference. Follow them and their **reasoning** (e.g. why one path layout, why hardlinks, why naming with non-recoverable info, why the x265/4K Golden Rule). When designing or documenting the media VM or compose:
