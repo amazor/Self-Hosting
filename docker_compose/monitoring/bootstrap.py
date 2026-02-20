@@ -46,7 +46,6 @@ from scripts.homelab_common import (
 _PROMETHEUS_UID = 65534  # nobody
 _LOKI_UID = 10001
 _GRAFANA_UID = 472
-_ALLOY_UID = 473  # grafana/alloy image
 _UPTIME_KUMA_UID = 1000  # louislam/uptime-kuma (node user when non-root)
 
 _MIN_DISK_GB = 10
@@ -374,23 +373,8 @@ def ensure_alloy_config(config_base: Path, env: dict[str, str]) -> None:
 // - Optional: add Tempo + OTLP pipeline in Alloy for trace<->log linking in Grafana
 // ============================================================================
 
-// ----------------------------------------------------------------------------
-// Identity inputs (owned by bootstrap/deploy)
-// ----------------------------------------------------------------------------
-// Your bootstrap should substitute these placeholders, similar to {{hostname}}.
-// Recommended per-VM .env (or templating variables):
-//   VM_ROLE      = core|monitoring|media|apps|accelerated|security
-//   PROXMOX_NODE = pve1|pve2|...
-//
-// If you can't auto-discover PROXMOX_NODE inside the guest, require user input.
-// ----------------------------------------------------------------------------
-constants "identity" {{
-  host      = "{hostname}"        // VM hostname
-  vm_role   = "{vm_role}"         // injected by deploy/bootstrap
-  node      = "{node}"            // injected by deploy/bootstrap
-  env       = "prod"              // environment tag (low cardinality, consistent)
-  source    = "docker"
-}}
+// Identity values are inlined by bootstrap — see ensure_alloy_config() in bootstrap.py.
+// VM_ROLE, PROXMOX_NODE, and hostname are resolved at generation time.
 
 // ----------------------------------------------------------------------------
 // Alloy self-metrics -> Prometheus remote_write
@@ -400,13 +384,13 @@ prometheus.exporter.self "alloy_health" {{}}
 discovery.relabel "alloy_health" {{
   targets = prometheus.exporter.self.alloy_health.targets
 
-  rule {{ target_label = "instance" replacement = constants.identity.host }}
+  rule {{ target_label = "instance" replacement = "{hostname}" }}
 
   // Align with contract for metrics too (helps join concepts across signals)
-  rule {{ target_label = "host"    replacement = constants.identity.host }}
-  rule {{ target_label = "vm_role" replacement = constants.identity.vm_role }}
-  rule {{ target_label = "node"    replacement = constants.identity.node }}
-  rule {{ target_label = "env"     replacement = constants.identity.env }}
+  rule {{ target_label = "host"    replacement = "{hostname}" }}
+  rule {{ target_label = "vm_role" replacement = "{vm_role}" }}
+  rule {{ target_label = "node"    replacement = "{node}" }}
+  rule {{ target_label = "env"     replacement = "prod" }}
 
   rule {{ target_label = "container" replacement = "alloy" }}
 }}
@@ -447,14 +431,14 @@ discovery.relabel "docker_contract" {{
   targets = discovery.docker.local.targets
 
   // --- Contract base labels (always present) ---
-  rule {{ target_label = "node"    replacement = constants.identity.node }}
-  rule {{ target_label = "host"    replacement = constants.identity.host }}
-  rule {{ target_label = "vm_role" replacement = constants.identity.vm_role }}
-  rule {{ target_label = "env"     replacement = constants.identity.env }}
-  rule {{ target_label = "source"  replacement = constants.identity.source }}
+  rule {{ target_label = "node"    replacement = "{node}" }}
+  rule {{ target_label = "host"    replacement = "{hostname}" }}
+  rule {{ target_label = "vm_role" replacement = "{vm_role}" }}
+  rule {{ target_label = "env"     replacement = "prod" }}
+  rule {{ target_label = "source"  replacement = "docker" }}
 
   // Compatibility: many Loki dashboards expect these
-  rule {{ target_label = "instance" replacement = constants.identity.host }}
+  rule {{ target_label = "instance" replacement = "{hostname}" }}
 
   // --- Strongly recommended metadata ---
   // Compose project (stack-ish)
@@ -598,7 +582,7 @@ loki.process "normalize" {{
 
   // --- (4) Guarded regex fallback only if level_raw is empty ---
   stage.regex {{
-    expression = "(?i)(?:\\\\b(?:level|lvl|severity)\\\\b\\\\s*[:=]\\\\s*\\\\\"?(?P<level_fallback>trace|debug|info|warn|warning|error|err|fatal|critical|panic)\\\\\"?|\\\\[(?P<level_bracket>trace|debug|info|warn|warning|error|err|fatal|critical|panic)\\\\])"
+    expression = `(?i)(?:\\b(?:level|lvl|severity)\\b\\s*[:=]\\s*"?(?P<level_fallback>trace|debug|info|warn|warning|error|err|fatal|critical|panic)"?|\\[(?P<level_bracket>trace|debug|info|warn|warning|error|err|fatal|critical|panic)\\])`
   }}
 
   stage.template {{
@@ -609,7 +593,7 @@ loki.process "normalize" {{
   // --- (5) Canonical mapping with safe default (never empty) ---
   stage.template {{
     source   = "level"
-    template = "{{{{ if eq .level_raw \"warning\" }}}}warn{{{{ else if eq .level_raw \"err\" }}}}error{{{{ else if or (eq .level_raw \"critical\") (eq .level_raw \"panic\") }}}}fatal{{{{ else if or (eq .level_raw \"trace\") (eq .level_raw \"debug\") (eq .level_raw \"info\") (eq .level_raw \"warn\") (eq .level_raw \"error\") (eq .level_raw \"fatal\") }}}}{{{{ .level_raw }}}}{{{{ else }}}}unknown{{{{ end }}}}"
+    template = `{{{{ if eq .level_raw "warning" }}}}warn{{{{ else if eq .level_raw "err" }}}}error{{{{ else if or (eq .level_raw "critical") (eq .level_raw "panic") }}}}fatal{{{{ else if or (eq .level_raw "trace") (eq .level_raw "debug") (eq .level_raw "info") (eq .level_raw "warn") (eq .level_raw "error") (eq .level_raw "fatal") }}}}{{{{ .level_raw }}}}{{{{ else }}}}unknown{{{{ end }}}}`
   }}
 
   // --- (6) Attach canonical level as a label (now always non-empty) ---

@@ -48,6 +48,16 @@ def _detect_lan_ip() -> str | None:
         return None
 
 
+def _detect_docker_gid() -> int | None:
+    """Return the GID of the 'docker' group on this host, or None."""
+    import grp
+
+    try:
+        return grp.getgrnam("docker").gr_gid
+    except KeyError:
+        return None
+
+
 # ---------------------------------------------------------------------------
 # .env.example updater
 # ---------------------------------------------------------------------------
@@ -152,6 +162,18 @@ def main() -> None:
     mon_example = REPO_ROOT / "docker_compose" / "monitoring" / ".env.example"
     if mon_example.is_file():
         mon_updates: dict[str, tuple[str, str]] = {}
+
+        uid = os.getuid()
+        gid = os.getgid()
+        mon_updates["PUID"] = (str(uid), f"current user UID ({uid})")
+        mon_updates["PGID"] = (str(gid), f"current user GID ({gid})")
+
+        docker_gid = _detect_docker_gid()
+        if docker_gid is not None:
+            mon_updates["DOCKER_GID"] = (
+                str(docker_gid),
+                f"host docker group GID ({docker_gid})",
+            )
 
         updated = _update_env_example(mon_example, mon_updates)
         if updated:

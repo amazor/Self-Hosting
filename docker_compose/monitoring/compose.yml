@@ -75,6 +75,7 @@ services:
       - "--storage.tsdb.path=/prometheus"
       - "--storage.tsdb.retention.time=${PROMETHEUS_RETENTION:-30d}"
       - "--web.enable-lifecycle"
+      - "--web.enable-remote-write-receiver"
     # Required so Prometheus (on bridge) can scrape node_exporter on host.
     extra_hosts:
       - "host.docker.internal:host-gateway"
@@ -85,6 +86,8 @@ services:
       - "9090:9090"
     security_opt:
       - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     networks:
       - monitoring_internal
@@ -106,6 +109,12 @@ services:
       - "3100:3100"
     security_opt:
       - no-new-privileges:true
+    healthcheck:
+      test: ["CMD-SHELL", "wget --quiet --tries=1 --output-document=- http://localhost:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 30s
     cap_drop:
       - ALL
     restart: unless-stopped
@@ -207,7 +216,8 @@ services:
     cap_drop:
       - ALL
     depends_on:
-      - loki
+      loki:
+        condition: service_healthy
     restart: unless-stopped
     networks:
       - monitoring_internal
