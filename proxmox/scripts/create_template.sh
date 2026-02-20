@@ -148,6 +148,22 @@ qm set "$VM_ID" --serial0 socket --vga serial0
 qm set "$VM_ID" --cicustom "vendor=local:snippets/$SNIPPET_NAME"
 
 # ---------------------------------------------------------------------------
+# 6b. Install hook so clones auto-inject Proxmox node name into cloud-init
+#     (pre-start hook runs when a clone starts; guest gets /etc/homelab/proxmox-node)
+# ---------------------------------------------------------------------------
+HOOK_NAME="inject-proxmox-node-hook.sh"
+HOOK_SRC="$SCRIPT_DIR/../snippets/$HOOK_NAME"
+HOOK_DEST="/var/lib/vz/snippets/$HOOK_NAME"
+if [ -f "$HOOK_SRC" ]; then
+    cp "$HOOK_SRC" "$HOOK_DEST"
+    chmod +x "$HOOK_DEST"
+    qm set "$VM_ID" --hookscript "local:snippets/$HOOK_NAME"
+    echo "Installed hook: $HOOK_DEST (clones will auto-inject Proxmox node name)"
+else
+    echo "Warning: hook not found at $HOOK_SRC; clones will not auto-inject Proxmox node name"
+fi
+
+# ---------------------------------------------------------------------------
 # 7. Cloud-Init user and network config
 #    --ciuser keeps the user visible in the Proxmox GUI and enables SSH key
 #    injection via the GUI. Produces a deprecation warning (Cloud-Init 22.2+,
@@ -162,3 +178,6 @@ echo ""
 echo "VM $VM_ID created. One-time setup before converting to template:"
 echo "  1. Add your SSH public key in Proxmox GUI → Cloud-Init tab"
 echo "  2. Convert to Template in the Proxmox GUI"
+echo ""
+echo "Clones from this template will auto-inject the Proxmox node name on first start"
+echo "(pre-start hook). Guest gets /etc/homelab/proxmox-node for monitoring/Alloy."

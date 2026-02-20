@@ -349,11 +349,14 @@ Follow these steps for **each** VM, using the VMID and name from the Per-VM tabl
    - Ensure your SSH key is present in Cloud-Init
    - Keep DHCP for now (the architecture relies on DNS names, not static addressing)
 
-4. **Boot the VM and wait for first-boot setup**
+4. **Proxmox node name (for monitoring/Alloy)**  
+   - If you created the template with this repo's `create_template.sh`, a **pre-start hook** is attached. When you start a clone, the hook runs on the Proxmox host and injects the node name (e.g. `pve1`) into the VM's cloud-init; on first boot the guest gets `/etc/homelab/proxmox-node` automatically. No extra step needed. If your template was created without the hook (e.g. older template), recreate it with the current `create_template.sh` so new clones get the hook.
+
+5. **Boot the VM and wait for first-boot setup**
    - After the VM boots, Cloud-Init and any bootstrap scripts (e.g. adding your user to the `docker` group, cloning the self-hosted repo) can take a minute or two.
    - **Recommendation:** wait 1–2 minutes before logging in or running verify. If you log in too soon, your user might not yet be in the `docker` group and the repo may not be present yet.
 
-5. **Verify + snapshot**
+6. **Verify + snapshot**
    - Run:
    ```bash
    docker --version && systemctl status qemu-guest-agent --no-pager && free -h

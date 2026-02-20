@@ -314,7 +314,7 @@ You might wonder why we’re heading back to the terminal. There are three criti
 
 The script lives in this repo at [`proxmox/scripts/create_template.sh`](../proxmox/scripts/create_template.sh). Copy it to your Proxmox host and make it executable with `chmod +x create_template.sh`.
 
-It is **idempotent** — it checks if the VM ID already exists before running, preventing accidental overwrites. It also auto-installs the Cloud-Init snippet: if `cloud-init-config.yaml` is already in `/var/lib/vz/snippets/` (from the copy-paste step above), it uses it; otherwise it looks for the file in the repo's `proxmox/snippets/` directory and copies it over.
+It is **idempotent** — it checks if the VM ID already exists before running, preventing accidental overwrites. It also auto-installs the Cloud-Init snippet: if `cloud-init-config.yaml` is already in `/var/lib/vz/snippets/` (from the copy-paste step above), it uses it; otherwise it looks for the file in the repo's `proxmox/snippets/` directory and copies it over. Finally, it installs a **pre-start hook** (`inject-proxmox-node-hook.sh`) on the VM; when you convert to template and later clone from it, that hook runs on the Proxmox host before each clone's first start and injects the node name (e.g. `pve1`) into the guest's cloud-init, so the VM gets `/etc/homelab/proxmox-node` automatically for monitoring/Alloy (see [Chapter 2 — Clone steps](Chapter2-vms.md#clone-steps-repeat-per-vm)).
 
 Run `./create_template.sh --help` for full usage:
 

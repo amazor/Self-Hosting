@@ -221,6 +221,7 @@ def _run_bootstrap(
         args.append("--force")
 
     env = os.environ.copy()
+    env["VM_ROLE"] = stack  # bootstrap uses this for Alloy/labels (e.g. monitoring, core, media)
     if mode == "update" or non_interactive:
         env["HOMELAB_DEPLOY"] = "1"
 
