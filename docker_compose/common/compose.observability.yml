@@ -1,0 +1,89 @@
+# Observability sidecars — shared overlay for all VM stacks
+#
+# Services:
+#   - node_exporter: host metrics (CPU, RAM, disk, network) for Prometheus
+#   - cAdvisor: per-container resource metrics for Prometheus
+#   - Alloy: log shipper (Docker container logs → Loki) + self-metrics → Prometheus
+#
+# Usage:
+#   Symlinked into each stack directory and activated by ENABLE_OBSERVABILITY=1
+#   in the stack's .env. deploy.py adds -f compose.observability.yml automatically.
+#
+# Network:
+#   Sidecars do NOT join any stack-specific network (no monitoring_internal,
+#   core_internal, etc.). node_exporter uses host network; cAdvisor and Alloy
+#   reach Loki/Prometheus via host-exposed ports (configured in the generated
+#   Alloy config via LOKI_URL and PROMETHEUS_URL env vars in .env).
+#
+# Required .env vars: PUID, PGID, DOCKER_GID, CONFIG_ROOT, LOKI_URL, PROMETHEUS_URL
+# See each stack's .env.example for details.
+
+services:
+  # --- node_exporter: host metrics (CPU, RAM, disk, network) ---
+  # Exposes /metrics for the host. Must use host network and PID namespace for
+  # accurate CPU and process metrics. Prometheus scrapes via host IP:9100.
+  # Docs: https://github.com/prometheus/node_exporter#docker
+  node-exporter:
+    image: prom/node-exporter:${NODE_EXPORTER_TAG:-latest}
+    container_name: node-exporter
+    command:
+      - "--path.rootfs=/host"
+      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+    volumes:
+      - /:/host:ro,rslave
+    network_mode: host
+    pid: host
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # --- cAdvisor: per-container resource metrics ---
+  # CPU, memory, network, disk I/O per container for Prometheus. Requires
+  # privileged + host paths on Debian/Ubuntu for cgroup v2 access.
+  # Docs: https://github.com/google/cadvisor
+  cadvisor:
+    image: ghcr.io/google/cadvisor:${CADVISOR_TAG:-latest}
+    container_name: cadvisor
+    privileged: true
+    volumes:
+      - /:/rootfs:ro
+      - /var/run:/var/run:ro
+      - /sys:/sys:ro
+      - /var/lib/docker/:/var/lib/docker:ro
+      - /dev/disk/:/dev/disk:ro
+    devices:
+      - /dev/kmsg:/dev/kmsg
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+
+  # --- Alloy: log shipper (Docker logs → Loki) + self-metrics → Prometheus ---
+  # Discovers containers via Docker socket, ships stdout/stderr to Loki with
+  # labels. Runs as VM user (PUID:PGID) with group_add for Docker socket access.
+  # Bootstrap generates config.alloy with correct endpoints and identity labels.
+  # Docs: https://grafana.com/docs/alloy/latest/get-started/install/docker/
+  alloy:
+    image: grafana/alloy:${ALLOY_TAG:-latest}
+    container_name: alloy
+    user: "${PUID:-1000}:${PGID:-1000}"
+    group_add:
+      - "${DOCKER_GID:-989}"
+    command:
+      - run
+      - "--server.http.listen-addr=0.0.0.0:12345"
+      - "--storage.path=/tmp/alloy-data"
+      - /etc/alloy/config.alloy
+    environment:
+      - ALLOY_DEPLOY_MODE=docker
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ${CONFIG_ROOT:-./config}/alloy/config.alloy:/etc/alloy/config.alloy:ro
+      - ${CONFIG_ROOT:-./config}/alloy/data:/tmp/alloy-data
+    ports:
+      - "12345:12345"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped

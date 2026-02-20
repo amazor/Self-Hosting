@@ -34,6 +34,7 @@ from scripts.homelab_common import (
     log,
     resolve_config_base,
     setup_logging,
+    setup_observability_config,
 )
 
 
@@ -477,6 +478,9 @@ def main(argv: list[str] | None = None) -> None:
     )
     ensure_config_directories(config_base, env, real_user)
     copy_example_configs(config_base, env, real_user)
+
+    if env.get("ENABLE_OBSERVABILITY", "1") == "1":
+        setup_observability_config(config_base, env, SCRIPT_DIR)
 
     if not deploy_mode:
         print_summary(env)

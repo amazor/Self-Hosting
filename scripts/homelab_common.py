@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import shutil
+import socket
 import subprocess
 from pathlib import Path
 
@@ -44,6 +46,7 @@ def setup_logging(*, verbose: bool = False) -> None:
 
 _PLACEHOLDER_VALUES = frozenset({"example.com", "0.0.0.0"})
 _PLACEHOLDER_SUFFIXES = (".example.com",)
+_PLACEHOLDER_SUBSTRINGS = ("MONITORING_VM_IP",)
 
 
 def is_placeholder(val: str | None) -> bool:
@@ -54,7 +57,9 @@ def is_placeholder(val: str | None) -> bool:
         return True
     if val in _PLACEHOLDER_VALUES:
         return True
-    return any(val.endswith(s) for s in _PLACEHOLDER_SUFFIXES)
+    if any(val.endswith(s) for s in _PLACEHOLDER_SUFFIXES):
+        return True
+    return any(s in val for s in _PLACEHOLDER_SUBSTRINGS)
 
 
 def load_env(path: Path) -> dict[str, str]:
@@ -192,3 +197,394 @@ def get_user_shell(user: str) -> str:
         return result.stdout.strip().split(":")[-1]
     except (subprocess.CalledProcessError, IndexError):
         return "/bin/bash"
+
+
+# ---------------------------------------------------------------------------
+# VM identity helpers (used by observability config generation)
+# ---------------------------------------------------------------------------
+
+
+def detect_hostname() -> str:
+    """Return the system hostname for labeling."""
+    return socket.gethostname()
+
+
+def read_proxmox_node() -> str | None:
+    """Read Proxmox node name written by cloud-init pre-start hook.
+
+    Returns None if file missing or unreadable.
+    """
+    path = Path("/etc/homelab/proxmox-node")
+    if not path.is_file():
+        return None
+    try:
+        return path.read_text().strip() or None
+    except OSError:
+        return None
+
+
+def resolve_vm_identity(
+    env: dict[str, str], script_dir: Path
+) -> tuple[str, str, str]:
+    """Return (hostname, vm_role, node) from env with sensible fallbacks.
+
+    Resolution order per field:
+      hostname — VM_HOSTNAME env var → socket.gethostname()
+      vm_role  — VM_ROLE env var → script_dir.name (stack directory)
+      node     — PROXMOX_NODE env var → /etc/homelab/proxmox-node file → "pve1"
+    """
+    hostname = env.get("VM_HOSTNAME") or detect_hostname()
+    vm_role = env.get("VM_ROLE") or script_dir.name
+    node = env.get("PROXMOX_NODE") or read_proxmox_node() or "pve1"
+    return hostname, vm_role, node
+
+
+# ---------------------------------------------------------------------------
+# Observability sidecar config (Alloy)
+# ---------------------------------------------------------------------------
+
+
+_ALLOY_CONFIG_TEMPLATE = """\
+// ============================================================================
+// Homelab Alloy (production-grade pattern)
+// Goals:
+// - Strict label contract (logs + metrics aligned where possible)
+// - Clean drilldowns: Overview -> vm_role -> host -> service -> container -> logs
+// - Dynamic dashboards (no hardcoded VM names)
+// - Log normalization at ingestion (levels)
+// - Multi-node ready (node label)
+// - Compatibility labels preserved (job, instance)
+//
+// TODO (future phase): Distributed tracing
+// - Add correlation IDs / trace IDs via app instrumentation (OpenTelemetry or X-Request-ID)
+// - Then *extract* request_id/trace_id/span_id fields in loki.process (do NOT label them)
+// - Optional: add Tempo + OTLP pipeline in Alloy for trace<->log linking in Grafana
+// ============================================================================
+
+// Identity values are inlined by bootstrap — see setup_observability_config()
+// in scripts/homelab_common.py.  VM_ROLE, PROXMOX_NODE, and hostname are
+// resolved at generation time.
+
+// ----------------------------------------------------------------------------
+// Alloy self-metrics -> Prometheus remote_write
+// ----------------------------------------------------------------------------
+prometheus.exporter.self "alloy_health" {{}}
+
+discovery.relabel "alloy_health" {{
+  targets = prometheus.exporter.self.alloy_health.targets
+
+  rule {{
+    target_label = "instance"
+    replacement  = "{hostname}"
+  }}
+
+  // Align with contract for metrics too (helps join concepts across signals)
+  rule {{
+    target_label = "host"
+    replacement  = "{hostname}"
+  }}
+  rule {{
+    target_label = "vm_role"
+    replacement  = "{vm_role}"
+  }}
+  rule {{
+    target_label = "node"
+    replacement  = "{node}"
+  }}
+  rule {{
+    target_label = "env"
+    replacement  = "prod"
+  }}
+
+  rule {{
+    target_label = "container"
+    replacement  = "alloy"
+  }}
+  rule {{
+    target_label = "service"
+    replacement  = "alloy"
+  }}
+}}
+
+prometheus.scrape "alloy_health" {{
+  targets    = discovery.relabel.alloy_health.output
+  job_name   = "integrations/alloy"
+  forward_to = [prometheus.remote_write.default.receiver]
+}}
+
+// NOTE: This assumes Prometheus is running with remote_write receiver enabled.
+// If you later move to Mimir/VM/Thanos receiver, update endpoint accordingly.
+prometheus.remote_write "default" {{
+  endpoint {{
+    url = "{prometheus_url}/api/v1/write"
+  }}
+}}
+
+// ----------------------------------------------------------------------------
+// Logs: Docker -> Loki
+// Contract-required labels on every log stream:
+//   node, host, vm_role, service, container, source
+//
+// Strongly recommended:
+//   env, compose_project, image, stream
+//
+// Compatibility (do not treat as canonical):
+//   job = service
+//   instance = host
+// ----------------------------------------------------------------------------
+discovery.docker "local" {{
+  host = "unix:///var/run/docker.sock"
+}}
+
+// Relabel processes real targets and outputs a target set.
+// This removes rules-only ambiguity and allows earlier validation of relabel logic.
+discovery.relabel "docker_contract" {{
+  targets = discovery.docker.local.targets
+
+  // --- Contract base labels (always present) ---
+  rule {{
+    target_label = "node"
+    replacement  = "{node}"
+  }}
+  rule {{
+    target_label = "host"
+    replacement  = "{hostname}"
+  }}
+  rule {{
+    target_label = "vm_role"
+    replacement  = "{vm_role}"
+  }}
+  rule {{
+    target_label = "env"
+    replacement  = "prod"
+  }}
+  rule {{
+    target_label = "source"
+    replacement  = "docker"
+  }}
+
+  // Compatibility: many Loki dashboards expect these
+  rule {{
+    target_label = "instance"
+    replacement  = "{hostname}"
+  }}
+
+  // --- Strongly recommended metadata ---
+  // Compose project (stack-ish)
+  rule {{
+    source_labels = ["__meta_docker_container_label_com_docker_compose_project"]
+    regex         = "(.+)"
+    target_label  = "compose_project"
+  }}
+
+  // Optional but useful: compose container number (low cardinality, helps when scaled)
+  rule {{
+    source_labels = ["__meta_docker_container_label_com_docker_compose_container_number"]
+    regex         = "(.+)"
+    target_label  = "compose_container_number"
+  }}
+
+  // Docker image (sanitized: strip digest if present to reduce churn)
+  // Avoid repo@sha256:... churn; keep repo[:tag]
+  rule {{
+    source_labels = ["__meta_docker_container_image"]
+    regex         = "^([^@]+)(?:@.+)?$"
+    replacement   = "$1"
+    target_label  = "image"
+  }}
+
+  // stdout/stderr stream if present (may be absent depending on SD implementation)
+  rule {{
+    source_labels = ["__meta_docker_container_log_stream"]
+    regex         = "(.+)"
+    target_label  = "stream"
+  }}
+
+  // --------------------------------------------------------------------------
+  // Canonical identity extraction (no intermediate labels emitted)
+  //
+  // Priority order:
+  //   1) Explicit override label: com.homelab.service
+  //   2) Compose service label: com.docker.compose.service
+  //   3) Parsed from container name: project-service-1 / project_service_1
+  //   4) Final fallback: service = container
+  //
+  // Also:
+  //   service   = stable logical identity
+  //   container = actual container instance identity (human-readable)
+  // --------------------------------------------------------------------------
+
+  // container: actual container instance identity (strip leading '/')
+  rule {{
+    source_labels = ["__meta_docker_container_name"]
+    regex         = "^/(.+)$"
+    replacement   = "$1"
+    target_label  = "container"
+  }}
+
+  // (1) Explicit override label (reserved for future use)
+  // Example: label com.homelab.service=sonarr to force service identity.
+  rule {{
+    source_labels = ["__meta_docker_container_label_com_homelab_service"]
+    regex         = "(.+)"
+    target_label  = "service"
+  }}
+
+  // (2) Compose service label (preferred; stable) — fill only if service is empty
+  rule {{
+    source_labels = ["service", "__meta_docker_container_label_com_docker_compose_service"]
+    regex         = "^$;(.+)"
+    replacement   = "$1"
+    target_label  = "service"
+  }}
+
+  // (3) Parse from container name ONLY if service is empty AND container matches.
+  // Matches: project-service-1 OR project_service_1 (conservative on purpose)
+  rule {{
+    source_labels = ["service", "container"]
+    regex         = "^$;(.+?)[-_]([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)[-_](\\\\d+)$"
+    replacement   = "$2"
+    target_label  = "service"
+  }}
+
+  // (4) Final fallback: service = container (guarantee non-empty)
+  rule {{
+    source_labels = ["service", "container"]
+    regex         = "^$;(.+)"
+    replacement   = "$1"
+    target_label  = "service"
+  }}
+
+  // Compatibility alias (DO NOT use as canonical in new dashboards)
+  rule {{
+    source_labels = ["service"]
+    target_label  = "job"
+  }}
+}}
+
+// Use relabeled output targets rather than raw discovery targets.
+loki.source.docker "docker_logs" {{
+  host       = "unix:///var/run/docker.sock"
+  targets    = discovery.relabel.docker_contract.output
+  forward_to = [loki.process.normalize.receiver]
+}}
+
+// ----------------------------------------------------------------------------
+// Log normalization pipeline
+// - Parse JSON first (high confidence)
+// - Parse logfmt second
+// - Regex fallback last (guarded patterns)
+// - Canonicalize to: trace, debug, info, warn, error, fatal
+//
+// IMPORTANT: Do NOT turn trace_id/request_id into labels (future high-cardinality).
+// ----------------------------------------------------------------------------
+loki.process "normalize" {{
+
+  // --- (1) Try JSON parsing ---
+  stage.json {{
+    expressions = {{
+      level    = "level",
+      lvl      = "lvl",
+      severity = "severity",
+      // future: trace_id = "trace_id", span_id = "span_id", request_id = "request_id"
+    }}
+  }}
+
+  // --- (2) Try logfmt parsing ---
+  stage.logfmt {{
+    mapping = {{
+      level    = "level",
+      lvl      = "lvl",
+      severity = "severity",
+      // future: trace_id = "trace_id", span_id = "span_id", request_id = "request_id"
+    }}
+  }}
+
+  // --- (3) Normalize "raw" level candidate into a single key: level_raw ---
+  stage.template {{
+    source   = "level_raw"
+    template = "{{{{ if .level }}}}{{{{ .level }}}}{{{{ else if .lvl }}}}{{{{ .lvl }}}}{{{{ else if .severity }}}}{{{{ .severity }}}}{{{{ end }}}}"
+  }}
+
+  // Lowercase it for consistency
+  stage.template {{
+    source   = "level_raw"
+    template = "{{{{ ToLower .level_raw }}}}"
+  }}
+
+  // --- (4) Guarded regex fallback only if level_raw is empty ---
+  stage.regex {{
+    expression = `(?i)(?:\\b(?:level|lvl|severity)\\b\\s*[:=]\\s*"?(?P<level_fallback>trace|debug|info|warn|warning|error|err|fatal|critical|panic)"?|\\[(?P<level_bracket>trace|debug|info|warn|warning|error|err|fatal|critical|panic)\\])`
+  }}
+
+  stage.template {{
+    source   = "level_raw"
+    template = "{{{{ if .level_raw }}}}{{{{ .level_raw }}}}{{{{ else if .level_fallback }}}}{{{{ ToLower .level_fallback }}}}{{{{ else if .level_bracket }}}}{{{{ ToLower .level_bracket }}}}{{{{ end }}}}"
+  }}
+
+  // --- (5) Canonical mapping with safe default (never empty) ---
+  stage.template {{
+    source   = "level"
+    template = `{{{{ if eq .level_raw "warning" }}}}warn{{{{ else if eq .level_raw "err" }}}}error{{{{ else if or (eq .level_raw "critical") (eq .level_raw "panic") }}}}fatal{{{{ else if or (eq .level_raw "trace") (eq .level_raw "debug") (eq .level_raw "info") (eq .level_raw "warn") (eq .level_raw "error") (eq .level_raw "fatal") }}}}{{{{ .level_raw }}}}{{{{ else }}}}unknown{{{{ end }}}}`
+  }}
+
+  // --- (6) Attach canonical level as a label (now always non-empty) ---
+  stage.labels {{
+    values = {{ level = "level" }}
+  }}
+
+  forward_to = [loki.write.local.receiver]
+}}
+
+loki.write "local" {{
+  endpoint {{
+    url = "{loki_url}/loki/api/v1/push"
+  }}
+}}
+"""
+
+
+def setup_observability_config(
+    config_base: Path,
+    env: dict[str, str],
+    script_dir: Path,
+) -> None:
+    """Create Alloy config directories and generate config.alloy.
+
+    Idempotent: creates directories, sets ownership, and writes config.alloy
+    only if it does not already exist.  Called by each stack's bootstrap when
+    ENABLE_OBSERVABILITY is on.
+    """
+    alloy_dir = config_base / "alloy"
+    alloy_data = alloy_dir / "data"
+    alloy_dir.mkdir(parents=True, exist_ok=True)
+    alloy_data.mkdir(parents=True, exist_ok=True)
+
+    host_uid = os.getuid()
+    host_gid = os.getegid()
+    if not try_chown(alloy_data, host_uid, host_gid, recursive=True):
+        try_sudo_chown(alloy_data, host_uid, host_gid, recursive=True)
+
+    conf = alloy_dir / "config.alloy"
+    if conf.is_file():
+        log.info("config.alloy already exists; not overwriting.")
+        return
+
+    hostname, vm_role, node = resolve_vm_identity(env, script_dir)
+    loki_url = env.get("LOKI_URL", "http://host.docker.internal:3100")
+    prometheus_url = env.get("PROMETHEUS_URL", "http://host.docker.internal:9090")
+
+    # Strip trailing slash to avoid double-slash in URL paths
+    loki_url = loki_url.rstrip("/")
+    prometheus_url = prometheus_url.rstrip("/")
+
+    conf.write_text(
+        _ALLOY_CONFIG_TEMPLATE.format(
+            hostname=hostname,
+            vm_role=vm_role,
+            node=node,
+            loki_url=loki_url,
+            prometheus_url=prometheus_url,
+        )
+    )
+    log.info(f"Created starter Alloy config: {conf}")

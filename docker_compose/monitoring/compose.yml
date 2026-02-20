@@ -5,9 +5,10 @@
 #   - Prometheus: metrics store (scrapes exporters on all VMs)
 #   - Loki: log aggregation (receives from Alloy agents on all VMs)
 #   - Uptime Kuma: uptime checks + alerting
-#   - node_exporter: host metrics (CPU, RAM, disk, network) — host network
-#   - cAdvisor: per-container metrics (CPU, RAM, restarts)
-#   - Alloy: log shipper (Docker container logs → Loki)
+#
+# Sidecars (node_exporter, cAdvisor, Alloy) live in the shared overlay:
+#   compose.observability.yml (symlink → ../common/compose.observability.yml)
+#   Enabled via ENABLE_OBSERVABILITY=1 in .env (default: on).
 #
 # Principles:
 #   - All data lives on LOCAL disk (no NFS — Prometheus TSDB, Loki TSDB, and
@@ -15,11 +16,10 @@
 #   - Retention is bounded (default 30d) to keep disk usage predictable.
 #   - Losing this VM loses visibility, not functionality.
 #   - Services run as non-root where the image supports it; bootstrap sets
-#     volume ownership (e.g. Uptime Kuma, Alloy) so we don't need root.
+#     volume ownership (e.g. Uptime Kuma) so we don't need root.
 #
 # Network:
 #   - Most services on monitoring_internal bridge (communicate by container name).
-#   - node_exporter uses network_mode: host for accurate host metrics.
 #   - Prometheus reaches node_exporter via host.docker.internal.
 #
 # Paths:
@@ -81,6 +81,7 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - ${CONFIG_ROOT:-./config}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ${CONFIG_ROOT:-./config}/prometheus/targets:/etc/prometheus/targets:ro
       - ${CONFIG_ROOT:-./config}/prometheus/data:/prometheus
     ports:
       - "9090:9090"
@@ -139,86 +140,6 @@ services:
       - no-new-privileges:true
     cap_drop:
       - ALL
-    restart: unless-stopped
-    networks:
-      - monitoring_internal
-
-  # --- node_exporter: host metrics (CPU, RAM, disk, network) ---
-  # Exposes /metrics for the host. Must use host network and PID namespace for
-  # accurate CPU and process metrics. Prometheus scrapes via host.docker.internal:9100.
-  # Log message "Failed to open directory ... /run/udev/data" is expected in
-  # containers; udev device properties are disabled but disk/host metrics still work.
-  # Docs: https://github.com/prometheus/node_exporter#docker
-  node-exporter:
-    image: prom/node-exporter:${NODE_EXPORTER_TAG:-latest}
-    container_name: node-exporter
-    command:
-      - "--path.rootfs=/host"
-      - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
-    volumes:
-      - /:/host:ro,rslave
-    network_mode: host
-    pid: host
-    read_only: true
-    security_opt:
-      - no-new-privileges:true
-    restart: unless-stopped
-
-  # --- cAdvisor: per-container resource metrics ---
-  # CPU, memory, network, disk I/O per container for Prometheus. Requires
-  # privileged + host paths on Debian/Ubuntu for cgroup v2 access; no way to
-  # avoid privileged for full container metrics.
-  # Docs: https://github.com/google/cadvisor
-  cadvisor:
-    image: ghcr.io/google/cadvisor:${CADVISOR_TAG:-latest}
-    container_name: cadvisor
-    privileged: true
-    volumes:
-      - /:/rootfs:ro
-      - /var/run:/var/run:ro
-      - /sys:/sys:ro
-      - /var/lib/docker/:/var/lib/docker:ro
-      - /dev/disk/:/dev/disk:ro
-    devices:
-      - /dev/kmsg:/dev/kmsg
-    ports:
-      - "8080:8080"
-    restart: unless-stopped
-    networks:
-      - monitoring_internal
-
-  # --- Alloy: log shipper (Docker logs → Loki) ---
-  # Replaces Promtail (deprecated, EOL March 2026). Discovers containers via
-  # Docker socket, ships stdout/stderr to Loki with labels. Runs as VM user
-  # (PUID:PGID) with group_add so it can read the Docker socket; bootstrap
-  # chowns config/alloy/data to that user. Set DOCKER_GID to host docker group GID.
-  # Docs: https://grafana.com/docs/alloy/latest/get-started/install/docker/
-  alloy:
-    image: grafana/alloy:${ALLOY_TAG:-latest}
-    container_name: alloy
-    user: "${PUID:-1000}:${PGID:-1000}"
-    group_add:
-      - "${DOCKER_GID:-989}"
-    command:
-      - run
-      - "--server.http.listen-addr=0.0.0.0:12345"
-      - "--storage.path=/tmp/alloy-data"
-      - /etc/alloy/config.alloy
-    environment:
-      - ALLOY_DEPLOY_MODE=docker
-    volumes:
-      - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ${CONFIG_ROOT:-./config}/alloy/config.alloy:/etc/alloy/config.alloy:ro
-      - ${CONFIG_ROOT:-./config}/alloy/data:/tmp/alloy-data
-    ports:
-      - "12345:12345"
-    security_opt:
-      - no-new-privileges:true
-    cap_drop:
-      - ALL
-    depends_on:
-      loki:
-        condition: service_healthy
     restart: unless-stopped
     networks:
       - monitoring_internal

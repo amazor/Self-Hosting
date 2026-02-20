@@ -80,3 +80,32 @@ python3 deploy.py core          # or: python3 deploy.py all
 ```
 
 **Convenience:** Pass `--init-env` to have deploy copy `.env.example` to `.env` automatically when `.env` is missing. Required vars must still be filled — validation is unchanged even with `--force`.
+
+---
+
+## Observability sidecars
+
+Every VM stack includes an observability overlay (`compose.observability.yml`) that runs **node_exporter**, **cAdvisor**, and **Alloy** as sidecars. The overlay is a symlink to `docker_compose/common/compose.observability.yml` — one canonical file, shared across all stacks.
+
+Enabled by default via `ENABLE_OBSERVABILITY=1` in `.env`. Set to `0` to skip sidecars (e.g. if you don't have a monitoring VM). Required env vars when enabled:
+
+| Variable | What it does |
+|----------|-------------|
+| **LOKI_URL** | Where Alloy pushes logs (e.g. `http://192.168.1.120:3100`). |
+| **PROMETHEUS_URL** | Where Alloy pushes self-metrics (e.g. `http://192.168.1.120:9090`). |
+| **DOCKER_GID** | Host `docker` group GID so Alloy can read the Docker socket. Pre-filled by `setup_env.py`. |
+
+On the monitoring VM, set these to `http://host.docker.internal:3100` and `http://host.docker.internal:9090` (Loki and Prometheus are local). On other VMs, use the monitoring VM's LAN IP.
+
+Bootstrap generates `config.alloy` with the correct endpoint URLs and identity labels (from **VM_HOSTNAME**, **VM_ROLE**, **PROXMOX_NODE** — all auto-detected with sensible defaults).
+
+---
+
+## `--force` flag
+
+`--force` skips overridable validation — useful for **local testing only**:
+
+- **deploy.py** — Skips `.env` placeholder checks (e.g. unfilled `LOKI_URL`, weak Grafana password). The stack deploys but sidecars may fail to connect to endpoints.
+- **bootstrap.py** — Skips stack-specific guardrails (e.g. Grafana password strength, VPN config). Config generation still runs normally.
+
+Sidecars (Alloy, node_exporter, cAdvisor) are resilient: they start and retry connections. With `--force`, a missing monitoring VM means Alloy logs retry warnings — no crashes, no data loss on the VM itself. This makes `--force` safe for offline/single-VM testing.

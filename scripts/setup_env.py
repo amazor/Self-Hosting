@@ -112,6 +112,11 @@ def main() -> None:
     setup_logging()
     log.info("--- Pre-filling .env.example files ---")
 
+    # -- Shared identity / observability values (same for every stack) --
+    uid = os.getuid()
+    gid = os.getgid()
+    docker_gid = _detect_docker_gid()
+
     # -- Core stack --
     core_example = REPO_ROOT / "docker_compose" / "core" / ".env.example"
     if core_example.is_file():
@@ -130,6 +135,14 @@ def main() -> None:
                 f"detected LAN IP ({ip}); verify before use",
             )
 
+        core_updates["PUID"] = (str(uid), f"current user UID ({uid})")
+        core_updates["PGID"] = (str(gid), f"current user GID ({gid})")
+        if docker_gid is not None:
+            core_updates["DOCKER_GID"] = (
+                str(docker_gid),
+                f"host docker group GID ({docker_gid})",
+            )
+
         updated = _update_env_example(core_example, core_updates)
         if updated:
             log.info(f"Core .env.example: pre-filled {', '.join(updated)}")
@@ -143,10 +156,13 @@ def main() -> None:
     if media_example.is_file():
         media_updates: dict[str, tuple[str, str]] = {}
 
-        uid = os.getuid()
-        gid = os.getgid()
         media_updates["PUID"] = (str(uid), f"current user UID ({uid})")
         media_updates["PGID"] = (str(gid), f"current user GID ({gid})")
+        if docker_gid is not None:
+            media_updates["DOCKER_GID"] = (
+                str(docker_gid),
+                f"host docker group GID ({docker_gid})",
+            )
 
         updated = _update_env_example(media_example, media_updates)
         if updated:
@@ -163,12 +179,9 @@ def main() -> None:
     if mon_example.is_file():
         mon_updates: dict[str, tuple[str, str]] = {}
 
-        uid = os.getuid()
-        gid = os.getgid()
         mon_updates["PUID"] = (str(uid), f"current user UID ({uid})")
         mon_updates["PGID"] = (str(gid), f"current user GID ({gid})")
 
-        docker_gid = _detect_docker_gid()
         if docker_gid is not None:
             mon_updates["DOCKER_GID"] = (
                 str(docker_gid),

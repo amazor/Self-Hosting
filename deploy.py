@@ -137,6 +137,9 @@ def _collect_all_stacks() -> list[str]:
     return stacks
 
 
+_OBSERVABILITY_VARS = ["LOKI_URL", "PROMETHEUS_URL"]
+
+
 def _validate_stack_env(stack: str) -> list[str]:
     """Return a list of error messages for the given stack's .env."""
     sdir = _stack_dir(stack)
@@ -151,7 +154,12 @@ def _validate_stack_env(stack: str) -> list[str]:
         return errors
 
     env = load_env(env_file)
-    for var in REQUIRED_VARS.get(stack, []):
+    required = list(REQUIRED_VARS.get(stack, []))
+
+    if env.get("ENABLE_OBSERVABILITY", "1") == "1":
+        required += _OBSERVABILITY_VARS
+
+    for var in required:
         val = env.get(var, "")
         if not val:
             errors.append(f"Required var {var} is unset in {env_file}.")
@@ -187,6 +195,10 @@ def _build_compose_files(stack: str, sdir: Path) -> list[str]:
         for var, filename in _MEDIA_OVERLAYS.items():
             if env.get(var, "0") == "1":
                 files += ["-f", str(sdir / filename)]
+
+    obs_file = sdir / "compose.observability.yml"
+    if env.get("ENABLE_OBSERVABILITY", "1") == "1" and obs_file.exists():
+        files += ["-f", str(obs_file)]
 
     return files
 
@@ -247,6 +259,7 @@ core() {
   if [[ -f "$dir/.env" ]]; then
     source "$dir/.env" 2>/dev/null
     [[ "${ENABLE_DDNS:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.ddclient.yml"
+    [[ "${ENABLE_OBSERVABILITY:-1}" = "1" ]] && [[ -f "$dir/compose.observability.yml" ]] && compose_files="$compose_files -f $dir/compose.observability.yml"
   fi
   (cd "$dir" && docker compose $compose_files "$@")
 }
@@ -273,6 +286,7 @@ media() {
     [[ "${ENABLE_SABNZBD:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.sabnzbd.yml"
     [[ "${ENABLE_BAZARR:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.bazarr.yml"
     [[ "${ENABLE_NTFY:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.ntfy.yml"
+    [[ "${ENABLE_OBSERVABILITY:-1}" = "1" ]] && [[ -f "$dir/compose.observability.yml" ]] && compose_files="$compose_files -f $dir/compose.observability.yml"
   fi
   (cd "$dir" && docker compose $compose_files "$@")
 }
@@ -309,8 +323,15 @@ def _write_stack_functions(
             lines.append(_MEDIA_HELPER % helper_dir)
         else:
             lines.append(
-                f'{name}() {{ (cd "{helper_dir}" && docker compose '
-                f'-f compose.yml "$@"); }}'
+                f'{name}() {{\n'
+                f'  local dir="{helper_dir}"\n'
+                f'  local compose_files="-f $dir/compose.yml"\n'
+                f'  if [[ -f "$dir/.env" ]]; then\n'
+                f'    source "$dir/.env" 2>/dev/null\n'
+                f'    [[ "${{ENABLE_OBSERVABILITY:-1}}" = "1" ]] && [[ -f "$dir/compose.observability.yml" ]] && compose_files="$compose_files -f $dir/compose.observability.yml"\n'
+                f'  fi\n'
+                f'  (cd "$dir" && docker compose $compose_files "$@")\n'
+                f'}}'
             )
 
     if default_stack:
@@ -463,6 +484,12 @@ def _print_deploy_summary(stacks: list[str]) -> None:
         enabled: list[str] = []
         disabled: list[str] = []
 
+        # Universal overlay
+        obs_label, obs_var = "Observability", "ENABLE_OBSERVABILITY"
+        (enabled if env.get(obs_var, "1") == "1" else disabled).append(
+            obs_label
+        )
+
         if stack == "core":
             for label, var in [("DDNS", "ENABLE_DDNS")]:
                 (enabled if env.get(var, "0") == "1" else disabled).append(
@@ -486,8 +513,6 @@ def _print_deploy_summary(stacks: list[str]) -> None:
             log.info(f"    Enabled:  {', '.join(enabled)}")
         if disabled:
             log.info(f"    Disabled: {', '.join(disabled)}")
-        if not enabled and not disabled:
-            log.info("    (no optional overlays)")
 
     log.info("")
     log.info(

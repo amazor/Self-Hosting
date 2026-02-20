@@ -38,6 +38,7 @@ from scripts.homelab_common import (
     require_docker,
     resolve_config_base,
     setup_logging,
+    setup_observability_config,
     try_chown,
     try_sudo_chown,
 )
@@ -315,6 +316,9 @@ def build_compose_files(
     files = ["-f", str(SCRIPT_DIR / "compose.yml")]
     if env.get("ENABLE_DDNS", "0") == "1":
         files += ["-f", str(SCRIPT_DIR / "compose.ddclient.yml")]
+    obs_file = SCRIPT_DIR / "compose.observability.yml"
+    if env.get("ENABLE_OBSERVABILITY", "1") == "1" and obs_file.exists():
+        files += ["-f", str(obs_file)]
     return files
 
 
@@ -438,6 +442,10 @@ def main(argv: list[str] | None = None) -> None:
     )
 
     ensure_starter_ddclient_conf(config_base, enable_ddns)
+
+    if env.get("ENABLE_OBSERVABILITY", "1") == "1":
+        setup_observability_config(config_base, env, SCRIPT_DIR)
+
     validate_compose(compose_files)
 
     deploy_mode = bool(os.environ.get("HOMELAB_DEPLOY"))
