@@ -273,12 +273,31 @@ def validate_env(env: dict[str, str], real_user: str, env_file: Path) -> None:
 
     media_root = Path(media_root_str)
     if not media_root.is_dir():
-        log.error(
-            f"MEDIA_ROOT does not exist: {media_root}\n"
-            "Create/mount it first, then re-run bootstrap."
-        )
-        log.error(f"Update: {env_loc}")
-        raise SystemExit(1)
+        # Local testing: create MEDIA_ROOT and required subdirs so bootstrap
+        # works without NFS. In prod, mount NFS at this path (mount replaces dir).
+        required_subdirs = ("downloads", "library")
+        try:
+            media_root.mkdir(parents=True, exist_ok=True)
+            for sub in required_subdirs:
+                (media_root / sub).mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.chown(media_root, user=real_user)
+                for sub in required_subdirs:
+                    shutil.chown(media_root / sub, user=real_user)
+            except (PermissionError, LookupError):
+                pass
+            log.info(
+                f"Created MEDIA_ROOT locally: {media_root} (with "
+                f"{', '.join(required_subdirs)}). For NFS in prod, mount "
+                "at this path before starting the stack."
+            )
+        except OSError as e:
+            log.error(
+                f"MEDIA_ROOT does not exist and could not be created: "
+                f"{media_root}\n{e}\nCreate/mount it first, then re-run bootstrap."
+            )
+            log.error(f"Update: {env_loc}")
+            raise SystemExit(1)
 
     result = subprocess.run(
         ["sudo", "-u", real_user, "test", "-w", str(media_root)],
