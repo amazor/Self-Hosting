@@ -38,6 +38,7 @@ Stack configuration and deployment (env, compose, bootstrap, deploy): [Chapter 3
   - [Per-VM quick reference (VMID + resources)](#per-vm-quick-reference-vmid--resources)
   - [Disk and storage (default 32GB, when to increase)](#disk-and-storage-default-32gb-when-to-increase)
   - [Clone steps (repeat per VM)](#clone-steps-repeat-per-vm)
+- [Planned apps (future)](#-planned-apps-future)
 - [When to add a new VM](#when-to-add-a-new-vm)
 - [FAQ](#-frequently-asked-questions)
 
@@ -168,6 +169,17 @@ Current choices (from [Chapter 2C](Chapter2c-media.md#media-stack-overview-quick
 |-----|------|------------------------|
 | Plex | Core | Media server: playback + optional transcoding |
 | Immich | Core | Photo/video platform with acceleration support |
+
+---
+
+## 🔮 Planned apps (future)
+
+These apps are planned for addition **once the current implementation is done**. They are listed here so the VM layout and docs stay aligned with intent.
+
+| App | Target VM | Purpose |
+|-----|------------|--------|
+| **Fail2ban** | `core` (or dedicated security) | Host/access-plane protection: rate limiting for whoami, SSH, Caddy access logs. |
+| **PaperlessNGX** | `apps` | Document management: scan, OCR, tag, and search documents; self-hosted alternative to cloud document systems. |
 
 ---
 

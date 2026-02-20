@@ -167,3 +167,5 @@ This lab is a work in progress. Future expansions include:
 * **UPS + Graceful Shutdown:** Battery backup + automated shutdown (especially for NAS + Proxmox).
 * **3-2-1 Backups:** Encrypted local + offsite backups (and a tested restore path).
 * **Security VM:** A dedicated security/host-insight layer (e.g., Wazuh) kept out of the `core` access plane.
+* **Fail2ban:** Host/access-plane protection (e.g. rate limiting whoami, SSH, Caddy logs) — to be added once the current implementation is done.
+* **PaperlessNGX:** Document management (scan, OCR, tag, search) — planned for the `apps` VM once the current implementation is done.
