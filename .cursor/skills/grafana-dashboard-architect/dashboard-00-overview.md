@@ -131,19 +131,19 @@ A single **table panel**, full width, ranked descending by error count.
 
 **Question:** "Is anything running out of headroom?"
 
-Four bar gauge panels: **CPU**, **Memory**, **Disk**, **Containers Running** — all per-VM, full width at equal widths.
+Three bar gauge panels (**CPU**, **Memory**, **Disk**) plus a **Containers Running** table — all per-VM, full width.
 
-| Panel | Query basis | Thresholds |
-|-------|-------------|------------|
-| CPU | `1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m]))` | 70% yellow, 85% red |
-| Memory | `1 - (max(MemAvailable) / max(MemTotal))` | 70% yellow, 85% red |
-| Disk | `max(1 - (avail / size))` on `mountpoint="/"` | 70% yellow, 85% red |
-| Containers Running | `count(container_start_time_seconds)` per VM | 0 = red, ≥1 = green |
+| Panel | Type | Query basis | Thresholds |
+|-------|------|-------------|------------|
+| CPU | bar gauge | `1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m]))` | 70% yellow, 85% red |
+| Memory | bar gauge | `1 - (max(MemAvailable) / max(MemTotal))` | 70% yellow, 85% red |
+| Disk | bar gauge | `max(1 - (avail / size))` on `mountpoint="/"` | 70% yellow, 85% red |
+| Containers Running | table | `count(container_start_time_seconds)` (Up) vs `max_over_time(count(...)[24h:5m])` (Expected) | gauge column: <0.5 red, <1 yellow, 1 green |
 
 **Design decisions:**
 - **CPU uses `[2m]` rate window** (not `[5m]`). The 5-minute window made CPU feel slow to respond — a brief spike would stay elevated for 5 minutes after clearing. 2 minutes balances responsiveness with noise suppression.
 - **Memory and Disk use `max by (host, vm_role)`** to deduplicate. Without this, node_exporter can return multiple series per host (different scrape instances or device labels), producing phantom duplicate bars in the gauge.
-- **Containers Running uses `count(container_start_time_seconds)`, not `container_tasks_state`.** `container_tasks_state` measures Linux cgroup process states — `state="running"` counts processes executing on CPU (typically 0–2 per container), not the number of Docker containers. `container_start_time_seconds` exists exactly once per running container and is dropped by cAdvisor when the container exits, making `count()` the true running container count. This is the per-VM complement to the fleet-wide Containers panel in the top row. A VM that drops from 8 to 7 running containers is visible here even if the container was restarted before the next scrape, because the fleet Restarts sparkline captures the event. Threshold: red at 0 (no containers at all), green at ≥1.
+- **Containers Running is a compact table, not a bar gauge.** Each row shows: Host | Up | Expected | gauge. "Up" is the current running count; "Expected" is derived from `max_over_time` of the running count over 24 hours — this automatically reflects the compose-defined count without hardcoding. The operator sees both numbers side-by-side (e.g., "8 / 9") making it immediately obvious when a container is missing. A calculated gauge column (Up/Expected ratio) provides at-a-glance visual feedback: full green when all are up, partial yellow/red when something is down. `clamp_min(..., 1)` in the denominator prevents division by zero on fresh deployments. Still uses `container_start_time_seconds` (not `container_tasks_state`) because cAdvisor only exports this metric for running containers.
 
 **Links:** Each gauge → D01 Infra Workbench with `$vm_role` and `$host`.
 

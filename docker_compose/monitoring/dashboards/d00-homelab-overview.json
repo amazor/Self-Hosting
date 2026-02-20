@@ -635,9 +635,9 @@
 
     {
       "id": 13,
-      "type": "bargauge",
+      "type": "table",
       "title": "Containers Running",
-      "description": "Number of running containers per VM. cAdvisor only exports container_start_time_seconds for running containers, so counting the series gives the true running count. A drop from the prior value indicates a container was stopped or crashed — complements the fleet-wide Containers and Restarts panels in the top row. Click to drill into the Infra Workbench.",
+      "description": "Running vs expected containers per VM. Expected = peak running count over the last 24 hours. The gauge column fills green when all containers are up; a deficit is immediately visible. Click a row to drill into the Infra Workbench.",
       "gridPos": { "x": 18, "y": 7, "w": 6, "h": 5 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
@@ -646,9 +646,56 @@
           "editorMode": "code",
           "expr": "count by (host, vm_role) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
           "instant": true,
-          "range": false,
-          "legendFormat": "{{host}}",
+          "format": "table",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "clamp_min(max_over_time(count by (host, vm_role) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[24h:5m]), 1)",
+          "instant": true,
+          "format": "table",
+          "refId": "B"
+        }
+      ],
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "calculateField",
+          "options": {
+            "mode": "binary",
+            "binary": {
+              "left": "Value #A",
+              "operator": "/",
+              "right": "Value #B"
+            },
+            "alias": "Health",
+            "replaceFields": false
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "host": 0,
+              "Value #A": 1,
+              "Value #B": 2,
+              "Health": 3,
+              "vm_role": 4
+            },
+            "renameByName": {
+              "host": "Host",
+              "Value #A": "Up",
+              "Value #B": "Expected",
+              "Health": ""
+            }
+          }
         }
       ],
       "fieldConfig": {
@@ -657,32 +704,69 @@
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
+              { "color": "text", "value": null }
             ]
           },
-          "mappings": [],
-          "unit": "short",
-          "decimals": 0,
-          "noValue": "0",
           "links": [
             {
               "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.Host}",
               "targetBlank": false
             }
           ]
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": { "id": "byName", "options": "vm_role" },
+            "properties": [
+              { "id": "custom.hidden", "value": true }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Up" },
+            "properties": [
+              { "id": "custom.width", "value": 40 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Expected" },
+            "properties": [
+              { "id": "custom.width", "value": 70 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "" },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "gauge",
+                  "mode": "gradient"
+                }
+              },
+              { "id": "min", "value": 0 },
+              { "id": "max", "value": 1 },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    { "color": "red", "value": null },
+                    { "color": "yellow", "value": 0.5 },
+                    { "color": "green", "value": 1 }
+                  ]
+                }
+              },
+              { "id": "custom.width", "value": 60 }
+            ]
+          }
+        ]
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "sizing": "auto",
-        "minVizWidth": 8,
-        "minVizHeight": 25
+        "showHeader": true,
+        "cellHeight": "sm",
+        "sortBy": [{ "displayName": "Host", "desc": false }],
+        "footer": { "show": false }
       }
     },
 
