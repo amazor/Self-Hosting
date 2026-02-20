@@ -58,25 +58,42 @@ Five sections, top to bottom. Each answers one question. Top Offenders is at the
 
 **Question:** "Do I need to pay attention right now?"
 
-The 2-second glance row. Five compact stat panels, full width. Green = walk away.
+The 2-second glance row. Three compact stat panels, full width. Green = walk away.
 
 | Panel | What It Shows | Sparkline | Threshold Logic |
 |-------|--------------|-----------|-----------------|
-| **Host Status** | "5/5 UP" — single merged panel; turns red if any host is down | No | Green at full count, red if any down |
+| **Host Status** | "All Hosts UP" or count of down VMs | No | Green at 0 down, red if any down |
 | **Error Rate** | Fleet-wide errors/min (rate, not accumulated count) | Yes — shows direction | Green at 0, yellow at low rate, red at high rate |
-| **Restarts** | Fleet-wide container restart count in window | Yes — shows if ongoing | Green at 0, yellow >=1, red >=5 |
-| **Containers** | Fleet-wide running container count | Yes — reveals drops | Red at 0, green at >=1 |
-| **Scrape Health** | Percentage of Prometheus targets currently UP | No | Red <90%, yellow <99%, green >=99% |
+| **Containers** | Container deficit: max_over_time(count, 24h) minus current_count. Shows "All Up" at 0. | Yes — restart events appear as brief spikes | Green at 0, red at >=1 |
 
 **Design decisions:**
 - **Merged Host Status** replaces separate Hosts Up + Hosts Down panels. Two panels for a binary signal wastes status bar space.
 - **Error Rate replaces Error Count.** Raw count over a range is meaningless without baseline. Rate shows magnitude; sparkline shows direction. "3/min and rising" is actionable. "47 errors" is not.
-- **Restarts uses `container_start_time_seconds > (time() - 300)`, not `changes()`.** `changes([5m])` is broken for Docker stop+start: when a container stops, cAdvisor drops its time series; when it starts again, cAdvisor creates a brand-new series with a single data point. A series with one point has no history for `changes()` to compare, so it always returns 0. The recency check `> (time() - 300)` evaluates the *current value* of the metric — if the start time is within the last 5 minutes, the container recently started, regardless of whether the series is new or old.
-- **Containers uses `count(container_start_time_seconds)`, not `container_tasks_state`.** `container_tasks_state` measures Linux cgroup process states (sleeping, running, stopped, zombie), NOT Docker container lifecycle states. A healthy container has most processes in `sleeping` — querying `state!="running"` to detect stopped Docker containers actually counts sleeping processes from running containers and always returns a large positive number. Worse, cAdvisor drops all metrics for a container that exits, so `container_tasks_state` never has series for truly stopped containers. `container_start_time_seconds` exists exactly once per running container and is dropped by cAdvisor when the container exits — `count()` gives the true running count. The sparkline reveals drops: a sudden decrease means something crashed or was stopped.
+- **Containers shows the deficit, not the raw count.** `max_over_time(count(container_start_time_seconds)[24h:5m])` captures the baseline (highest count seen in 24h, sampled at 5m granularity). Subtracting the current count gives the number of missing containers. 0 = all up (green), >=1 = something down (red). The sparkline normal state is a flat line at 0; restart events appear as brief spikes that return to 0 once the container recovers. This replaces both the old raw count panel and the old Restarts panel.
+- **Restarts panel removed.** The deficit approach in Containers captures restart events as transient spikes in the sparkline. The old Restarts panel used `container_start_time_seconds > (time() - 300)` — a 5-minute window that was frequently already expired by the time an operator looked, always showing 0 even after a confirmed restart.
+- **Scrape Health removed from fleet pulse.** `avg(up) * 100` shows 100% when Prometheus can reach node_exporter and cAdvisor. In practice this drops only if an exporter process crashes, which is the same condition causing VM Availability to show DOWN. It is redundant with VM Availability and cannot detect container log issues. Scrape Staleness in Section 5 handles the subtler failure mode (scrape delays without full target loss).
 - **Sparklines are not time series graphs.** A stat panel sparkline is a trend indicator — it answers "up or down?" not "when exactly?" The operator never zooms into a sparkline. This is not an anti-pattern; it's directional context.
 - **Warnings are absent.** Warning-level logs are not actionable at fleet level. A fleet with 500 warnings and zero errors is healthy. Warnings compete for attention with actual problems and win by volume. They belong on D02 Log Workbench.
 
-**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Restarts → D01 Infra Workbench. Containers → D01 Infra Workbench. Scrape Health → scrolls to Section 5.
+**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Containers → D01 Infra Workbench. Connectivity → D03 Network/Connectivity.
+
+**Planned panel — requires Blackbox Exporter:**
+
+| Panel | What It Shows | Sparkline | Threshold Logic |
+||-------|--------------|-----------|-----------------|
+|| **Connectivity** | Single binary: are all critical probes passing? Fails red if any probe is down. | No | Green = all pass, red = any fail |
+
+The Connectivity panel combines independent probes into one fleet-level signal:
+
+1. **HTTP probe → your public domain** — validates the entire public chain end-to-end (DNS resolves, TCP connects on 443, TLS handshakes, reverse proxy returns 200). If any layer in the public stack breaks, this fails.
+2. **DNS probe → internal resolver** — completely independent from the HTTP probe. A dead internal resolver leaves all VMs and containers appearing healthy while inter-service communication silently fails. Cannot be inferred from the HTTP probe.
+3. **TCP probe → NAS port 2049 (conditional — only when NFS is in use)** — the NAS going offline is a fleet-level event: multiple VMs lose their mounts simultaneously. Containers keep running but file operations silently fail or hang. Port 2049 is the NFS service port; a passing TCP probe means the NAS is online and accepting NFS connections. Not a substitute for checking whether a specific mount is healthy (that is D03/D01 detail), but sufficient as a D00 binary signal.
+
+**Why not a separate public DNS probe:** The HTTP probe already requires DNS to resolve before TCP connects, so a passing HTTP probe implies public DNS is working. A separate public DNS probe only tells you *which layer* broke — investigation detail for D03, not triage signal for D00.
+
+**Why not per-service probes on D00:** Per-service HTTP probes (one per app behind the proxy) are D03 territory. D00 asks “is the public stack reachable?”; D03 asks “which specific service is broken?”
+
+**When NFS is not in use:** Omit probe 3. Do not add the NAS probe unconditionally — a probe target that doesn’t exist creates misleading failures.
 
 **Must NOT include:** Per-VM breakdown, service names, log text, any number that requires careful reading.
 
@@ -137,13 +154,15 @@ Three bar gauge panels (**CPU**, **Memory**, **Disk**) plus a **Containers Runni
 |-------|------|-------------|------------|
 | CPU | bar gauge | `1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m]))` | 70% yellow, 85% red |
 | Memory | bar gauge | `1 - (max(MemAvailable) / max(MemTotal))` | 70% yellow, 85% red |
-| Disk | bar gauge | `max(1 - (avail / size))` on `mountpoint="/"` | 70% yellow, 85% red |
-| Containers Running | table | `count(container_start_time_seconds)` (Up) vs `max_over_time(count(...)[24h:5m])` (Expected) | gauge column: <0.5 red, <1 yellow, 1 green |
+| Disk | bar gauge | `max(1 - (avail / size))` on `mountpoint="/"` plus optional NFS mounts (see design decisions) | 70% yellow, 85% red |
+| Containers Running | table | `count(container_start_time_seconds)` (Up) vs `max_over_time(count(...)[24h:5m])` (Exp) | row color-background: entire row turns red/yellow/green based on Up/Exp ratio. <0.8 red, <1 yellow, =1 green |
 
 **Design decisions:**
 - **CPU uses `[2m]` rate window** (not `[5m]`). The 5-minute window made CPU feel slow to respond — a brief spike would stay elevated for 5 minutes after clearing. 2 minutes balances responsiveness with noise suppression.
 - **Memory and Disk use `max by (host, vm_role)`** to deduplicate. Without this, node_exporter can return multiple series per host (different scrape instances or device labels), producing phantom duplicate bars in the gauge.
-- **Containers Running is a compact table, not a bar gauge.** Each row shows: Host | Up | Expected | gauge. "Up" is the current running count; "Expected" is derived from `max_over_time` of the running count over 24 hours — this automatically reflects the compose-defined count without hardcoding. The operator sees both numbers side-by-side (e.g., "8 / 9") making it immediately obvious when a container is missing. A calculated gauge column (Up/Expected ratio) provides at-a-glance visual feedback: full green when all are up, partial yellow/red when something is down. `clamp_min(..., 1)` in the denominator prevents division by zero on fresh deployments. Still uses `container_start_time_seconds` (not `container_tasks_state`) because cAdvisor only exports this metric for running containers.
+- **Containers Running is a compact table, not a bar gauge.** Each row shows: Host | Up | Exp | Health%. "Up" is the current running count; "Exp" is derived from `max_over_time` of the running count over 24 hours — automatically reflects the compose-defined count without hardcoding. The Health column (Up/Exp ratio, shown as %) drives `applyToRow: true` color-background: the **entire row** turns red/yellow/green based on whether all containers are up. This eliminates horizontal scrolling and makes unhealthy rows immediately obvious without reading the numbers. Column widths are tightened (Up: 35px, Exp: 40px, Health: 55px) so the table fits within the 6-column panel without a horizontal scrollbar. `clamp_min(..., 1)` in the denominator prevents division by zero on fresh deployments. Still uses `container_start_time_seconds` (not `container_tasks_state`) because cAdvisor only exports this metric for running containers.
+
+- **NAS storage in the Disk panel (conditional — only when NFS mounts are in use).** The current Disk query filters to `mountpoint="/"` (VM root filesystems, typically 30–50 GB each). This makes the NAS — where all actual data lives: downloads, media, backups — completely invisible on D00. If a VM has an NFS mount, node_exporter on that VM automatically exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mounted path. A second query targeting `fstype=~"nfs|nfs4"` adds the NAS as an additional bar in the Disk bargauge, labeled by mountpoint or a human-readable alias (e.g., "NAS"). No new tooling required. NAS storage running out is often more impactful than VM root disk running out — a full NAS silently stops downloads and recordings while all containers remain healthy. Same thresholds: 70% yellow, 85% red.
 
 **Links:** Each gauge → D01 Infra Workbench with `$vm_role` and `$host`.
 

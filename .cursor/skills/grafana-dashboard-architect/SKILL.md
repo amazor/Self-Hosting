@@ -22,21 +22,24 @@ This skill defines the **structural philosophy** for the homelab's Grafana dashb
 ## Dashboard Hierarchy
 
 ```
-D00: Homelab Overview          ← entry point (fleet health, triage)
+D00: Homelab Overview               ← entry point (fleet health, triage)
  ├── D01: Infrastructure Workbench  ← host + container metrics deep dive
  ├── D02: Log Workbench             ← log exploration, error triage
- └── D03+: Domain Exceptions        ← only when generic workbenches fail
-                                       (e.g., Media Pipeline)
+ ├── D03: Network/Connectivity      ← probe results, DNS, throughput, TLS
+ ├── D04: Media Pipeline            ← queue depth, transcoding, sessions (planned)
+ └── D05: Hardware/Host             ← Proxmox host, temperatures, SMART (planned)
 ```
 
 ### Ownership Rules
 
 | Dashboard | Owns | Does NOT Own |
 |-----------|------|--------------|
-| **D00 Overview** | Fleet health: availability, error attribution (VM + service), change detection (rate direction, restarts), resource saturation summaries, data freshness | Per-container detail, log text, service-specific metrics, historical trend analysis, warning-level log counts |
-| **D01 Infra Workbench** | Host metrics (CPU/RAM/disk/network), container resource consumption, restart tracking | Log content, application-level metrics |
+| **D00 Overview** | Fleet health: availability, connectivity (public HTTP probe + internal DNS probe), error attribution (VM + service), change detection, resource saturation summaries, data freshness | Per-container detail, log text, service-specific metrics, historical trend analysis, warning-level log counts, per-probe breakdown |
+| **D01 Infra Workbench** | Host metrics (CPU/RAM/disk/network/swap/inodes), container resource consumption, restart timeline, CPU steal time, OOM kill counter, I/O wait, load average, NFS mount filesystem metrics | Log content, application-level metrics, probe results |
 | **D02 Log Workbench** | Log exploration, error/warn streams, log volume rates, pattern detection | Host resource metrics, container lifecycle |
-| **D03+ Exceptions** | Domain-specific signals that don't fit generic workbenches | Anything the workbenches already cover |
+| **D03 Network/Connectivity** | All Blackbox probe results, DNS resolution detail, inter-VM reachability matrix, per-service proxy health, network throughput per VM/container, packet errors/drops, TLS cert expiry | Host resource metrics, log content |
+| **D04 Media Pipeline** | Download queue depth, indexer reachability, Plex/Jellyfin active sessions and transcoding load, library stats | Infrastructure metrics, log text |
+| **D05 Hardware/Host** | Proxmox host CPU/RAM/storage, VM allocation vs capacity, CPU temperatures, SMART disk health, container image currency | Per-VM application metrics |
 
 ### When to Create an Exception Dashboard
 
@@ -47,6 +50,20 @@ Only when ALL of these are true:
 3. The target audience would otherwise need to mentally join 2+ workbenches
 
 If in doubt, add a row to a workbench first.
+
+### Signals That Commonly Get Misplaced
+
+| Signal | Wrong placement | Correct placement | Reason |
+|--------|----------------|-------------------|--------|
+| Network throughput per VM | D00 | D01 | No meaningful fleet threshold — 50 MB/s on media is normal, same on core is suspicious |
+| Per-probe breakdown (which DNS/HTTP check failed) | D00 | D03 | D00 only needs binary pass/fail; investigation belongs on D03 |
+| CPU steal time | D00 | D01 | Proxmox-specific signal; investigation context, not triage |
+| OOM kill count | D01 only | D00 (change detection) + D01 (timeline) | An OOM kill is a fleet-level event worth surfacing immediately; `node_vmstat_oom_kill` is the metric |
+| Inode exhaustion | disk panel | D01 separate panel | Standard disk % hides inode exhaustion; they are independent failure modes. `node_filesystem_files_free / node_filesystem_files` |
+| TLS cert expiry | D00 | D03 (with days-to-expiry warning forwarded to D00 if critical) | Expiry timeline is investigation detail; only "expires in <3 days" is triage-urgent |
+| NAS storage remaining | invisible (not currently shown) | D00 Disk panel (current %) + D03 (historical trend) | VM root disks are shown but NAS is invisible. `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` on the mounting VM requires no new tooling. |
+| NFS mount health (stale/hung?) | D03 TCP probe alone | D03 TCP probe + D01 (mountpoint metrics present) + D02 (I/O error logs) | TCP to port 2049 confirms NAS is up; it does not confirm the mount is working. Three signals together cover the full failure surface. |
+| Swap usage | memory panel | D01 separate stat | Swap being used at all means memory pressure exceeded RAM; deserves its own signal, not a footnote on the memory gauge |
 
 ---
 
@@ -60,6 +77,21 @@ Before designing panels or writing queries, read these files for the live state 
 | `docker_compose/monitoring/compose.yml` | Which metric/log containers exist, ports, network topology | Full file (short) |
 
 The Alloy config in `ensure_alloy_config()` is the **canonical label contract** for logs. The Prometheus config in `ensure_prometheus_config()` mirrors the same contract for metrics via `metric_relabel_configs` on the cAdvisor job. If bootstrap.py and the tables below ever disagree, bootstrap.py wins.
+
+### Planned Signal Sources (not yet in stack)
+
+| Component | Adds | Needed by |
+|-----------|------|-----------|
+| **Blackbox Exporter** | HTTP/DNS/TCP/ICMP/TLS probes from monitoring VM | D00 Connectivity panel (HTTP + DNS + NAS TCP), D03 Network dashboard |
+| **Proxmox node_exporter** (on pve1) | Host-level CPU, RAM, disk, temperatures | D05 Hardware/Host |
+| **smartd_exporter** or `node_exporter` SMART collector | Disk SMART health data | D05 Hardware/Host |
+| **Reverse proxy metrics endpoint** (Nginx stub_status, Traefik /metrics, Caddy /metrics) | Request rates, 5xx counts, response latency per service | D03 (per-service proxy health) |
+| **Diun or Watchtower** | Container image update availability | D01 or D05 |
+| **NAS node_exporter** (Synology community package or Docker) | NAS disk, CPU, RAM, temperature from the NAS itself | D03 (NAS storage trend), D05 (hardware health). Without this, NAS storage is visible only via the NFS-mounted filesystem metrics on the mounting VM — useful but indirect. |
+
+**NAS/NFS signal availability without extra tooling:** If a VM (e.g., `media`) has the NAS NFS-mounted, node_exporter on that VM already exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mount path. This is collected by Prometheus today with no changes. The D00 Disk panel and D03 NAS storage trend can use this immediately for the NAS volumes that are mounted on that VM.
+
+Do not design panels requiring these sources until the source is confirmed running and scraped by Prometheus.
 
 ---
 
@@ -210,8 +242,11 @@ If you add a new exporter or metric source:
 ## Dashboard-Specific Specs
 
 - [Dashboard 00 — Homelab Overview](dashboard-00-overview.md)
+- [Dashboard 03 — Network/Connectivity](dashboard-03-network.md)
 
 Future specs (to be created when building each dashboard):
 
 - Dashboard 01 — Infrastructure Workbench
 - Dashboard 02 — Log Workbench
+- Dashboard 04 — Media Pipeline *(build after media stack is instrumented)*
+- Dashboard 05 — Hardware/Host *(build after Proxmox node_exporter and SMART collector are added)*

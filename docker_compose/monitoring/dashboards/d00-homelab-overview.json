@@ -138,7 +138,7 @@
       "type": "stat",
       "title": "Host Status",
       "description": "Number of VMs with a failed node_exporter scrape. Zero means all hosts are reachable. Click to investigate in the Infra Workbench.",
-      "gridPos": { "x": 0, "y": 0, "w": 5, "h": 3 },
+      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -197,7 +197,7 @@
       "type": "stat",
       "title": "Errors /min",
       "description": "Fleet-wide error + fatal log rate per minute. Sparkline shows trend direction — rising means the situation is getting worse.",
-      "gridPos": { "x": 5, "y": 0, "w": 5, "h": 3 },
+      "gridPos": { "x": 6, "y": 0, "w": 9, "h": 3 },
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
       "targets": [
         {
@@ -246,17 +246,17 @@
     },
 
     {
-      "id": 3,
+      "id": 12,
       "type": "stat",
-      "title": "Restarts",
-      "description": "Fleet-wide count of containers that started within the last 5 minutes (evaluated at each step for the sparkline). Detects restarts by checking whether container_start_time_seconds is recent — unlike changes(), this works even when cAdvisor drops and recreates the series after a stop+start event.",
-      "gridPos": { "x": 10, "y": 0, "w": 5, "h": 3 },
+      "title": "Containers",
+      "description": "Number of containers currently below the expected fleet count (deficit). Expected = peak running count over the last 24 hours. Zero means all containers are up. A non-zero value means one or more containers went down. The sparkline shows the deficit over time — restart events appear as brief spikes that return to zero once the container recovers.",
+      "gridPos": { "x": 15, "y": 0, "w": 9, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "count(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"} > (time() - 300)) OR on() vector(0)",
+          "expr": "clamp_min(clamp_min(max_over_time(count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[24h:5m]), 1) - count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}), 0) OR on() vector(0)",
           "instant": false,
           "range": true,
           "legendFormat": "",
@@ -270,117 +270,17 @@
             "mode": "absolute",
             "steps": [
               { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 5 }
+              { "color": "red", "value": 1 }
             ]
           },
-          "mappings": [],
-          "noValue": "0",
-          "links": [
+          "mappings": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
-              "targetBlank": false
+              "type": "value",
+              "options": {
+                "0": { "text": "All Up", "index": 0 }
+              }
             }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "area",
-        "colorMode": "background",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
-      "id": 12,
-      "type": "stat",
-      "title": "Containers",
-      "description": "Fleet-wide count of running containers. cAdvisor only reports container_start_time_seconds for containers that are currently running — counting this metric gives the true running container count. The sparkline reveals drops: a sudden decrease means a container stopped or crashed. Complements the per-VM breakdown in the Resource Saturation row.",
-      "gridPos": { "x": 15, "y": 0, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) OR on() vector(0)",
-          "instant": false,
-          "range": true,
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
-            ]
-          },
-          "mappings": [],
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "area",
-        "colorMode": "background",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "Scrape Health",
-      "description": "Percentage of Prometheus scrape targets currently UP. Below 100% means at least one target is unreachable. Click to investigate in the Infra Workbench.",
-      "gridPos": { "x": 19, "y": 0, "w": 5, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "avg(up{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) * 100",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 90 },
-              { "color": "green", "value": 99 }
-            ]
-          },
-          "mappings": [],
-          "unit": "percent",
+          ],
           "decimals": 0,
           "noValue": "N/A",
           "links": [
@@ -395,7 +295,7 @@
       },
       "options": {
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "none",
+        "graphMode": "area",
         "colorMode": "background",
         "justifyMode": "center",
         "textMode": "auto",
@@ -692,8 +592,8 @@
             "renameByName": {
               "host": "Host",
               "Value #A": "Up",
-              "Value #B": "Expected",
-              "Health": ""
+              "Value #B": "Exp",
+              "Health": "Health"
             }
           }
         }
@@ -725,25 +625,27 @@
           {
             "matcher": { "id": "byName", "options": "Up" },
             "properties": [
+              { "id": "custom.width", "value": 35 }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "Exp" },
+            "properties": [
               { "id": "custom.width", "value": 40 }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Expected" },
-            "properties": [
-              { "id": "custom.width", "value": 70 }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "" },
+            "matcher": { "id": "byName", "options": "Health" },
             "properties": [
               {
                 "id": "custom.cellOptions",
                 "value": {
-                  "type": "gauge",
-                  "mode": "gradient"
+                  "type": "color-background",
+                  "applyToRow": true
                 }
               },
+              { "id": "unit", "value": "percentunit" },
+              { "id": "decimals", "value": 0 },
               { "id": "min", "value": 0 },
               { "id": "max", "value": 1 },
               {
@@ -752,12 +654,12 @@
                   "mode": "absolute",
                   "steps": [
                     { "color": "red", "value": null },
-                    { "color": "yellow", "value": 0.5 },
+                    { "color": "yellow", "value": 0.8 },
                     { "color": "green", "value": 1 }
                   ]
                 }
               },
-              { "id": "custom.width", "value": 60 }
+              { "id": "custom.width", "value": 55 }
             ]
           }
         ]
@@ -766,7 +668,11 @@
         "showHeader": true,
         "cellHeight": "sm",
         "sortBy": [{ "displayName": "Host", "desc": false }],
-        "footer": { "show": false }
+        "footer": {
+          "show": true,
+          "reducer": ["sum"],
+          "fields": ["Up", "Exp"]
+        }
       }
     },
 
