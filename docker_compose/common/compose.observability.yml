@@ -55,7 +55,7 @@ services:
     devices:
       - /dev/kmsg:/dev/kmsg
     ports:
-      - "8080:8080"
+      - "8081:8080"    # host 8081 avoids conflict with qBittorrent Web UI (8080)
     restart: unless-stopped
 
   # --- Alloy: log shipper (Docker logs → Loki) + self-metrics → Prometheus ---

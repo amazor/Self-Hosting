@@ -462,7 +462,7 @@ node_exporter runs on **every VM** as a sidecar container. It is the first concr
 ### Container metrics: cAdvisor (sidecar)
 
 **What it does**  
-cAdvisor (Container Advisor) exposes per-container resource metrics — CPU, memory, network, and disk I/O — on port `8080` in Prometheus format. It gives you visibility that node_exporter does not: which *container* is consuming resources, not just which VM.
+cAdvisor (Container Advisor) exposes per-container resource metrics — CPU, memory, network, and disk I/O — on host port `8081` (container port `8080`) in Prometheus format. It gives you visibility that node_exporter does not: which *container* is consuming resources, not just which VM.
 
 **Why cAdvisor**  
 It is the standard way to get container-level metrics into Prometheus. Without it, you can see that a VM's CPU spiked but not which container caused it.

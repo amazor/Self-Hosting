@@ -268,7 +268,7 @@ scrape_configs:
 
   - job_name: "cadvisor"
     static_configs:
-      - targets: ["host.docker.internal:8080"]
+      - targets: ["host.docker.internal:8081"]
         labels:
           instance: "{hostname}"
           host: "{hostname}"
@@ -434,7 +434,7 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
                 "labels": {**base_labels, "service": "node-exporter"},
             })
             entries.append({
-                "targets": [f"{ip}:8080"],
+                "targets": [f"{ip}:8081"],
                 "labels": {**base_labels, "service": "cadvisor"},
             })
 
@@ -566,7 +566,7 @@ def print_summary(config_base: Path, env: dict[str, str]) -> None:
     obs = env.get("ENABLE_OBSERVABILITY", "1") == "1"
     if obs:
         log.info("  node_exporter: http://localhost:9100/metrics (host network)")
-        log.info("  cAdvisor:      http://localhost:8080")
+        log.info("  cAdvisor:      http://localhost:8081")
         log.info("  Alloy:         http://localhost:12345 (management UI)")
     else:
         log.info("  Observability sidecars: disabled (ENABLE_OBSERVABILITY=0)")

@@ -176,7 +176,7 @@ The full stack is in `docker_compose/monitoring/compose.yml`. Below are the part
 | Service | Role |
 |---------|------|
 | **node-exporter** | Host metrics (CPU, RAM, disk, network); **host network** and **pid: host** for accuracy; port 9100. |
-| **cadvisor** | Per-container metrics; port 8080; requires `privileged: true` on Debian/Ubuntu for cgroup access. |
+| **cadvisor** | Per-container metrics; host port 8081 (container 8080); requires `privileged: true` on Debian/Ubuntu for cgroup access. |
 | **alloy** | Log shipper: discovers Docker containers via socket, pushes logs to Loki and self-metrics to Prometheus; port 12345 (management UI). |
 
 ### Network topology
@@ -210,7 +210,7 @@ Applied where they do not affect functionality:
 5. **Disk space** — Warn if free space at `CONFIG_ROOT` is below 10 GB.
 6. **Ownership** — Set data dir ownership to the UIDs used by the images: Prometheus data `65534`, Loki data `10001`, Grafana data `472`.
 7. **Starter configs** (only if file missing — idempotent):
-   - **prometheus/prometheus.yml** — Self, node_exporter at `host.docker.internal:9100`, cAdvisor at `host.docker.internal:8080` (local targets as `static_configs`); remote targets via `file_sd_configs` pointing to `targets/scrape-targets.json`.
+   - **prometheus/prometheus.yml** — Self, node_exporter at `host.docker.internal:9100`, cAdvisor at `host.docker.internal:8081` (local targets as `static_configs`); remote targets via `file_sd_configs` pointing to `targets/scrape-targets.json`.
    - **loki/loki-config.yml** — TSDB store, v13 schema, filesystem storage, retention from **LOKI_RETENTION**, compactor, query cache, analytics off.
    - **grafana/provisioning/datasources/datasources.yml** — Prometheus and Loki datasources so Grafana works out of the box.
 8. **Scrape targets** (always regenerated) — Parse **SCRAPE_TARGETS** from `.env` and write `prometheus/targets/scrape-targets.json` with node-exporter and cAdvisor entries per remote VM. Prometheus picks this up via `file_sd_configs` (polls every 5 minutes).
@@ -341,7 +341,7 @@ Prometheus has no UI for editing config; you edit files and optionally reload.
 These services have no (or minimal) configuration UI:
 
 - **node_exporter** — Exposes metrics on port 9100 (host network). Prometheus scrapes it; verify in Prometheus targets page (`http://localhost:9090/targets`).
-- **cAdvisor** — Exposes metrics on port 8080. Prometheus scrapes it; verify in targets. Optional: open `http://<monitoring-vm-ip>:8080` for a simple container list.
+- **cAdvisor** — Exposes metrics on host port 8081 (container port 8080). Prometheus scrapes it; verify in targets. Optional: open `http://<monitoring-vm-ip>:8081` for a simple container list.
 - **Alloy** — Pushes Docker container logs to Loki. Config in `CONFIG_ROOT/alloy/config.alloy`. Management UI at `http://<monitoring-vm-ip>:12345`. Verify logs in Grafana Explore (Loki, filter by `host="monitoring"` or container name).
 
 ---
@@ -376,7 +376,7 @@ Set `ENABLE_OBSERVABILITY=0` in `.env` and redeploy. The overlay is not included
 ### Network requirements
 
 - Alloy on each VM needs to reach Loki (`:3100`) and Prometheus (`:9090`) on the monitoring VM.
-- Prometheus on the monitoring VM needs to reach node_exporter (`:9100`) and cAdvisor (`:8080`) on each remote VM.
+- Prometheus on the monitoring VM needs to reach node_exporter (`:9100`) and cAdvisor (`:8081`) on each remote VM.
 - Ensure these ports are reachable across VMs (no firewall blocking).
 
 ---
