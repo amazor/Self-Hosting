@@ -33,7 +33,7 @@ D00: Homelab Overview          ← entry point (fleet health, triage)
 
 | Dashboard | Owns | Does NOT Own |
 |-----------|------|--------------|
-| **D00 Overview** | Fleet health: availability, aggregate error rates, resource saturation summaries, data freshness | Per-container detail, log text, service-specific metrics, trend analysis |
+| **D00 Overview** | Fleet health: availability, error attribution (VM + service), change detection (rate direction, restarts), resource saturation summaries, data freshness | Per-container detail, log text, service-specific metrics, historical trend analysis, warning-level log counts |
 | **D01 Infra Workbench** | Host metrics (CPU/RAM/disk/network), container resource consumption, restart tracking | Log content, application-level metrics |
 | **D02 Log Workbench** | Log exploration, error/warn streams, log volume rates, pattern detection | Host resource metrics, container lifecycle |
 | **D03+ Exceptions** | Domain-specific signals that don't fit generic workbenches | Anything the workbenches already cover |
@@ -59,7 +59,7 @@ Before designing panels or writing queries, read these files for the live state 
 | `docker_compose/monitoring/bootstrap.py` | Alloy label contract, Prometheus scrape targets, log normalization pipeline, Grafana datasource provisioning | `ensure_alloy_config()`, `ensure_prometheus_config()`, `ensure_grafana_provisioning()` |
 | `docker_compose/monitoring/compose.yml` | Which metric/log containers exist, ports, network topology | Full file (short) |
 
-The Alloy config in `ensure_alloy_config()` is the **canonical label contract** — it defines every label, the service identity extraction chain, the level normalization pipeline, and compatibility aliases. If bootstrap.py and the tables below ever disagree, bootstrap.py wins.
+The Alloy config in `ensure_alloy_config()` is the **canonical label contract** for logs. The Prometheus config in `ensure_prometheus_config()` mirrors the same contract for metrics via `metric_relabel_configs` on the cAdvisor job. If bootstrap.py and the tables below ever disagree, bootstrap.py wins.
 
 ---
 
@@ -67,26 +67,28 @@ The Alloy config in `ensure_alloy_config()` is the **canonical label contract** 
 
 Summary of the labels available for dashboard queries. Authoritative source: `ensure_alloy_config()` in `bootstrap.py`.
 
-### Required (always present on every log stream)
+### Required (always present on every log stream and metric series)
 
-| Label | Meaning | Example |
-|-------|---------|---------|
-| `node` | Proxmox host | `pve1` |
-| `host` | VM hostname | `monitoring`, `core`, `media` |
-| `vm_role` | VM's functional role | `monitoring`, `core`, `media`, `apps`, `accelerated` |
-| `env` | Environment | `prod` |
-| `service` | Logical service identity | `grafana`, `sonarr`, `alloy` |
-| `container` | Container instance name | `grafana`, `sonarr-1` |
-| `source` | Log origin type | `docker` |
+The `M` column indicates whether the label is also present on **Prometheus metrics** (via static_configs or cAdvisor metric_relabel_configs).
+
+| Label | Meaning | Example | On Metrics |
+|-------|---------|---------|------------|
+| `node` | Proxmox host | `pve1` | M (all jobs) |
+| `host` | VM hostname | `monitoring`, `core`, `media` | M (all jobs) |
+| `vm_role` | VM's functional role | `monitoring`, `core`, `media`, `apps`, `accelerated` | M (all jobs) |
+| `env` | Environment | `prod` | M (all jobs) |
+| `service` | Logical service identity | `grafana`, `sonarr`, `alloy` | M (all jobs; cAdvisor via relabeling) |
+| `container` | Container instance name | `grafana`, `sonarr-1` | M (cAdvisor via relabeling; alias for `name`) |
+| `source` | Log origin type | `docker` | — (logs only) |
 
 ### Strong (present when available)
 
-| Label | Meaning |
-|-------|---------|
-| `level` | Normalized: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `unknown` |
-| `compose_project` | Docker Compose project name |
-| `image` | Container image (tag only, no digest) |
-| `stream` | `stdout` / `stderr` |
+| Label | Meaning | On Metrics |
+|-------|---------|------------|
+| `level` | Normalized: `trace`, `debug`, `info`, `warn`, `error`, `fatal`, `unknown` | — (logs only) |
+| `compose_project` | Docker Compose project name | M (cAdvisor via relabeling) |
+| `image` | Container image (tag only, no digest) | M (cAdvisor; digest stripped via relabeling) |
+| `stream` | `stdout` / `stderr` | — (logs only) |
 
 ### Compatibility (do not use as canonical in new dashboards)
 

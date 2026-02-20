@@ -260,6 +260,7 @@ scrape_configs:
           vm_role: "{vm_role}"
           node: "{node}"
           env: "prod"
+          service: "prometheus"
 
   - job_name: "node-exporter"
     static_configs:
@@ -270,6 +271,7 @@ scrape_configs:
           vm_role: "{vm_role}"
           node: "{node}"
           env: "prod"
+          service: "node-exporter"
       # Add remote VMs (use their LAN IP):
       # - targets: ["192.168.1.110:9100"]
       #   labels:
@@ -278,6 +280,7 @@ scrape_configs:
       #     vm_role: "core"
       #     node: "pve1"
       #     env: "prod"
+      #     service: "node-exporter"
 
   - job_name: "cadvisor"
     static_configs:
@@ -288,6 +291,7 @@ scrape_configs:
           vm_role: "{vm_role}"
           node: "{node}"
           env: "prod"
+          service: "cadvisor"
       # Add remote VMs:
       # - targets: ["192.168.1.110:8080"]
       #   labels:
@@ -296,6 +300,46 @@ scrape_configs:
       #     vm_role: "core"
       #     node: "pve1"
       #     env: "prod"
+      #     service: "cadvisor"
+    metric_relabel_configs:
+      # --- Container identity labels (aligned with Alloy/Loki label contract) ---
+      #
+      # container: stable container instance name (alias for cAdvisor 'name' label).
+      - source_labels: [name]
+        regex: '(.+)'
+        target_label: container
+
+      # service: logical service identity — mirrors Alloy's priority chain.
+      # Rules are evaluated in order; last write wins, so list in ascending priority.
+      #   1. container name (lowest priority / fallback)
+      - source_labels: [name]
+        regex: '(.+)'
+        target_label: service
+      #   2. Compose service name (stable; preferred for compose-managed containers)
+      - source_labels: [container_label_com_docker_compose_service]
+        regex: '(.+)'
+        target_label: service
+      #   3. Explicit homelab override (highest priority; set label com.homelab.service=xxx)
+      - source_labels: [container_label_com_homelab_service]
+        regex: '(.+)'
+        target_label: service
+
+      # compose_project: Docker Compose project/stack name.
+      - source_labels: [container_label_com_docker_compose_project]
+        regex: '(.+)'
+        target_label: compose_project
+
+      # Strip image digest to reduce churn (keep repo[:tag] only, drop @sha256:...).
+      - source_labels: [image]
+        regex: '^([^@]+)(?:@.+)?$'
+        replacement: '$1'
+        target_label: image
+
+      # Drop high-cardinality and noisy labels:
+      #   id                — container ID hash (changes on every restart)
+      #   container_label_* — raw Docker labels (values extracted above; no longer needed)
+      - action: labeldrop
+        regex: 'id|container_label_.*'
 """
     )
     log.info(f"Created starter Prometheus config: {conf}")
@@ -436,6 +480,10 @@ discovery.relabel "alloy_health" {{
 
   rule {{
     target_label = "container"
+    replacement  = "alloy"
+  }}
+  rule {{
+    target_label = "service"
     replacement  = "alloy"
   }}
 }}
