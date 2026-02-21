@@ -65,6 +65,7 @@ The 2-second glance row. Three compact stat panels, full width. Green = walk awa
 | **Host Status** | "All Hosts UP" or count of down VMs | No | Green at 0 down, red if any down |
 | **Error Rate** | Fleet-wide errors/min (rate, not accumulated count) | Yes — shows direction | Green at 0, yellow at low rate, red at high rate |
 | **Containers** | Container deficit: max_over_time(count, 24h) minus current_count. Shows "All Up" at 0. | Yes — restart events appear as brief spikes | Green at 0, red at >=1 |
+| **OOM Kills** | Fleet-wide OOM kill events in the current time range. Shows "0" when healthy. | No | Green at 0, red at any positive value |
 
 **Design decisions:**
 - **Merged Host Status** replaces separate Hosts Up + Hosts Down panels. Two panels for a binary signal wastes status bar space.
@@ -72,16 +73,22 @@ The 2-second glance row. Three compact stat panels, full width. Green = walk awa
 - **Containers shows the deficit, not the raw count.** `max_over_time(count(container_start_time_seconds)[24h:5m])` captures the baseline (highest count seen in 24h, sampled at 5m granularity). Subtracting the current count gives the number of missing containers. 0 = all up (green), >=1 = something down (red). The sparkline normal state is a flat line at 0; restart events appear as brief spikes that return to 0 once the container recovers. This replaces both the old raw count panel and the old Restarts panel.
 - **Restarts panel removed.** The deficit approach in Containers captures restart events as transient spikes in the sparkline. The old Restarts panel used `container_start_time_seconds > (time() - 300)` — a 5-minute window that was frequently already expired by the time an operator looked, always showing 0 even after a confirmed restart.
 - **Scrape Health removed from fleet pulse.** `avg(up) * 100` shows 100% when Prometheus can reach node_exporter and cAdvisor. In practice this drops only if an exporter process crashes, which is the same condition causing VM Availability to show DOWN. It is redundant with VM Availability and cannot detect container log issues. Scrape Staleness in Section 5 handles the subtler failure mode (scrape delays without full target loss).
+- **OOM Kills is a change detection signal.** `increase(node_vmstat_oom_kill[$__range])` summed across all VMs. An OOM kill means the kernel terminated a process because memory was completely exhausted — the app loses all in-memory state and restarts with no error log explaining why. Without this stat, the operator sees "Sonarr restarted and has 12 errors" in Top Offenders, investigates logs (which show a clean startup, not the cause), and misses the real problem: the VM ran out of memory. The OOM stat turns "mysterious restart" into "OOM-killed — check memory on that VM." In self-hosted Docker environments, memory leaks in arr applications, Jellyfin, and qBittorrent accumulate over days/weeks and eventually trigger OOM kills.
 - **Sparklines are not time series graphs.** A stat panel sparkline is a trend indicator — it answers "up or down?" not "when exactly?" The operator never zooms into a sparkline. This is not an anti-pattern; it's directional context.
 - **Warnings are absent.** Warning-level logs are not actionable at fleet level. A fleet with 500 warnings and zero errors is healthy. Warnings compete for attention with actual problems and win by volume. They belong on D02 Log Workbench.
 
-**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Containers → D01 Infra Workbench. Connectivity → D03 Network/Connectivity.
+**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Containers → D01 Infra Workbench. OOM Kills → D01 Infra Workbench (memory section). Connectivity → D03 Network/Connectivity.
 
-**Planned panel — requires Blackbox Exporter:**
+**Planned panels — require Blackbox Exporter:**
 
 | Panel | What It Shows | Sparkline | Threshold Logic |
 ||-------|--------------|-----------|-----------------|
 || **Connectivity** | Single binary: are all critical probes passing? Fails red if any probe is down. | No | Green = all pass, red = any fail |
+|| **TLS Cert Expiry** | Fewest days remaining across all probed domains. | No | Green >14d, yellow 7–14d, red <7d |
+
+The **TLS Cert Expiry** stat shows `min((probe_ssl_earliest_cert_expiry - time()) / 86400)` — the minimum days-to-expiry across all TLS-probed domains. This catches silent Let's Encrypt renewal failures: the cert works fine today, but renewal stopped 3 weeks ago and there are 5 days left. The HTTP probe still passes green because the cert is currently valid. Without this stat, the operator discovers the failure when everything behind HTTPS breaks simultaneously.
+
+**Links:** TLS Cert Expiry → D03 Network/Connectivity (TLS section for per-domain breakdown).
 
 The Connectivity panel combines independent probes into one fleet-level signal:
 
@@ -320,6 +327,29 @@ The Top Offenders table scales by label query, not by repeating — new VMs appe
 | Unknown/Stale | Gray/Purple | No data — possibly worse than red |
 
 Stale/unknown is deliberately NOT green. Missing data is a signal, not silence.
+
+---
+
+## Click Flow Map
+
+Every clickable element on D00, its action, and where it goes. D00 is always depth 1 — every click routes outward to a workbench.
+
+| Panel / Element | Click Action | Target | Context Passed |
+|----------------|-------------|--------|----------------|
+| Fleet Pulse → Host Status | Scroll | Section 2 (VM Availability) | — |
+| Fleet Pulse → Error Rate | Cross-dashboard | D02 Log Workbench | `time`, `$vm_role`, `$host`, `level=error` |
+| Fleet Pulse → Containers | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Fleet Pulse → OOM Kills | Cross-dashboard | D01 Infra Workbench | `time` (memory section) |
+| Fleet Pulse → Connectivity | Cross-dashboard | D03 Network/Connectivity | `time` |
+| Fleet Pulse → TLS Cert Expiry | Cross-dashboard | D03 Network/Connectivity | `time` (TLS section) |
+| VM Availability → VM panel | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Top Offenders → table row | Cross-dashboard | D02 Log Workbench | `time`, `$host`, `$service`, `level=error` |
+| Saturation → CPU bar | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Saturation → Memory bar | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Saturation → Disk bar | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Saturation → Containers Running row | Cross-dashboard | D01 Infra Workbench | `time`, `$host` |
+| Freshness → Stale scrape host | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Freshness → Stale log host | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
 
 ---
 

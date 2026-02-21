@@ -90,7 +90,7 @@ A table or stat grid showing ICMP or TCP probe results for key paths:
 - **Probes run from `monitoring` VM only.** Blackbox Exporter runs on `monitoring`. True bidirectional matrix probing would require a Blackbox instance on every VM — overkill for a homelab. The `monitoring` VM reaching a target is a reasonable proxy for "the network path exists."
 - **TCP not ICMP where possible.** ICMP can be blocked by firewalls while the application port is open. A TCP probe to the actual service port is more representative.
 - **NFS reachability vs mount health are different things.** TCP reachability to port 2049 confirms the NAS is online and the NFS service is running — if this fails, all mounts are broken or about to be. But a passing TCP probe does not confirm that individual mounts are healthy (they can be stale-mounted, permission-denied, or returning I/O errors). For individual mount health, the signal is: (a) node_exporter on the mounting VM stops reporting `node_filesystem_avail_bytes` for the NFS mountpoint, or (b) containers using the mount start logging I/O errors (surfaced via D02/Top Offenders). The TCP probe is a necessary but not sufficient condition.
-- **NAS storage available (when NFS mounts exist).** If node_exporter runs on the NAS (Synology community package available) or if a VM has the NAS NFS-mounted, `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` is already being collected and can be displayed here as a time series showing available space over time. This complements the D00 Disk bargauge (which shows current usage %) with historical trend — useful for projecting "when will the NAS fill up?"
+**Known gap — Docker-internal DNS:** Blackbox probes run from the monitoring VM and test external/inter-VM DNS resolvers. They cannot test Docker's internal DNS (127.0.0.11) on other VMs. Docker DNS failures are one of the most common silent issues in self-hosted stacks — containers fail to resolve hostnames while the host VM resolves them fine. These failures surface as error log patterns on D02 ("Name or service not known", "Temporary failure in name resolution") rather than as probe failures on D03. If D02 shows DNS-related errors from a specific VM but all D03 DNS probes pass, the problem is likely Docker DNS on that VM, not network DNS.
 
 ---
 
@@ -185,6 +185,40 @@ D03 receives drilldowns from:
 D03 drills out to:
 - D02 Log Workbench — when a service fails its proxy probe, check its logs
 - D01 Infra Workbench — when throughput is high, check which container is responsible
+
+---
+
+## Click Flow Map
+
+D03 supports Focus (narrowing by host in throughput panels) and Investigate (routing to D02 for service logs or D01 for host health).
+
+| Panel / Element | Click Type | Target | Context Passed |
+|----------------|-----------|--------|----------------|
+| Probe Status → failing HTTP probe row | Investigate | D02 Log Workbench | `time`, `$service` (from probe label) |
+| Probe Status → failing DNS probe | Informational | Stay on D03 | Investigation within D03's context |
+| Probe Status → failing TCP probe (NAS) | Investigate | D01 Infra Workbench | `time`, `$host` (VM that mounts NAS) |
+| Inter-VM Reachability → failing path | Investigate | D01 Infra Workbench | `time`, `$host` (target VM) |
+| TLS Cert Expiry → domain | Informational | — | Operator investigates cert renewal process |
+| Per-Service Proxy Health → failing service | Investigate | D02 Log Workbench | `time`, `$service` |
+| Network Throughput → VM line | **Focus** | Same dashboard | Updates `$host`; container bandwidth table filters to that VM |
+| Top Container Bandwidth → row | Investigate | D02 Log Workbench (or D01) | `time`, `$host`, `$service` |
+| Packet Errors → VM with non-zero errors | Investigate | D01 Infra Workbench | `time`, `$host` |
+
+**Focus behavior:** Clicking a VM line in the Network Throughput time series updates `$host`. The Top Container Bandwidth table (same section) now shows only containers from that VM, revealing which container is responsible for the traffic spike. From that narrowed table, clicking a container row drills to D02 for that service's logs.
+
+---
+
+## Uptime Kuma and Blackbox Exporter
+
+Both tools run in the monitoring stack. They probe endpoints but serve different purposes:
+
+- **Blackbox Exporter** provides Prometheus-native probe metrics that power D03's panels and D00's Connectivity stat. It is the data source for all probe-based dashboard panels. Probe targets are defined in Blackbox's config and Prometheus scrape configuration.
+
+- **Uptime Kuma** provides a standalone status page (shareable with household members who don't use Grafana), a notification router (Discord, email, push on failure), and a web UI for managing probes without editing config files. It does NOT feed into Grafana dashboards.
+
+Probe targets should be defined in both tools. Their purposes do not overlap: Blackbox feeds dashboards, Uptime Kuma feeds notifications and a human-readable status page.
+
+If Uptime Kuma proves redundant over time (e.g., Grafana Alerting handles all notifications and no one uses the status page), it can be removed without affecting any dashboard. Blackbox Exporter is the required component for D03 and D00.
 
 ---
 

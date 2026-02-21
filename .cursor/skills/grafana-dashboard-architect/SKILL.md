@@ -61,7 +61,7 @@ If in doubt, add a row to a workbench first.
 | OOM kill count | D01 only | D00 (change detection) + D01 (timeline) | An OOM kill is a fleet-level event worth surfacing immediately; `node_vmstat_oom_kill` is the metric |
 | Inode exhaustion | disk panel | D01 separate panel | Standard disk % hides inode exhaustion; they are independent failure modes. `node_filesystem_files_free / node_filesystem_files` |
 | TLS cert expiry | D00 | D03 (with days-to-expiry warning forwarded to D00 if critical) | Expiry timeline is investigation detail; only "expires in <3 days" is triage-urgent |
-| NAS storage remaining | invisible (not currently shown) | D00 Disk panel (current %) + D03 (historical trend) | VM root disks are shown but NAS is invisible. `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` on the mounting VM requires no new tooling. |
+| NAS storage remaining | invisible (not currently shown) | D00 Disk panel (current %) + D04 (media volume trend) | VM root disks are shown but NAS is invisible. `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` on the mounting VM requires no new tooling. |
 | NFS mount health (stale/hung?) | D03 TCP probe alone | D03 TCP probe + D01 (mountpoint metrics present) + D02 (I/O error logs) | TCP to port 2049 confirms NAS is up; it does not confirm the mount is working. Three signals together cover the full failure surface. |
 | Swap usage | memory panel | D01 separate stat | Swap being used at all means memory pressure exceeded RAM; deserves its own signal, not a footnote on the memory gauge |
 
@@ -87,9 +87,9 @@ The Alloy config in `ensure_alloy_config()` is the **canonical label contract** 
 | **smartd_exporter** or `node_exporter` SMART collector | Disk SMART health data | D05 Hardware/Host |
 | **Reverse proxy metrics endpoint** (Nginx stub_status, Traefik /metrics, Caddy /metrics) | Request rates, 5xx counts, response latency per service | D03 (per-service proxy health) |
 | **Diun or Watchtower** | Container image update availability | D01 or D05 |
-| **NAS node_exporter** (Synology community package or Docker) | NAS disk, CPU, RAM, temperature from the NAS itself | D03 (NAS storage trend), D05 (hardware health). Without this, NAS storage is visible only via the NFS-mounted filesystem metrics on the mounting VM — useful but indirect. |
+| **NAS node_exporter** (Synology community package or Docker) | NAS disk, CPU, RAM, temperature from the NAS itself | D04 (NAS storage trend), D05 (hardware health). Without this, NAS storage is visible only via the NFS-mounted filesystem metrics on the mounting VM — useful but indirect. |
 
-**NAS/NFS signal availability without extra tooling:** If a VM (e.g., `media`) has the NAS NFS-mounted, node_exporter on that VM already exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mount path. This is collected by Prometheus today with no changes. The D00 Disk panel and D03 NAS storage trend can use this immediately for the NAS volumes that are mounted on that VM.
+**NAS/NFS signal availability without extra tooling:** If a VM (e.g., `media`) has the NAS NFS-mounted, node_exporter on that VM already exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mount path. This is collected by Prometheus today with no changes. The D00 Disk panel and D04 NAS storage trend can use this immediately for the NAS volumes that are mounted on that VM.
 
 Do not design panels requiring these sources until the source is confirmed running and scraped by Prometheus.
 
@@ -213,6 +213,79 @@ The Grafana time range IS the incident window. No custom time variables needed.
 
 ---
 
+## Interactivity Contract
+
+Every visible signal should be clickable. Dashboards follow a **Focus → Investigate** progressive disclosure pattern. The Drilldown Flow section above covers cross-dashboard URL mechanics. This section defines the click *philosophy* — what happens when the operator clicks, and what insight they should expect next.
+
+### Progressive Disclosure
+
+Two click depths, applied consistently across all dashboards:
+
+1. **Focus (same dashboard):** Clicking a series, row, or cell narrows the current view. A time series showing all containers' network traffic, when one container's line is clicked, updates `$service` to that container. The dashboard re-renders showing only that container's data across all panels.
+
+2. **Investigate (cross-dashboard):** From a focused view, a second click drills to the workbench that owns the next level of detail. From the focused container on D01, a "View Logs" link opens D02 pre-filtered to that service at the same time window.
+
+Every visible anomaly should have a click path to its explanation. The operator should never see something interesting without knowing where to click next.
+
+### Implementation Patterns
+
+**Same-dashboard focus (variable update via self-link):**
+
+```
+/d/${__dashboard.uid}?var-service=${__data.fields.service}&from=${__from}&to=${__to}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}
+```
+
+Navigates to the same dashboard with one variable narrowed. All upstream variables are preserved to prevent cascade resets. The dashboard re-renders with narrowed scope.
+
+**Cross-dashboard drilldown:**
+
+```
+/d/<target-uid>?var-host=${__data.fields.host}&var-service=${__data.fields.service}&from=${__from}&to=${__to}
+```
+
+**Rules for all click links:**
+
+- Every link includes `from=${__from}&to=${__to}` — the time window is the incident context
+- Same-dashboard focus links preserve all upstream variables (`$node`, `$vm_role`, `$host`) to prevent cascade resets
+- Cross-dashboard links include only the variables the target dashboard uses
+- Use `${__data.fields.*}` for row/cell-specific values (tables, stat panels)
+- Use `${variable_name}` for current dashboard variable values (filter-wide drilldowns)
+
+### What the Next Click Should Show
+
+The expected next insight depends on what the operator is looking at:
+
+| Signal type on screen | Focus action (same dashboard) | Investigate action (cross-dashboard) |
+|----------------------|------------------------------|-------------------------------------|
+| Multi-host resource metric | Filter to one host | → D01 (from D00) or → D02 logs (from D01) |
+| Multi-container time series | Update `$service` to one container | → D02 for that service's logs |
+| Error count or rate | Update `$service` to one service | → D02 with `level=error` |
+| Container restart event | — (already specific) | → D02 with time narrowed to restart |
+| Probe failure | — (already specific) | → D02 for service logs; D01 for host health |
+| High network throughput | Filter to one host or container | → D03 (from D01) or → D02 logs |
+| Disk/storage warning | Filter to specific mount | → D02 for I/O error logs |
+| Log error pattern | Filter log stream to that pattern | Terminal — operator reads and acts |
+| Physical hardware signal | — (already specific) | → D01 for the affected VM |
+
+### Click Depth by Dashboard
+
+| Dashboard | Typical depth | Pattern |
+|-----------|--------------|---------|
+| **D00 Overview** | 1 click | Always routes outward to a workbench. D00 never focuses itself. |
+| **D01 Infra** | 1–2 clicks | Click table row → focus on container (1). Click focused panel → D02 logs (2). |
+| **D02 Logs** | 1–2 clicks | Click service line → focus (1). Read logs → act (terminal). |
+| **D03 Network** | 1–2 clicks | Click VM in throughput → focus (1). Click focused signal → D02 or D01 (2). |
+| **D04 Media** | 1 click | Click pipeline stage → D02 for logs or D01 for resources. |
+| **D05 Hardware** | 1 click | Click VM in allocation → D01 for that VM. |
+
+### D00 Is Always Depth 1
+
+The overview never focuses itself. Every click on D00 routes to a workbench. This is by design — the overview's job is routing, not investigation. If the instinct is "filter D00 to just this VM," the right action is opening D01 for that VM.
+
+Each dashboard spec includes a **Click Flow Map** table documenting every clickable element, its action type (focus or investigate), and its target.
+
+---
+
 ## Scaling Rules
 
 ### Adding a New VM (e.g., Security)
@@ -241,12 +314,11 @@ If you add a new exporter or metric source:
 
 ## Dashboard-Specific Specs
 
-- [Dashboard 00 — Homelab Overview](dashboard-00-overview.md)
-- [Dashboard 03 — Network/Connectivity](dashboard-03-network.md)
-
-Future specs (to be created when building each dashboard):
-
-- Dashboard 01 — Infrastructure Workbench
-- Dashboard 02 — Log Workbench
-- Dashboard 04 — Media Pipeline *(build after media stack is instrumented)*
-- Dashboard 05 — Hardware/Host *(build after Proxmox node_exporter and SMART collector are added)*
+| Dashboard | File | Status |
+|-----------|------|--------|
+| D00 — Homelab Overview | [dashboard-00-overview.md](dashboard-00-overview.md) | Built |
+| D01 — Infrastructure Workbench | [dashboard-01-infra-workbench.md](dashboard-01-infra-workbench.md) | Planning |
+| D02 — Log Workbench | [dashboard-02-log-workbench.md](dashboard-02-log-workbench.md) | Planning |
+| D03 — Network/Connectivity | [dashboard-03-network.md](dashboard-03-network.md) | Planning |
+| D04 — Media Pipeline | [dashboard-04-media-pipeline.md](dashboard-04-media-pipeline.md) | Planning — requires exportarr, qbittorrent-exporter, Jellyfin metrics |
+| D05 — Hardware/Host | [dashboard-05-hardware-host.md](dashboard-05-hardware-host.md) | Planning — requires node_exporter on pve1, SMART collector |
