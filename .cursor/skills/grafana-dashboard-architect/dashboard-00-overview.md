@@ -24,7 +24,7 @@ This is a triage tool, not an investigation tool. A glance should tell you withi
 
 ### What D00 Does NOT Own
 
-- Per-container resource breakdown (→ D01 Infra Workbench)
+- Per-container resource breakdown (→ D01b Container Workbench)
 - Log text or log exploration (→ D02 Log Workbench)
 - Service-specific metrics (queue depth, download rates, etc.)
 - Historical trend analysis or capacity planning
@@ -77,7 +77,7 @@ The 2-second glance row. Three compact stat panels, full width. Green = walk awa
 - **Sparklines are not time series graphs.** A stat panel sparkline is a trend indicator — it answers "up or down?" not "when exactly?" The operator never zooms into a sparkline. This is not an anti-pattern; it's directional context.
 - **Warnings are absent.** Warning-level logs are not actionable at fleet level. A fleet with 500 warnings and zero errors is healthy. Warnings compete for attention with actual problems and win by volume. They belong on D02 Log Workbench.
 
-**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Containers → D01 Infra Workbench. OOM Kills → D01 Infra Workbench (memory section). Connectivity → D03 Network/Connectivity.
+**Links:** Host Status → scrolls to Section 2. Error Rate → D02 Log Workbench (fleet-wide, level=error). Containers → D01b Container Workbench. OOM Kills → D01a Host Workbench (memory section). Connectivity → D03 Network/Connectivity.
 
 **Planned panels — require Blackbox Exporter:**
 
@@ -94,7 +94,7 @@ The Connectivity panel combines independent probes into one fleet-level signal:
 
 1. **HTTP probe → your public domain** — validates the entire public chain end-to-end (DNS resolves, TCP connects on 443, TLS handshakes, reverse proxy returns 200). If any layer in the public stack breaks, this fails.
 2. **DNS probe → internal resolver** — completely independent from the HTTP probe. A dead internal resolver leaves all VMs and containers appearing healthy while inter-service communication silently fails. Cannot be inferred from the HTTP probe.
-3. **TCP probe → NAS port 2049 (conditional — only when NFS is in use)** — the NAS going offline is a fleet-level event: multiple VMs lose their mounts simultaneously. Containers keep running but file operations silently fail or hang. Port 2049 is the NFS service port; a passing TCP probe means the NAS is online and accepting NFS connections. Not a substitute for checking whether a specific mount is healthy (that is D03/D01 detail), but sufficient as a D00 binary signal.
+3. **TCP probe → NAS port 2049 (conditional — only when NFS is in use)** — the NAS going offline is a fleet-level event: multiple VMs lose their mounts simultaneously. Containers keep running but file operations silently fail or hang. Port 2049 is the NFS service port; a passing TCP probe means the NAS is online and accepting NFS connections. Not a substitute for checking whether a specific mount is healthy (that is D03/D01a detail), but sufficient as a D00 binary signal.
 
 **Why not a separate public DNS probe:** The HTTP probe already requires DNS to resolve before TCP connects, so a passing HTTP probe implies public DNS is working. A separate public DNS probe only tells you *which layer* broke — investigation detail for D03, not triage signal for D00.
 
@@ -112,7 +112,7 @@ The Connectivity panel combines independent probes into one fleet-level signal:
 
 Per-VM stat panels showing UP or DOWN. Colored backgrounds. One panel per host, auto-populated by label query. No changes from current implementation — this section works.
 
-**Links:** Each VM → D01 Infra Workbench with `$vm_role` and `$host` pre-set.
+**Links:** Each VM → D01a Host Workbench with `$vm_role` and `$host` pre-set.
 
 **Must NOT include:** Uptime duration, response times, or any metric beyond "is the exporter reachable."
 
@@ -171,7 +171,7 @@ Three bar gauge panels (**CPU**, **Memory**, **Disk**) plus a **Containers Runni
 
 - **NAS storage in the Disk panel (conditional — only when NFS mounts are in use).** The current Disk query filters to `mountpoint="/"` (VM root filesystems, typically 30–50 GB each). This makes the NAS — where all actual data lives: downloads, media, backups — completely invisible on D00. If a VM has an NFS mount, node_exporter on that VM automatically exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mounted path. A second query targeting `fstype=~"nfs|nfs4"` adds the NAS as an additional bar in the Disk bargauge, labeled by mountpoint or a human-readable alias (e.g., "NAS"). No new tooling required. NAS storage running out is often more impactful than VM root disk running out — a full NAS silently stops downloads and recordings while all containers remain healthy. Same thresholds: 70% yellow, 85% red.
 
-**Links:** Each gauge → D01 Infra Workbench with `$vm_role` and `$host`.
+**Links:** CPU, Memory, Disk gauges → D01a Host Workbench with `$vm_role` and `$host`. Containers Running table rows → D01b Container Workbench with `$host`.
 
 **Must NOT include:** Per-mount filesystem breakdown, per-core CPU, swap details, network I/O, per-container resource breakdown.
 
@@ -193,7 +193,7 @@ A dashboard that silently stops receiving data is worse than one that shows red.
 - **Stale/unknown is gray or purple, never green.** Missing data is a signal, not silence.
 - **Container Restarts removed from this section.** Restart counts are not a data freshness signal. Fleet-wide restarts are in Section 1 (Fleet Pulse). Per-VM/service restart attribution is in Section 3 (Top Offenders). The previous placement created duplication.
 
-**Links:** Stale host → D01 Infra Workbench (scrape target investigation).
+**Links:** Stale host → D01a Host Workbench (scrape target investigation).
 
 **Must NOT include:** Prometheus internal metrics, Alloy pipeline details, log volume graphs.
 
@@ -226,11 +226,16 @@ The overview groups and filters by VM (`$host` / `$vm_role`). Service identity a
 | From (signal on D00) | To (target dashboard) | Context Passed |
 |----------------------|----------------------|----------------|
 | Fleet Pulse: Error Rate | D02 Log Workbench | `time`, `$vm_role`, `$host`, `level=error` |
-| Fleet Pulse: Restarts | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
-| VM Availability: per-VM | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Fleet Pulse: Containers (deficit) | D01b Container Workbench | `time`, `$vm_role`, `$host` |
+| Fleet Pulse: OOM Kills | D01a Host Workbench | `time` (memory section) |
+| VM Availability: per-VM | D01a Host Workbench | `time`, `$vm_role`, `$host` |
 | Top Offenders: table row | D02 Log Workbench | `time`, `$vm_role`, `$host`, `$service`, `level=error` |
-| Resource Saturation: gauge | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
-| Data Freshness: stale host | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Resource Saturation: CPU gauge | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Resource Saturation: Memory gauge | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Resource Saturation: Disk gauge | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Resource Saturation: Containers Running row | D01b Container Workbench | `time`, `$host` |
+| Data Freshness: stale scrape | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Data Freshness: stale logs | D01a Host Workbench | `time`, `$vm_role`, `$host` |
 
 ### Primary Routing Surface
 
@@ -338,18 +343,18 @@ Every clickable element on D00, its action, and where it goes. D00 is always dep
 |----------------|-------------|--------|----------------|
 | Fleet Pulse → Host Status | Scroll | Section 2 (VM Availability) | — |
 | Fleet Pulse → Error Rate | Cross-dashboard | D02 Log Workbench | `time`, `$vm_role`, `$host`, `level=error` |
-| Fleet Pulse → Containers | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
-| Fleet Pulse → OOM Kills | Cross-dashboard | D01 Infra Workbench | `time` (memory section) |
+| Fleet Pulse → Containers | Cross-dashboard | D01b Container Workbench | `time`, `$vm_role`, `$host` |
+| Fleet Pulse → OOM Kills | Cross-dashboard | D01a Host Workbench | `time` (memory section) |
 | Fleet Pulse → Connectivity | Cross-dashboard | D03 Network/Connectivity | `time` |
 | Fleet Pulse → TLS Cert Expiry | Cross-dashboard | D03 Network/Connectivity | `time` (TLS section) |
-| VM Availability → VM panel | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| VM Availability → VM panel | Cross-dashboard | D01a Host Workbench | `time`, `$vm_role`, `$host` |
 | Top Offenders → table row | Cross-dashboard | D02 Log Workbench | `time`, `$host`, `$service`, `level=error` |
-| Saturation → CPU bar | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
-| Saturation → Memory bar | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
-| Saturation → Disk bar | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
-| Saturation → Containers Running row | Cross-dashboard | D01 Infra Workbench | `time`, `$host` |
-| Freshness → Stale scrape host | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
-| Freshness → Stale log host | Cross-dashboard | D01 Infra Workbench | `time`, `$vm_role`, `$host` |
+| Saturation → CPU bar | Cross-dashboard | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Saturation → Memory bar | Cross-dashboard | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Saturation → Disk bar | Cross-dashboard | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Saturation → Containers Running row | Cross-dashboard | D01b Container Workbench | `time`, `$host` |
+| Freshness → Stale scrape host | Cross-dashboard | D01a Host Workbench | `time`, `$vm_role`, `$host` |
+| Freshness → Stale log host | Cross-dashboard | D01a Host Workbench | `time`, `$vm_role`, `$host` |
 
 ---
 

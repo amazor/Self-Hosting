@@ -12,7 +12,7 @@ Answers the question: **"What is this service actually saying?"**
 
 This is the log investigation surface. When D00's Top Offenders table routes you to a specific service with errors, this dashboard opens with that context pre-loaded. It shows the actual log lines, their volume over time, the top recurring patterns, and the rate at which errors are accumulating.
 
-It is the terminal node of the triage chain: Overview → Infra Workbench → **Log Workbench**. Once here, the operator is reading evidence, not navigating further.
+It is the terminal node of the triage chain: Overview → Host/Container Workbench → **Log Workbench**. Once here, the operator is reading evidence, not navigating further.
 
 ---
 
@@ -29,8 +29,8 @@ It is the terminal node of the triage chain: Overview → Infra Workbench → **
 
 ### What D02 Does NOT Own
 
-- Host resource metrics (→ D01 Infra Workbench)
-- Container lifecycle state — whether it's running (→ D00/D01)
+- Host resource metrics (→ D01a Host Workbench)
+- Container lifecycle state — whether it's running (→ D00/D01b)
 - Network connectivity or probe results (→ D03)
 - Application-level queue depth or session counts (→ D04)
 
@@ -133,13 +133,13 @@ topk(20,
 | Error pattern in logs | Actual root cause | Where to investigate |
 |----------------------|-------------------|---------------------|
 | `Name or service not known` / `Temporary failure in name resolution` | Docker internal DNS (127.0.0.11) failed | Container DNS config; Docker daemon health; may be transient — check if pattern is intermittent or sustained |
-| `no space left on device` | Disk or inode exhaustion | D01 Disk section — check both filesystem % AND inode % (they are independent failure modes) |
-| `Killed` / `signal 9` / `OOM` | Process was OOM-killed by the kernel | D01 Memory section + OOM counter; check Mem Limit % in Container Resource Table |
+| `no space left on device` | Disk or inode exhaustion | D01a Disk section — check both filesystem % AND inode % (they are independent failure modes) |
+| `Killed` / `signal 9` / `OOM` | Process was OOM-killed by the kernel | D01a Memory section + OOM counter; check Mem Limit % in D01b Container Resource Table |
 | `permission denied` / `operation not permitted` | File permission mismatch (PUID/PGID) | Container user config vs mount ownership; common after NFS mount changes |
-| `connection refused` on an internal port | Dependency container not running or wrong Docker network | D00 Container deficit; D01 Container Resource Table for the dependency's status |
-| `i/o timeout` / `context deadline exceeded` | NFS mount stale or network partition | D03 NAS reachability (TCP 2049 probe); D01 NFS mount metrics and I/O latency |
-| `too many open files` | File descriptor limit reached | D01 Host section; container ulimits in compose.yml |
-| `certificate verify failed` / `SSL: CERTIFICATE_VERIFY_FAILED` | Expired cert or clock drift causing validation failure | D03 TLS cert expiry; D01 NTP time offset |
+| `connection refused` on an internal port | Dependency container not running or wrong Docker network | D00 Container deficit; D01b Container Resource Table for the dependency's status |
+| `i/o timeout` / `context deadline exceeded` | NFS mount stale or network partition | D03 NAS reachability (TCP 2049 probe); D01a NFS mount metrics and I/O latency |
+| `too many open files` | File descriptor limit reached | D01a Host section; container ulimits in compose.yml |
+| `certificate verify failed` / `SSL: CERTIFICATE_VERIFY_FAILED` | Expired cert or clock drift causing validation failure | D03 TLS cert expiry; D01a NTP time offset |
 
 **Interactivity:** Click a row in the top error patterns table → filters the Log Stream panel (Section 4) to show only lines matching that pattern. Implementation: data link to same dashboard with a line filter query parameter appended to the Loki query.
 
@@ -157,7 +157,7 @@ The primary panel — an actual log viewer showing log lines from Loki. Full wid
 ```
 
 **Design decisions:**
-- Default `$level` to `error|fatal` when arriving from a D00/D01 drilldown with `level=error`. When the operator wants to see context around an error, they can switch `$level` to `All` or `info|warn|error`.
+- Default `$level` to `error|fatal` when arriving from a D00/D01b drilldown with `level=error`. When the operator wants to see context around an error, they can switch `$level` to `All` or `info|warn|error`.
 - Show the `service` label in the log panel's displayed fields — when `$service = All`, it disambiguates which service each log line comes from.
 - Enable log line wrapping — container logs can be long JSON blobs.
 - Add a "Live" mode toggle for tail-following when actively debugging a running service.
@@ -194,7 +194,7 @@ This is a "while I'm here" panel rather than a primary signal. It's useful for p
 
 **`$level` as a custom variable:** Unlike the other variables (which are `label_values()` queries), `$level` is a fixed custom list. Log levels are well-known; enumerating them from Loki is unnecessary and would surface `unknown` as an equal option to `error`.
 
-**Note on `$service` default:** When arriving via drilldown from D00 Top Offenders or D01 Container Table, `$service` arrives pre-set. When opened directly, it defaults to All — which is intentional for exploration but produces a high-volume log stream. The Log Volume Rate panel (Section 1) helps the operator quickly identify which service to narrow down to.
+**Note on `$service` default:** When arriving via drilldown from D00 Top Offenders or D01b Container Resource Table, `$service` arrives pre-set. When opened directly, it defaults to All — which is intentional for exploration but produces a high-volume log stream. The Log Volume Rate panel (Section 1) helps the operator quickly identify which service to narrow down to.
 
 ---
 
@@ -203,11 +203,11 @@ This is a "while I'm here" panel rather than a primary signal. It's useful for p
 **Receives from:**
 - D00 Fleet Pulse Error Rate — arrives with `$host`, `$vm_role`, `level=error`
 - D00 Top Offenders table row — arrives with `$host`, `$service`, `level=error` (most specific)
-- D01 Container Resource Table row — arrives with `$host`, `$service`
+- D01b Container Resource Table row — arrives with `$host`, `$service`
 - D03 when a service fails its proxy probe — arrives with `$service`
 
 **Drills out to:**
-- D01 Infra Workbench — when log errors suggest resource exhaustion (e.g., "no space left on device", "OOM")
+- D01a Host Workbench — when log errors suggest resource exhaustion (e.g., "no space left on device", "OOM")
 
 **This dashboard is typically the end of the chain.** After reading log lines and identifying the root cause, the operator acts directly (SSH, restart, config change) rather than opening another dashboard.
 
@@ -227,15 +227,15 @@ This dashboard assumes the Alloy label contract from `bootstrap.py` is in place:
 
 ## Click Flow Map
 
-D02 is typically the terminal node of the triage chain. Most clicks are Focus actions (narrowing the view on the same dashboard). Cross-dashboard links go back to D01 when a log message reveals an infrastructure root cause.
+D02 is typically the terminal node of the triage chain. Most clicks are Focus actions (narrowing the view on the same dashboard). Cross-dashboard links go back to D01a when a log message reveals an infrastructure root cause.
 
 | Panel / Element | Click Type | Target | Context Passed |
 |----------------|-----------|--------|----------------|
 | Error Rate per Service → service line | **Focus** | Same dashboard | Updates `$service`; all panels filter to that service |
 | Log Volume Rate → level area | **Focus** | Same dashboard | Updates `$level` |
 | Top Error Patterns → pattern row | **Focus** | Same dashboard | Filters Log Stream to matching lines |
-| Log Stream → "no space left on device" | Investigate | D01 Infra Workbench | `time`, `$host` (Disk section) |
-| Log Stream → OOM/signal 9 message | Investigate | D01 Infra Workbench | `time`, `$host` (Memory section) |
+| Log Stream → "no space left on device" | Investigate | D01a Host Workbench | `time`, `$host` (Disk section) |
+| Log Stream → OOM/signal 9 message | Investigate | D01a Host Workbench | `time`, `$host` (Memory section) |
 | Log Stream → "i/o timeout" on NFS | Investigate | D03 Network/Connectivity | `time` (NAS reachability) |
 | Log Level Distribution → level segment | **Focus** | Same dashboard | Updates `$level` |
 
@@ -244,7 +244,7 @@ D02 is typically the terminal node of the triage chain. Most clicks are Focus ac
 2. Top Error Patterns now shows only that service's errors → click a pattern → log stream filters to matching lines
 3. Log Stream shows the actual evidence → operator reads and acts
 
-**Returning to D01:** When a log message reveals an infrastructure problem (out of disk, OOM, I/O timeout), a data link on the Log Stream panel routes back to D01 with context. This is the only cross-dashboard drilldown on D02 and it goes backward in the triage chain — from evidence back to the infrastructure that caused it.
+**Returning to D01a:** When a log message reveals an infrastructure problem (out of disk, OOM, I/O timeout), a data link on the Log Stream panel routes back to D01a with context. This is the only cross-dashboard drilldown on D02 and it goes backward in the triage chain — from evidence back to the infrastructure that caused it.
 
 ---
 
@@ -253,4 +253,4 @@ D02 is typically the terminal node of the triage chain. Most clicks are Focus ac
 1. **Showing all log lines from all services by default.** The default `$level = error|fatal` is not a restriction — it's a deliberate starting point. Showing ALL logs by default is overwhelming and makes the dashboard feel slow to load.
 2. **Parsing log structure in the dashboard query instead of at ingest.** Heavy regex/pattern extraction in every LogQL query is expensive. If a service's logs benefit from parsing, add a structured extraction stage to Alloy's pipeline — then dashboards get clean fields for free.
 3. **Log volume rate as a threshold panel.** There is no meaningful threshold for "normal" log volume. Different services have vastly different verbosity. Use the rate for trend detection (is this higher than usual?) not for absolute alarming.
-4. **Duplicating D01 resource panels here.** If an operator wants to check memory while looking at logs, they open D01. Don't embed memory graphs on the log workbench — it conflates investigation contexts and makes the dashboard heavier.
+4. **Duplicating D01a resource panels here.** If an operator wants to check memory while looking at logs, they open D01a. Don't embed memory graphs on the log workbench — it conflates investigation contexts and makes the dashboard heavier.

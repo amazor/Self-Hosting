@@ -23,7 +23,8 @@ This skill defines the **structural philosophy** for the homelab's Grafana dashb
 
 ```
 D00: Homelab Overview               ← entry point (fleet health, triage)
- ├── D01: Infrastructure Workbench  ← host + container metrics deep dive
+ ├── D01a: Host Workbench           ← VM-level metrics (CPU, memory, disk, I/O)
+ ├── D01b: Container Workbench      ← container resource consumption, lifecycle, per-service detail
  ├── D02: Log Workbench             ← log exploration, error triage
  ├── D03: Network/Connectivity      ← probe results, DNS, throughput, TLS
  ├── D04: Media Pipeline            ← queue depth, transcoding, sessions (planned)
@@ -35,7 +36,8 @@ D00: Homelab Overview               ← entry point (fleet health, triage)
 | Dashboard | Owns | Does NOT Own |
 |-----------|------|--------------|
 | **D00 Overview** | Fleet health: availability, connectivity (public HTTP probe + internal DNS probe), error attribution (VM + service), change detection, resource saturation summaries, data freshness | Per-container detail, log text, service-specific metrics, historical trend analysis, warning-level log counts, per-probe breakdown |
-| **D01 Infra Workbench** | Host metrics (CPU/RAM/disk/network/swap/inodes), container resource consumption, restart timeline, CPU steal time, OOM kill counter, I/O wait, load average, NFS mount filesystem metrics | Log content, application-level metrics, probe results |
+| **D01a Host Workbench** | Host metrics (CPU/RAM/disk/swap/inodes), CPU steal time, OOM kill counter, I/O wait, I/O latency, load average, NFS mount filesystem metrics, compact container summary table (bridge to D01b) | Per-container time series, container lifecycle/restart timeline, log content, application-level metrics, probe results |
+| **D01b Container Workbench** | Container resource consumption (CPU, memory, Mem Limit %, network), restart timeline, per-container detail time series, container lifecycle events | Host CPU modes, host memory breakdown, disk I/O, log content, probe results |
 | **D02 Log Workbench** | Log exploration, error/warn streams, log volume rates, pattern detection | Host resource metrics, container lifecycle |
 | **D03 Network/Connectivity** | All Blackbox probe results, DNS resolution detail, inter-VM reachability matrix, per-service proxy health, network throughput per VM/container, packet errors/drops, TLS cert expiry | Host resource metrics, log content |
 | **D04 Media Pipeline** | Download queue depth, indexer reachability, Plex/Jellyfin active sessions and transcoding load, library stats | Infrastructure metrics, log text |
@@ -55,15 +57,17 @@ If in doubt, add a row to a workbench first.
 
 | Signal | Wrong placement | Correct placement | Reason |
 |--------|----------------|-------------------|--------|
-| Network throughput per VM | D00 | D01 | No meaningful fleet threshold — 50 MB/s on media is normal, same on core is suspicious |
+| Network throughput per VM | D00 | D01a | No meaningful fleet threshold — 50 MB/s on media is normal, same on core is suspicious |
 | Per-probe breakdown (which DNS/HTTP check failed) | D00 | D03 | D00 only needs binary pass/fail; investigation belongs on D03 |
-| CPU steal time | D00 | D01 | Proxmox-specific signal; investigation context, not triage |
-| OOM kill count | D01 only | D00 (change detection) + D01 (timeline) | An OOM kill is a fleet-level event worth surfacing immediately; `node_vmstat_oom_kill` is the metric |
-| Inode exhaustion | disk panel | D01 separate panel | Standard disk % hides inode exhaustion; they are independent failure modes. `node_filesystem_files_free / node_filesystem_files` |
+| CPU steal time | D00 | D01a | Proxmox-specific signal; investigation context, not triage |
+| OOM kill count | D01a only | D00 (change detection) + D01a (timeline) | An OOM kill is a fleet-level event worth surfacing immediately; `node_vmstat_oom_kill` is the metric |
+| Inode exhaustion | disk panel | D01a separate panel | Standard disk % hides inode exhaustion; they are independent failure modes. `node_filesystem_files_free / node_filesystem_files` |
 | TLS cert expiry | D00 | D03 (with days-to-expiry warning forwarded to D00 if critical) | Expiry timeline is investigation detail; only "expires in <3 days" is triage-urgent |
 | NAS storage remaining | invisible (not currently shown) | D00 Disk panel (current %) + D04 (media volume trend) | VM root disks are shown but NAS is invisible. `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` on the mounting VM requires no new tooling. |
-| NFS mount health (stale/hung?) | D03 TCP probe alone | D03 TCP probe + D01 (mountpoint metrics present) + D02 (I/O error logs) | TCP to port 2049 confirms NAS is up; it does not confirm the mount is working. Three signals together cover the full failure surface. |
-| Swap usage | memory panel | D01 separate stat | Swap being used at all means memory pressure exceeded RAM; deserves its own signal, not a footnote on the memory gauge |
+| NFS mount health (stale/hung?) | D03 TCP probe alone | D03 TCP probe + D01a (mountpoint metrics present) + D02 (I/O error logs) | TCP to port 2049 confirms NAS is up; it does not confirm the mount is working. Three signals together cover the full failure surface. |
+| Swap usage | memory panel | D01a separate stat | Swap being used at all means memory pressure exceeded RAM; deserves its own signal, not a footnote on the memory gauge |
+| Container Mem Limit % | D01a host view | D01b container resource table | Memory limit pressure is per-container investigation; meaningless without container context |
+| Container restart timeline | D01a host view | D01b container lifecycle section | Restart events are container-level signals; the host workbench only needs the summary count in the bridge table |
 
 ---
 
@@ -86,7 +90,7 @@ The Alloy config in `ensure_alloy_config()` is the **canonical label contract** 
 | **Proxmox node_exporter** (on pve1) | Host-level CPU, RAM, disk, temperatures | D05 Hardware/Host |
 | **smartd_exporter** or `node_exporter` SMART collector | Disk SMART health data | D05 Hardware/Host |
 | **Reverse proxy metrics endpoint** (Nginx stub_status, Traefik /metrics, Caddy /metrics) | Request rates, 5xx counts, response latency per service | D03 (per-service proxy health) |
-| **Diun or Watchtower** | Container image update availability | D01 or D05 |
+| **Diun or Watchtower** | Container image update availability | D01b or D05 |
 | **NAS node_exporter** (Synology community package or Docker) | NAS disk, CPU, RAM, temperature from the NAS itself | D04 (NAS storage trend), D05 (hardware health). Without this, NAS storage is visible only via the NFS-mounted filesystem metrics on the mounting VM — useful but indirect. |
 
 **NAS/NFS signal availability without extra tooling:** If a VM (e.g., `media`) has the NAS NFS-mounted, node_exporter on that VM already exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mount path. This is collected by Prometheus today with no changes. The D00 Disk panel and D04 NAS storage trend can use this immediately for the NAS volumes that are mounted on that VM.
@@ -188,7 +192,10 @@ Every drilldown link MUST include:
 ```
 D00 (Overview)
  │
- ├─ [VM status / saturation] ──→ D01 (Infra Workbench)
+ ├─ [VM status / saturation / OOM] ──→ D01a (Host Workbench)
+ │     passes: time, $vm_role, $host
+ │
+ ├─ [Container deficit / restarts] ──→ D01b (Container Workbench)
  │     passes: time, $vm_role, $host
  │
  ├─ [Error rate spike] ──→ D02 (Log Workbench)
@@ -197,9 +204,14 @@ D00 (Overview)
  └─ [Domain signal] ──→ D03+ (Exception)
        passes: time, $vm_role, $host
 
-D01 (Infra Workbench)
+D01a (Host Workbench)
  │
- └─ [Container with errors] ──→ D02 (Log Workbench)
+ └─ [Container summary table row] ──→ D01b (Container Workbench)
+       passes: time, $host, $service
+
+D01b (Container Workbench)
+ │
+ └─ [Container with errors / "View Logs"] ──→ D02 (Log Workbench)
        passes: time, $host, $service
 ```
 
@@ -223,7 +235,7 @@ Two click depths, applied consistently across all dashboards:
 
 1. **Focus (same dashboard):** Clicking a series, row, or cell narrows the current view. A time series showing all containers' network traffic, when one container's line is clicked, updates `$service` to that container. The dashboard re-renders showing only that container's data across all panels.
 
-2. **Investigate (cross-dashboard):** From a focused view, a second click drills to the workbench that owns the next level of detail. From the focused container on D01, a "View Logs" link opens D02 pre-filtered to that service at the same time window.
+2. **Investigate (cross-dashboard):** From a focused view, a second click drills to the workbench that owns the next level of detail. From the focused container on D01b, a "View Logs" link opens D02 pre-filtered to that service at the same time window.
 
 Every visible anomaly should have a click path to its explanation. The operator should never see something interesting without knowing where to click next.
 
@@ -257,30 +269,32 @@ The expected next insight depends on what the operator is looking at:
 
 | Signal type on screen | Focus action (same dashboard) | Investigate action (cross-dashboard) |
 |----------------------|------------------------------|-------------------------------------|
-| Multi-host resource metric | Filter to one host | → D01 (from D00) or → D02 logs (from D01) |
+| Multi-host resource metric | Filter to one host | → D01a (from D00) or → D02 logs (from D01a) |
 | Multi-container time series | Update `$service` to one container | → D02 for that service's logs |
 | Error count or rate | Update `$service` to one service | → D02 with `level=error` |
 | Container restart event | — (already specific) | → D02 with time narrowed to restart |
-| Probe failure | — (already specific) | → D02 for service logs; D01 for host health |
-| High network throughput | Filter to one host or container | → D03 (from D01) or → D02 logs |
+| Probe failure | — (already specific) | → D02 for service logs; D01a for host health |
+| High network throughput | Filter to one host or container | → D03 (from D01a) or → D02 logs |
 | Disk/storage warning | Filter to specific mount | → D02 for I/O error logs |
 | Log error pattern | Filter log stream to that pattern | Terminal — operator reads and acts |
-| Physical hardware signal | — (already specific) | → D01 for the affected VM |
+| Physical hardware signal | — (already specific) | → D01a for the affected VM |
+| Container summary row (on D01a) | — (bridge table, no focus) | → D01b with `$host` + `$service` |
 
 ### Click Depth by Dashboard
 
 | Dashboard | Typical depth | Pattern |
 |-----------|--------------|---------|
 | **D00 Overview** | 1 click | Always routes outward to a workbench. D00 never focuses itself. |
-| **D01 Infra** | 1–2 clicks | Click table row → focus on container (1). Click focused panel → D02 logs (2). |
+| **D01a Host** | 1–2 clicks | Click host panel → focus on host (1). Click bridge table row → D01b (2). |
+| **D01b Container** | 1–2 clicks | Click table row → focus on container (1). Click focused panel → D02 logs (2). |
 | **D02 Logs** | 1–2 clicks | Click service line → focus (1). Read logs → act (terminal). |
-| **D03 Network** | 1–2 clicks | Click VM in throughput → focus (1). Click focused signal → D02 or D01 (2). |
-| **D04 Media** | 1 click | Click pipeline stage → D02 for logs or D01 for resources. |
-| **D05 Hardware** | 1 click | Click VM in allocation → D01 for that VM. |
+| **D03 Network** | 1–2 clicks | Click VM in throughput → focus (1). Click focused signal → D02 or D01a (2). |
+| **D04 Media** | 1 click | Click pipeline stage → D02 for logs or D01a for resources. |
+| **D05 Hardware** | 1 click | Click VM in allocation → D01a for that VM. |
 
 ### D00 Is Always Depth 1
 
-The overview never focuses itself. Every click on D00 routes to a workbench. This is by design — the overview's job is routing, not investigation. If the instinct is "filter D00 to just this VM," the right action is opening D01 for that VM.
+The overview never focuses itself. Every click on D00 routes to a workbench. This is by design — the overview's job is routing, not investigation. If the instinct is "filter D00 to just this VM," the right action is opening D01a for that VM.
 
 Each dashboard spec includes a **Click Flow Map** table documenting every clickable element, its action type (focus or investigate), and its target.
 
@@ -306,7 +320,7 @@ This works because:
 
 If you add a new exporter or metric source:
 
-1. It goes on the **workbench** that owns that signal type (infra metrics → D01, logs → D02)
+1. It goes on the **workbench** that owns that signal type (host metrics → D01a, container metrics → D01b, logs → D02)
 2. Only if the signal reveals a fleet-level health condition does it get a **summary** on D00
 3. D00 summaries are always aggregations (counts, rates, max), never raw series
 
@@ -317,7 +331,8 @@ If you add a new exporter or metric source:
 | Dashboard | File | Status |
 |-----------|------|--------|
 | D00 — Homelab Overview | [dashboard-00-overview.md](dashboard-00-overview.md) | Built |
-| D01 — Infrastructure Workbench | [dashboard-01-infra-workbench.md](dashboard-01-infra-workbench.md) | Planning |
+| D01a — Host Workbench | [dashboard-01a-host-workbench.md](dashboard-01a-host-workbench.md) | Planning |
+| D01b — Container Workbench | [dashboard-01b-container-workbench.md](dashboard-01b-container-workbench.md) | Planning |
 | D02 — Log Workbench | [dashboard-02-log-workbench.md](dashboard-02-log-workbench.md) | Planning |
 | D03 — Network/Connectivity | [dashboard-03-network.md](dashboard-03-network.md) | Planning |
 | D04 — Media Pipeline | [dashboard-04-media-pipeline.md](dashboard-04-media-pipeline.md) | Planning — requires exportarr, qbittorrent-exporter, Jellyfin metrics |

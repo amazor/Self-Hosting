@@ -10,7 +10,7 @@ Planning reference for the media automation and streaming dashboard.
 
 Answers the question: **"Is the media pipeline working, and what is it doing?"**
 
-This is the domain workbench for the media VM. It covers the full lifecycle of media automation: content discovery via indexers (Prowlarr), download queue management (Sonarr/Radarr), actual downloading (qBittorrent/SABnzbd), and final delivery via streaming (Jellyfin/Plex). Each stage can fail independently — a healthy Jellyfin with a broken Sonarr queue is an operational failure that D00 and D01 won't surface without domain-specific signals.
+This is the domain workbench for the media VM. It covers the full lifecycle of media automation: content discovery via indexers (Prowlarr), download queue management (Sonarr/Radarr), actual downloading (qBittorrent/SABnzbd), and final delivery via streaming (Jellyfin/Plex). Each stage can fail independently — a healthy Jellyfin with a broken Sonarr queue is an operational failure that D00 and D01a/D01b won't surface without domain-specific signals.
 
 This dashboard only makes sense when the media stack is deployed and instrumented. Don't build it before the exporters are running.
 
@@ -29,7 +29,7 @@ This dashboard only makes sense when the media stack is deployed and instrumente
 
 ### What D04 Does NOT Own
 
-- Infrastructure metrics for the media VM (CPU/memory/disk I/O) (→ D01)
+- Infrastructure metrics for the media VM (CPU/memory/disk I/O) (→ D01a/D01b)
 - Log text from arr services (→ D02)
 - Network connectivity or NFS mount reachability (→ D03)
 - Hardware health of the server (→ D05)
@@ -176,7 +176,7 @@ jellyfin_active_sessions_total{host=~"$host"}
 jellyfin_transcoding_sessions_total{host=~"$host"}
 ```
 
-**Why transcoding matters:** Every transcoding session typically costs 1–4 CPU cores depending on resolution and codec. On a VM without GPU transcoding, 3 simultaneous 4K→1080p transcodes will saturate the media VM's CPU. This panel is the bridge between "Jellyfin works" and "D01 shows CPU saturation" — it provides the domain reason for the resource spike.
+**Why transcoding matters:** Every transcoding session typically costs 1–4 CPU cores depending on resolution and codec. On a VM without GPU transcoding, 3 simultaneous 4K→1080p transcodes will saturate the media VM's CPU. This panel is the bridge between "Jellyfin works" and "D01a shows CPU saturation" — it provides the domain reason for the resource spike.
 
 **GPU transcoding (future — D05/accelerated VM):** If hardware transcoding is enabled (Intel Quick Sync via the accelerated VM), transcoding cost drops to near-zero. A `hw_transcode` vs `sw_transcode` label split would show whether HW acceleration is actually being used for each session.
 
@@ -243,7 +243,7 @@ This panel is the historical complement to the D00 Disk bargauge, which shows on
 - Manual navigation when investigating a "why isn't X downloading?" question
 
 **Drills out to:**
-- D01 — when media VM CPU/memory is high due to transcoding load
+- D01a — when media VM CPU/memory is high due to transcoding load
 - D02 — when an indexer failure is suspected, check Sonarr/Radarr logs for grab failures
 - D03 — when indexer reachability seems to be a network issue
 
@@ -251,7 +251,7 @@ This panel is the historical complement to the D00 Disk bargauge, which shows on
 
 ## Click Flow Map
 
-D04 is a domain workbench. Most clicks are depth 1 — routing to D02 for logs or D01 for resource investigation. The Pipeline Health Summary stats (Section 1) also act as in-page navigation to the relevant detail section below.
+D04 is a domain workbench. Most clicks are depth 1 — routing to D02 for logs, D01a for host resource investigation, or D01b for container attribution. The Pipeline Health Summary stats (Section 1) also act as in-page navigation to the relevant detail section below.
 
 | Panel / Element | Click Type | Target | Context Passed |
 |----------------|-----------|--------|----------------|
@@ -263,9 +263,9 @@ D04 is a domain workbench. Most clicks are depth 1 — routing to D02 for logs o
 | Queue Depth time series → spike | Investigate | D02 Log Workbench | `time`, `$service` (sonarr/radarr) |
 | Indexer Health → failing indexer row | Investigate | D02 Log Workbench | `time`, `service=prowlarr` |
 | Download Speed → stall (speed=0, queue>0) | Investigate | D02 Log Workbench | `time`, `service=qbittorrent` |
-| Jellyfin Sessions → high transcode count | Investigate | D01 Infra Workbench | `time`, `$host` (media VM CPU) |
+| Jellyfin Sessions → high transcode count | Investigate | D01a Host Workbench | `time`, `$host` (media VM CPU) |
 | Library Stats → high missing + failing indexers | Investigate | Section 3 (correlation) | — |
-| NAS Storage → low available space | Investigate | D01 Infra Workbench | `time`, `$host` (Disk section) |
+| NAS Storage → low available space | Investigate | D01a Host Workbench | `time`, `$host` (Disk section) |
 
 **In-page navigation pattern:** Section 1's stat panels serve as both health indicators and table-of-contents for the sections below. Clicking a stat scrolls to its detail section. This makes the top row function as a routing surface within the dashboard, similar to how D00 routes across dashboards.
 

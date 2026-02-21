@@ -18,10 +18,20 @@
   "weekStart": "",
   "links": [
     {
-      "title": "Infra Workbench",
+      "title": "Host Workbench",
       "type": "link",
-      "url": "/d/homelab-infra-workbench",
-      "tooltip": "Host + container metrics deep dive",
+      "url": "/d/homelab-host-workbench",
+      "tooltip": "VM-level metrics: CPU, memory, disk, I/O",
+      "icon": "external link",
+      "targetBlank": false,
+      "includeVars": true,
+      "keepTime": true
+    },
+    {
+      "title": "Container Workbench",
+      "type": "link",
+      "url": "/d/homelab-container-workbench",
+      "tooltip": "Container resource consumption, lifecycle, per-service detail",
       "icon": "external link",
       "targetBlank": false,
       "includeVars": true,
@@ -137,7 +147,7 @@
       "id": 1,
       "type": "stat",
       "title": "Host Status",
-      "description": "Number of VMs with a failed node_exporter scrape. Zero means all hosts are reachable. Click to investigate in the Infra Workbench.",
+      "description": "Number of VMs with a failed node_exporter scrape. Zero means all hosts are reachable. Click to investigate in the Host Workbench.",
       "gridPos": { "x": 0, "y": 0, "w": 6, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
@@ -172,8 +182,8 @@
           "noValue": "N/A",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
               "targetBlank": false
             }
           ]
@@ -285,8 +295,8 @@
           "noValue": "N/A",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
+              "title": "\u2192 Container Workbench",
+              "url": "/d/homelab-container-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
               "targetBlank": false
             }
           ]
@@ -309,7 +319,7 @@
       "id": 5,
       "type": "stat",
       "title": "VM Availability",
-      "description": "Per-VM node_exporter status. Click a VM to drill down to the Infra Workbench.",
+      "description": "Per-VM node_exporter status. Click a VM to drill down to the Host Workbench.",
       "gridPos": { "x": 0, "y": 3, "w": 24, "h": 4 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
@@ -345,8 +355,8 @@
           "noValue": "N/A",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -402,8 +412,8 @@
           "noValue": "N/A",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -458,8 +468,8 @@
           "noValue": "N/A",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -514,8 +524,8 @@
           "noValue": "N/A",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -537,7 +547,7 @@
       "id": 13,
       "type": "table",
       "title": "Containers Running",
-      "description": "Running vs expected containers per VM. Expected = peak running count over the last 24 hours. The gauge column fills green when all containers are up; a deficit is immediately visible. Click a row to drill into the Infra Workbench.",
+      "description": "Running vs expected containers per VM. Expected = peak running count over the last 24 hours. The gauge column fills green when all containers are up; a deficit is immediately visible. Click a row to drill into the Container Workbench.",
       "gridPos": { "x": 18, "y": 7, "w": 6, "h": 5 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
@@ -609,8 +619,8 @@
           },
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.Host}",
+              "title": "\u2192 Container Workbench",
+              "url": "/d/homelab-container-workbench?from=${__from}&to=${__to}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.Host}",
               "targetBlank": false
             }
           ]
@@ -711,8 +721,8 @@
           "noValue": "N/A",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -734,16 +744,16 @@
     {
       "id": 11,
       "type": "stat",
-      "title": "Log Freshness (5m)",
-      "description": "Log lines received per VM in the last 5 minutes. Zero or missing means the Alloy log pipeline may be broken even if the VM is up.",
+      "title": "Log Freshness",
+      "description": "Log lines received per VM in the most recent scrape interval. Zero means no logs arrived in that interval (Alloy pipeline may be broken even if the VM is up). NO DATA means the host has never shipped logs or the datasource is unreachable.",
       "gridPos": { "x": 12, "y": 12, "w": 12, "h": 4 },
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "${datasource_loki}" },
           "editorMode": "code",
-          "expr": "sum by (host) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m]))",
-          "queryType": "instant",
+          "expr": "sum by (host) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[$__rate_interval]))",
+          "queryType": "range",
           "legendFormat": "{{host}}",
           "refId": "A"
         }
@@ -769,8 +779,8 @@
           "noValue": "NO DATA",
           "links": [
             {
-              "title": "\u2192 Infra Workbench",
-              "url": "/d/homelab-infra-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -778,7 +788,7 @@
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
         "graphMode": "none",
         "colorMode": "value",
         "justifyMode": "center",
@@ -821,17 +831,35 @@
           "options": {}
         },
         {
+          "id": "renameByRegex",
+          "options": {
+            "regex": ".*count_over_time.*",
+            "renamePattern": "Errors"
+          }
+        },
+        {
+          "id": "renameByRegex",
+          "options": {
+            "regex": ".*container_start_time.*",
+            "renamePattern": "Restarts"
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
               "Time": true
             },
+            "renameByName": {
+              "Value #A": "Errors",
+              "Value #B": "Restarts"
+            },
             "indexByName": {
               "node": 0,
               "host": 1,
               "service": 2,
-              "Value #A": 3,
-              "Value #B": 4
+              "Errors": 3,
+              "Restarts": 4
             }
           }
         }
@@ -879,9 +907,8 @@
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Value #A" },
+            "matcher": { "id": "byName", "options": "Errors" },
             "properties": [
-              { "id": "displayName", "value": "Errors" },
               { "id": "custom.cellOptions", "value": { "type": "color-background" } },
               {
                 "id": "thresholds",
@@ -897,9 +924,8 @@
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Value #B" },
+            "matcher": { "id": "byName", "options": "Restarts" },
             "properties": [
-              { "id": "displayName", "value": "Restarts" },
               { "id": "custom.cellOptions", "value": { "type": "color-background" } },
               {
                 "id": "thresholds",

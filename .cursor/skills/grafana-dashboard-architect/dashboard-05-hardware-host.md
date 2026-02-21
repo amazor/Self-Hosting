@@ -10,7 +10,7 @@ Planning reference for the Proxmox hypervisor and physical hardware health dashb
 
 Answers the question: **"Is the physical hardware healthy, and is Proxmox allocating resources sensibly?"**
 
-This dashboard operates one level below the VM dashboards. While D01 shows what a VM is using, D05 shows what the bare-metal host actually has — and whether the VMs are approaching its physical limits. It also covers signals that VMs cannot see at all: CPU temperature, disk SMART health, and Proxmox's own view of resource allocation across all VMs.
+This dashboard operates one level below the VM dashboards. While D01a shows what a VM is using, D05 shows what the bare-metal host actually has — and whether the VMs are approaching its physical limits. It also covers signals that VMs cannot see at all: CPU temperature, disk SMART health, and Proxmox's own view of resource allocation across all VMs.
 
 ---
 
@@ -27,7 +27,7 @@ This dashboard operates one level below the VM dashboards. While D01 shows what 
 
 ### What D05 Does NOT Own
 
-- Per-VM application metrics (→ D01)
+- Per-VM application metrics (→ D01a/D01b)
 - Log content (→ D02)
 - Network probe results (→ D03)
 - Media pipeline or application queues (→ D04)
@@ -42,7 +42,7 @@ If the signal requires physical access to the machine or would be lost on a VM r
 
 1. **Is the CPU overheating?** Thermal throttling is silent from inside a VM — the VM just gets slower. The physical host's temperature sensors give early warning before performance degrades or hardware fails.
 2. **Are the disks dying?** SMART reallocated sectors are the clearest early warning of disk failure. A growing count means sectors are being remapped because they're failing — the disk is degrading before any I/O error surfaces.
-3. **Is Proxmox overprovisioned?** VMs are often allocated more vCPUs and RAM than the host physically has. This is intentional (VMs don't all use their allocation simultaneously), but past a threshold it causes steal (visible in D01) and memory pressure. The allocation view shows the cumulative picture.
+3. **Is Proxmox overprovisioned?** VMs are often allocated more vCPUs and RAM than the host physically has. This is intentional (VMs don't all use their allocation simultaneously), but past a threshold it causes steal (visible in D01a) and memory pressure. The allocation view shows the cumulative picture.
 4. **Is the Proxmox host itself healthy?** Node_exporter on `pve1` exposes the host's own CPU, memory, disk I/O — separate from what the VMs report. The host doing significant I/O for reasons unrelated to VMs (Proxmox backup, VM migration) is visible only here.
 5. **How much disk does Proxmox have left?** VM disk images live in local-lvm (or equivalent). When local-lvm fills up, VM disks can't grow and new VMs can't be provisioned — a silent capacity ceiling.
 6. **Are container images stale?** Running containers based on 6-month-old images have unpatched vulnerabilities and miss bug fixes. Diun or a similar tool flags available updates without enforcing auto-update.
@@ -201,7 +201,7 @@ Footer rows:
 - **Total vCPU allocated**: sum of all VMs' allocations vs. physical core count
 - **Total RAM allocated**: sum of all VMs' allocations vs. physical RAM
 
-**Overprovisioning context:** A host with 8 physical cores and 24 vCPUs allocated across VMs is 3:1 overprovisioned. This is normal if VMs don't all peak simultaneously. But it explains steal time (D01). This table makes the allocation visible so the operator understands why steal exists and whether it's a tuning opportunity.
+**Overprovisioning context:** A host with 8 physical cores and 24 vCPUs allocated across VMs is 3:1 overprovisioned. This is normal if VMs don't all peak simultaneously. But it explains steal time (D01a). This table makes the allocation visible so the operator understands why steal exists and whether it's a tuning opportunity.
 
 ---
 
@@ -238,19 +238,19 @@ Most panels in this dashboard are implicitly filtered to `host="pve1"` (the Prox
 ## Drilldown Flow
 
 **Receives from:**
-- D01 when a VM shows CPU steal time suggesting hypervisor contention
-- D01 when load average is high relative to allocated cores
+- D01a when a VM shows CPU steal time suggesting hypervisor contention
+- D01a when load average is high relative to allocated cores
 - D00 (manual navigation) when a hardware failure is suspected
 
 **Drills out to:**
-- D01 — when SMART errors or storage pressure might explain a VM's disk I/O problems
+- D01a — when SMART errors or storage pressure might explain a VM's disk I/O problems
 - D02 — SMART events may appear in syslog; check logs for disk error messages
 
 ---
 
 ## Click Flow Map
 
-D05 is the physical layer dashboard. Most clicks are depth 1 — routing to D01 for the affected VM's detail. Some signals (temperatures, SMART) are informational endpoints where the operator acts directly (physical intervention, hardware planning) rather than drilling further into Grafana.
+D05 is the physical layer dashboard. Most clicks are depth 1 — routing to D01a for the affected VM's detail. Some signals (temperatures, SMART) are informational endpoints where the operator acts directly (physical intervention, hardware planning) rather than drilling further into Grafana.
 
 | Panel / Element | Click Type | Target | Context Passed |
 |----------------|-----------|--------|----------------|
@@ -260,10 +260,10 @@ D05 is the physical layer dashboard. Most clicks are depth 1 — routing to D01 
 | Disk Temperatures → hot drive | Scroll | Section 4 (SMART Health) | Check for correlated SMART errors |
 | SMART Health → disk with non-zero errors | Investigate | D02 Log Workbench | `time`, `host=pve1` (syslog for disk errors) |
 | Proxmox Storage Pools → low pool | Informational | — | Operator plans disk provisioning |
-| VM Allocation Table → VM row | Investigate | D01 Infra Workbench | `time`, `$host` (from VM name) |
+| VM Allocation Table → VM row | Investigate | D01a Host Workbench | `time`, `$host` (from VM name) |
 | Container Image Currency → stale image row | Informational | — | Operator decides whether to update |
 
-**Physical layer signals are often terminal.** Unlike D01–D04 where clicking leads deeper into Grafana, many D05 signals lead to physical actions: cleaning dust from a fan, replacing a degrading disk, or rebalancing VM allocations in Proxmox. The SMART Health table's link to D02 is the exception — checking syslog for disk error messages is a useful software investigation step before concluding hardware failure.
+**Physical layer signals are often terminal.** Unlike D01a/D01b–D04 where clicking leads deeper into Grafana, many D05 signals lead to physical actions: cleaning dust from a fan, replacing a degrading disk, or rebalancing VM allocations in Proxmox. The SMART Health table's link to D02 is the exception — checking syslog for disk error messages is a useful software investigation step before concluding hardware failure.
 
 ---
 

@@ -30,8 +30,8 @@ This is the investigation surface for connectivity failures. When D00's Connecti
 ### What D03 Does NOT Own
 
 - Why a container is producing errors (→ D02 Log Workbench)
-- Whether a container is running (→ D00/D01)
-- Host CPU/RAM/disk utilization (→ D01 Infra Workbench)
+- Whether a container is running (→ D00/D01b)
+- Host CPU/RAM/disk utilization (→ D01a Host Workbench)
 - Application-level metrics like queue depth (→ D04 Media Pipeline)
 
 ### Boundary Rule
@@ -122,7 +122,7 @@ One HTTP probe per service behind the reverse proxy (Sonarr, Radarr, Grafana, Je
 
 **Design decisions:**
 - **Internal probes, not public.** These probes hit the proxy from inside the network (monitoring → core's internal address). This tests proxy routing without depending on external DNS or public internet access. If the internal probe passes but users can't reach it externally, the problem is upstream (DNS, firewall, ISP) — which Section 1's public HTTP probe will have already caught.
-- **One probe per logical service, not per container.** The proxy routes by hostname/path, not by container. The probe validates the routing rule, not the container's internal health (D01 covers container health).
+- **One probe per logical service, not per container.** The proxy routes by hostname/path, not by container. The probe validates the routing rule, not the container's internal health (D01b covers container health).
 - **Separate from the main probe table.** Per-service probes are numerous enough to overwhelm Section 1. They warrant their own section with a cleaner visual (stat grid, not a table row per service).
 
 ---
@@ -180,29 +180,30 @@ Probe panels do **not** filter by `$host`/`$vm_role` — probe targets are defin
 
 D03 receives drilldowns from:
 - D00 Connectivity panel (when any probe fails) — opens at current time range
-- D01 when a VM shows network-related anomalies
+- D01a when a VM shows network-related anomalies
 
 D03 drills out to:
 - D02 Log Workbench — when a service fails its proxy probe, check its logs
-- D01 Infra Workbench — when throughput is high, check which container is responsible
+- D01a Host Workbench — when throughput is high, check which VM is saturated
+- D01b Container Workbench — when throughput is high, check which container is responsible
 
 ---
 
 ## Click Flow Map
 
-D03 supports Focus (narrowing by host in throughput panels) and Investigate (routing to D02 for service logs or D01 for host health).
+D03 supports Focus (narrowing by host in throughput panels) and Investigate (routing to D02 for service logs, D01a for host health, or D01b for container attribution).
 
 | Panel / Element | Click Type | Target | Context Passed |
 |----------------|-----------|--------|----------------|
 | Probe Status → failing HTTP probe row | Investigate | D02 Log Workbench | `time`, `$service` (from probe label) |
 | Probe Status → failing DNS probe | Informational | Stay on D03 | Investigation within D03's context |
-| Probe Status → failing TCP probe (NAS) | Investigate | D01 Infra Workbench | `time`, `$host` (VM that mounts NAS) |
-| Inter-VM Reachability → failing path | Investigate | D01 Infra Workbench | `time`, `$host` (target VM) |
+| Probe Status → failing TCP probe (NAS) | Investigate | D01a Host Workbench | `time`, `$host` (VM that mounts NAS) |
+| Inter-VM Reachability → failing path | Investigate | D01a Host Workbench | `time`, `$host` (target VM) |
 | TLS Cert Expiry → domain | Informational | — | Operator investigates cert renewal process |
 | Per-Service Proxy Health → failing service | Investigate | D02 Log Workbench | `time`, `$service` |
 | Network Throughput → VM line | **Focus** | Same dashboard | Updates `$host`; container bandwidth table filters to that VM |
-| Top Container Bandwidth → row | Investigate | D02 Log Workbench (or D01) | `time`, `$host`, `$service` |
-| Packet Errors → VM with non-zero errors | Investigate | D01 Infra Workbench | `time`, `$host` |
+| Top Container Bandwidth → row | Investigate | D01b Container Workbench | `time`, `$host`, `$service` |
+| Packet Errors → VM with non-zero errors | Investigate | D01a Host Workbench | `time`, `$host` |
 
 **Focus behavior:** Clicking a VM line in the Network Throughput time series updates `$host`. The Top Container Bandwidth table (same section) now shows only containers from that VM, revealing which container is responsible for the traffic spike. From that narrowed table, clicking a container row drills to D02 for that service's logs.
 
