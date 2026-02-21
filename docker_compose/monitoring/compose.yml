@@ -4,6 +4,7 @@
 #   - Grafana: dashboards + log search (Prometheus + Loki datasources)
 #   - Prometheus: metrics store (scrapes exporters on all VMs)
 #   - Loki: log aggregation (receives from Alloy agents on all VMs)
+#   - Blackbox Exporter: network probes (HTTP, TCP, ICMP, DNS)
 #   - Uptime Kuma: uptime checks + alerting
 #
 # Sidecars (node_exporter, cAdvisor, Alloy) live in the shared overlay:
@@ -119,6 +120,31 @@ services:
       start_period: 30s
     cap_drop:
       - ALL
+    restart: unless-stopped
+    networks:
+      - monitoring_internal
+
+  # --- Blackbox Exporter: network probe checks ---
+  # Probes endpoints via HTTP, HTTPS, TCP, ICMP, DNS on behalf of Prometheus.
+  # Prometheus sends probe requests; results become time-series metrics.
+  # Targets are managed via file_sd (config/prometheus/targets/blackbox-targets.json).
+  # ICMP probes require NET_RAW — added back after dropping ALL.
+  # Docs: https://github.com/prometheus/blackbox_exporter
+  blackbox-exporter:
+    image: prom/blackbox-exporter:${BLACKBOX_TAG:-latest}
+    container_name: blackbox-exporter
+    command:
+      - "--config.file=/config/blackbox.yml"
+    volumes:
+      - ${CONFIG_ROOT:-./config}/blackbox-exporter/blackbox.yml:/config/blackbox.yml:ro
+    ports:
+      - "9115:9115"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - NET_RAW
     restart: unless-stopped
     networks:
       - monitoring_internal
