@@ -183,7 +183,7 @@
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
               "targetBlank": false
             }
           ]
@@ -236,7 +236,7 @@
           "links": [
             {
               "title": "\u2192 Log Workbench",
-              "url": "/d/homelab-log-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}&var-level=error",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}&var-level=error",
               "targetBlank": false
             }
           ]
@@ -296,7 +296,7 @@
           "links": [
             {
               "title": "\u2192 Container Workbench",
-              "url": "/d/homelab-container-workbench?from=${__from}&to=${__to}&var-node=${var-node}&var-vm_role=${var-vm_role}&var-host=${var-host}",
+              "url": "/d/homelab-container-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
               "targetBlank": false
             }
           ]
@@ -356,7 +356,7 @@
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -413,7 +413,7 @@
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -469,7 +469,7 @@
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -491,7 +491,7 @@
       "id": 9,
       "type": "bargauge",
       "title": "Disk",
-      "description": "Root filesystem utilization per VM. Aggregated with max to prevent duplicate series when multiple devices share the same mountpoint.",
+      "description": "Filesystem utilization per VM (root disk) and NFS mounts (shared NAS storage). NFS filling up silently stops downloads and recordings while containers appear healthy.",
       "gridPos": { "x": 12, "y": 7, "w": 6, "h": 5 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
@@ -503,6 +503,15 @@
           "range": false,
           "legendFormat": "{{host}}",
           "refId": "A"
+        },
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "max by (host, vm_role, mountpoint) ((1 - (node_filesystem_avail_bytes{fstype=~\"nfs|nfs4\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} / node_filesystem_size_bytes{fstype=~\"nfs|nfs4\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})) * 100)",
+          "instant": true,
+          "range": false,
+          "legendFormat": "NFS {{mountpoint}}",
+          "refId": "B"
         }
       ],
       "fieldConfig": {
@@ -525,7 +534,7 @@
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -554,7 +563,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "count by (host, vm_role) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
+          "expr": "count by (host, vm_role, node) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
           "instant": true,
           "format": "table",
           "refId": "A"
@@ -562,7 +571,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "clamp_min(max_over_time(count by (host, vm_role) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[24h:5m]), 1)",
+          "expr": "clamp_min(max_over_time(count by (host, vm_role, node) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[24h:5m]), 1)",
           "instant": true,
           "format": "table",
           "refId": "B"
@@ -597,7 +606,8 @@
               "Value #A": 1,
               "Value #B": 2,
               "Health": 3,
-              "vm_role": 4
+              "vm_role": 4,
+              "node": 5
             },
             "renameByName": {
               "host": "Host",
@@ -620,7 +630,7 @@
           "links": [
             {
               "title": "\u2192 Container Workbench",
-              "url": "/d/homelab-container-workbench?from=${__from}&to=${__to}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.Host}",
+              "url": "/d/homelab-container-workbench?${__url_time_range}&var-node=${__data.fields.node}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.Host}",
               "targetBlank": false
             }
           ]
@@ -628,6 +638,12 @@
         "overrides": [
           {
             "matcher": { "id": "byName", "options": "vm_role" },
+            "properties": [
+              { "id": "custom.hidden", "value": true }
+            ]
+          },
+          {
+            "matcher": { "id": "byName", "options": "node" },
             "properties": [
               { "id": "custom.hidden", "value": true }
             ]
@@ -697,7 +713,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "time() - max by (host) (timestamp(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))",
+          "expr": "time() - max by (host, node, vm_role) (timestamp(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))",
           "instant": true,
           "range": false,
           "legendFormat": "{{host}}",
@@ -722,7 +738,7 @@
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${__field.labels.node}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -745,14 +761,14 @@
       "id": 11,
       "type": "stat",
       "title": "Log Freshness",
-      "description": "Log lines received per VM in the most recent scrape interval. Zero means no logs arrived in that interval (Alloy pipeline may be broken even if the VM is up). NO DATA means the host has never shipped logs or the datasource is unreachable.",
+      "description": "Log volume per VM (lines/min). The sparkline is the signal: a steady line means healthy pipeline, a cliff to zero means Alloy stopped shipping, a sudden spike means log churn from an incident. STALE means zero logs in the current window.",
       "gridPos": { "x": 12, "y": 12, "w": 12, "h": 4 },
       "datasource": { "type": "loki", "uid": "${datasource_loki}" },
       "targets": [
         {
           "datasource": { "type": "loki", "uid": "${datasource_loki}" },
           "editorMode": "code",
-          "expr": "sum by (host) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[$__interval]))",
+          "expr": "sum by (host, node, vm_role) (rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m])) * 60",
           "queryType": "range",
           "legendFormat": "{{host}}",
           "refId": "A"
@@ -776,11 +792,13 @@
               }
             }
           ],
+          "unit": "short",
+          "decimals": 0,
           "noValue": "NO DATA",
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?from=${__from}&to=${__to}&var-host=${__field.labels.host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${__field.labels.node}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
               "targetBlank": false
             }
           ]
@@ -788,8 +806,8 @@
         "overrides": []
       },
       "options": {
-        "reduceOptions": { "calcs": ["last"], "fields": "", "values": false },
-        "graphMode": "none",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
+        "graphMode": "area",
         "colorMode": "value",
         "justifyMode": "center",
         "textMode": "auto",
@@ -862,6 +880,22 @@
               "Restarts": 4
             }
           }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "type": "include",
+            "match": "any",
+            "filters": [
+              {
+                "fieldName": "Errors",
+                "config": {
+                  "id": "greater",
+                  "options": { "value": 0 }
+                }
+              }
+            ]
+          }
         }
       ],
       "fieldConfig": {
@@ -876,7 +910,7 @@
           "links": [
             {
               "title": "\u2192 Log Workbench",
-              "url": "/d/homelab-log-workbench?from=${__from}&to=${__to}&var-node=${__data.fields.node}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${__data.fields.node}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error",
               "targetBlank": false
             }
           ]

@@ -2,7 +2,7 @@
 
 Planning reference for the container-level resource investigation dashboard.
 
-> **Status:** Planning / not yet built. This file captures intent, signal inventory, and panel ideas. Refine into a full spec before building.
+> **Status:** Built. Dashboard file: `docker_compose/monitoring/dashboards/d01b-container-workbench.json` (UID: `homelab-container-workbench`).
 
 ---
 
@@ -23,7 +23,7 @@ The `$service` variable is the star of this dashboard — it controls what you s
 - Container resource consumption — CPU, memory, Mem Limit %, and network per container
 - Container lifecycle — which containers are running, which have restarted, and when
 - Per-container detail — focused CPU, memory, and network time series for a selected service
-- Restart timeline — scatter/annotation overlay showing restart events
+- Restart timeline — table of containers started within the time range, with relative timestamps
 
 ### What D01b Does NOT Own
 
@@ -86,8 +86,8 @@ All queries include the full variable cascade (`node`, `vm_role`, `host`, `servi
 - This is the single most useful signal for preventing OOM kills before they happen.
 
 **Interactivity (Focus → Investigate):**
-- **Click a row → Focus (same dashboard):** Updates `$service` to that container via a self-link: `/d/${__dashboard.uid}?var-service=${__data.fields.Service}&from=${__from}&to=${__to}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}`. Section 3 (Per-Container Detail) now renders for just that container, showing its CPU, memory, and network time series.
-- **From focused view → Investigate (cross-dashboard):** Each row also has a "View Logs" data link: `/d/homelab-log-workbench?var-host=${__data.fields.Host}&var-service=${__data.fields.Service}&from=${__from}&to=${__to}`. Opens D02 pre-filtered to that service's logs.
+- **Click a row → Focus (same dashboard):** Updates `$service` to that container via a self-link: `/d/${__dashboard.uid}?${__url_time_range}&var-service=${__data.fields.Service}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}`. Section 3 (Per-Container Detail) now renders for just that container, showing its CPU, memory, and network time series.
+- **From focused view → Investigate (cross-dashboard):** Each row also has a "View Logs" data link: `/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}`. Opens D02 pre-filtered to that service's logs.
 - The two-click pattern: click a row to focus on that container, then click again (or click the focused panel in Section 3) to investigate its logs on D02.
 
 ---
@@ -104,7 +104,7 @@ The `* 1000` converts to milliseconds for compatibility with Grafana's `dateTime
 
 This is different from the fleet-level Containers panel on D00. D00 tells you "something is missing." D01b tells you "alloy restarted 3 times in the last hour, the last time was at 14:32."
 
-**Why a table, not a scatter panel:** Grafana has no native scatter/annotation panel that works well for this use case. A table with relative timestamps is practical, sortable, and clickable. The built D01 JSON already validates this approach.
+**Why a table, not a scatter panel:** Grafana has no native scatter/annotation panel that works well for this use case. A table with relative timestamps is practical, sortable, and clickable.
 
 **Why not `changes()`:** `changes()` returns 0 for a container that stopped and was recreated as a new series. `container_start_time_seconds` is only exported by cAdvisor for running containers, so a fresh `start_time` within the time window reliably indicates a recent start — whether from a crash loop or a manual restart.
 
@@ -121,18 +121,26 @@ Three time series panels filtered by `$service`. When `$service` is narrowed to 
   sum by (service) (rate(container_cpu_usage_seconds_total{node=~"$node", vm_role=~"$vm_role", host=~"$host", service=~"$service", name!="", image!=""}[$__rate_interval]))
   ```
 
-- **Container Memory** — working set memory per container (what the OOM killer uses).
+- **Container Memory** — working set memory per container (what the OOM killer uses), with a **memory limit reference line** overlaid as a dashed orange line. The limit query filters `> 0` to exclude containers without explicit limits.
   ```promql
+  # Working set (actual usage)
   sum by (service) (container_memory_working_set_bytes{node=~"$node", vm_role=~"$vm_role", host=~"$host", service=~"$service", name!="", image!=""})
-  ```
 
-- **Container Network** — receive and transmit rate per container.
+  # Memory limit reference (dashed line — shows the OOM ceiling)
+  sum by (service) (container_spec_memory_limit_bytes{node=~"$node", vm_role=~"$vm_role", host=~"$host", service=~"$service", name!="", image!=""} > 0)
+  ```
+  The limit reference line is styled as dashed, semi-transparent orange via a `byRegexp` override matching `/^Limit:/`. When investigating a memory leak, the operator sees the working set growing toward a visible ceiling instead of mentally cross-referencing the table's Mem Limit % column.
+
+- **Container Network** — bidirectional throughput per container. Receive is positive, transmit is rendered negative (`* -1`) so the chart is centered at zero. This is a standard network monitoring pattern — traffic asymmetry is immediately visible (e.g., qBittorrent uploading vs downloading). Receive lines are green, transmit lines are blue.
   ```promql
+  # Receive (positive)
   sum by (service) (rate(container_network_receive_bytes_total{node=~"$node", vm_role=~"$vm_role", host=~"$host", service=~"$service", name!="", image!=""}[$__rate_interval]))
-  sum by (service) (rate(container_network_transmit_bytes_total{node=~"$node", vm_role=~"$vm_role", host=~"$host", service=~"$service", name!="", image!=""}[$__rate_interval]))
+
+  # Transmit (negative — rendered below zero)
+  - sum by (service) (rate(container_network_transmit_bytes_total{node=~"$node", vm_role=~"$vm_role", host=~"$host", service=~"$service", name!="", image!=""}[$__rate_interval]))
   ```
 
-This approach (filter by `$service` variable, not repeat rows) matches the existing built D01 JSON and avoids the noise of per-container repeated rows when many services are selected.
+This approach (filter by `$service` variable, not repeat rows) avoids the noise of per-container repeated rows when many services are selected.
 
 **Interactivity:** From a focused per-container panel → D02 Log Workbench with `$host` and `$service` pre-set. This is the terminal investigation step on D01b — the next insight comes from logs.
 
@@ -148,7 +156,7 @@ This approach (filter by `$service` variable, not repeat rows) matches the exist
 | `$host` | yes | yes | Cascades from `$vm_role` |
 | `$service` | yes | yes | Primary interactive variable; defaults to All |
 
-`$service` is the defining variable of this dashboard. It controls the resource table filter and drives the per-container detail repeat rows. When D01a's bridge table links here with a specific `$service`, the dashboard opens pre-focused on that container.
+`$service` is the defining variable of this dashboard. It controls the resource table filter and the per-container detail time series panels. When D01a's bridge table links here with a specific `$service`, the dashboard opens pre-focused on that container.
 
 ---
 
@@ -166,7 +174,7 @@ This approach (filter by `$service` variable, not repeat rows) matches the exist
 
 **Link format (Container table row → D02):**
 ```
-/d/homelab-log-workbench?from=${__from}&to=${__to}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}
+/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}
 ```
 
 ---

@@ -2,7 +2,7 @@
 
 Planning reference for the VM-level resource investigation dashboard.
 
-> **Status:** Planning / not yet built. This file captures intent, signal inventory, and panel ideas. Refine into a full spec before building.
+> **Status:** Built. Dashboard file: `docker_compose/monitoring/dashboards/d01a-host-workbench.json` (UID: `homelab-host-workbench`).
 
 ---
 
@@ -78,6 +78,8 @@ All queries include the full variable cascade (`node`, `vm_role`, `host`) so tha
 ---
 
 ## Layout — Section Ideas
+
+> **Built layout note:** The built dashboard refines the section order below. It adds a **Quick Summary** row at the top (stat panels for Load 1m/5m/15m, Swap Used, OOM Kills, NTP Offset), followed by Host CPU, Host Memory (not collapsed), Disk (collapsed), and Container Summary. The queries and panel designs below remain accurate — only the section grouping changed.
 
 ### Section 1 — Host CPU
 
@@ -205,7 +207,7 @@ Sorted descending by CPU. No Mem Limit %, no Net I/O, no restart column — thos
 
 **Interactivity:** Each row links to D01b Container Workbench with `$host` and `$service` pre-set:
 ```
-/d/homelab-container-workbench?from=${__from}&to=${__to}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}
+/d/homelab-container-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}
 ```
 
 **Why a bridge table instead of just links:** The operator needs attribution before deciding where to click. "CPU is high on this VM" → which container? The bridge table answers that in 2 seconds, then routes. Without it, the operator would have to click to D01b blind and then scan the full container table.
@@ -242,7 +244,7 @@ D01a does not expose `$service` — container-level filtering is D01b's domain. 
 
 **Link format (Bridge table row → D01b):**
 ```
-/d/homelab-container-workbench?from=${__from}&to=${__to}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}
+/d/homelab-container-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}
 ```
 
 ---

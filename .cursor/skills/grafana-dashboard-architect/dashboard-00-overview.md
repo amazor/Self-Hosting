@@ -58,7 +58,7 @@ Five sections, top to bottom. Each answers one question. Top Offenders is at the
 
 **Question:** "Do I need to pay attention right now?"
 
-The 2-second glance row. Three compact stat panels, full width. Green = walk away.
+The 2-second glance row. Four compact stat panels, full width. Green = walk away.
 
 | Panel | What It Shows | Sparkline | Threshold Logic |
 |-------|--------------|-----------|-----------------|
@@ -161,7 +161,7 @@ Three bar gauge panels (**CPU**, **Memory**, **Disk**) plus a **Containers Runni
 |-------|------|-------------|------------|
 | CPU | bar gauge | `1 - avg(rate(node_cpu_seconds_total{mode="idle"}[2m]))` | 70% yellow, 85% red |
 | Memory | bar gauge | `1 - (max(MemAvailable) / max(MemTotal))` | 70% yellow, 85% red |
-| Disk | bar gauge | `max(1 - (avail / size))` on `mountpoint="/"` plus optional NFS mounts (see design decisions) | 70% yellow, 85% red |
+| Disk | bar gauge | `max(1 - (avail / size))` on `mountpoint="/"` (root) + `fstype=~"nfs\|nfs4"` (NAS shared storage) | 70% yellow, 85% red |
 | Containers Running | table | `count(container_start_time_seconds)` (Up) vs `max_over_time(count(...)[24h:5m])` (Exp) | row color-background: entire row turns red/yellow/green based on Up/Exp ratio. <0.8 red, <1 yellow, =1 green |
 
 **Design decisions:**
@@ -169,7 +169,7 @@ Three bar gauge panels (**CPU**, **Memory**, **Disk**) plus a **Containers Runni
 - **Memory and Disk use `max by (host, vm_role)`** to deduplicate. Without this, node_exporter can return multiple series per host (different scrape instances or device labels), producing phantom duplicate bars in the gauge.
 - **Containers Running is a compact table, not a bar gauge.** Each row shows: Host | Up | Exp | Health%. "Up" is the current running count; "Exp" is derived from `max_over_time` of the running count over 24 hours — automatically reflects the compose-defined count without hardcoding. The Health column (Up/Exp ratio, shown as %) drives `applyToRow: true` color-background: the **entire row** turns red/yellow/green based on whether all containers are up. This eliminates horizontal scrolling and makes unhealthy rows immediately obvious without reading the numbers. Column widths are tightened (Up: 35px, Exp: 40px, Health: 55px) so the table fits within the 6-column panel without a horizontal scrollbar. `clamp_min(..., 1)` in the denominator prevents division by zero on fresh deployments. Still uses `container_start_time_seconds` (not `container_tasks_state`) because cAdvisor only exports this metric for running containers.
 
-- **NAS storage in the Disk panel (conditional — only when NFS mounts are in use).** The current Disk query filters to `mountpoint="/"` (VM root filesystems, typically 30–50 GB each). This makes the NAS — where all actual data lives: downloads, media, backups — completely invisible on D00. If a VM has an NFS mount, node_exporter on that VM automatically exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mounted path. A second query targeting `fstype=~"nfs|nfs4"` adds the NAS as an additional bar in the Disk bargauge, labeled by mountpoint or a human-readable alias (e.g., "NAS"). No new tooling required. NAS storage running out is often more impactful than VM root disk running out — a full NAS silently stops downloads and recordings while all containers remain healthy. Same thresholds: 70% yellow, 85% red.
+- **NAS storage in the Disk panel.** A second query targeting `fstype=~"nfs|nfs4"` adds NFS-mounted NAS volumes as additional bars in the Disk bargauge, labeled `NFS {{mountpoint}}`. node_exporter on any VM with NFS mounts already exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for each mounted path — no new tooling required. NAS storage running out is often more impactful than VM root disk running out — a full NAS silently stops downloads and recordings while all containers remain healthy. Same thresholds: 70% yellow, 85% red. Deduplicated via `max by (host, vm_role, mountpoint)` — if the same export appears on multiple VMs, each bar reflects the VM reporting it.
 
 **Links:** CPU, Memory, Disk gauges → D01a Host Workbench with `$vm_role` and `$host`. Containers Running table rows → D01b Container Workbench with `$host`.
 
@@ -186,11 +186,11 @@ A dashboard that silently stops receiving data is worse than one that shows red.
 | Panel | What It Shows | Source |
 |-------|--------------|--------|
 | **Scrape Staleness** | Seconds since last successful Prometheus scrape, per VM | `timestamp(up{...})` |
-| **Log Freshness** | Seconds since last log line received, per VM | Loki (last log timestamp per host) |
+| **Log Freshness** | Log volume per VM (lines/min) with sparkline showing trend over time | Loki: `sum by (host) (rate({...}[5m])) * 60` |
 
 **Design decisions:**
-- **Log Freshness is new.** Catches the failure mode where Prometheus scrapes fine but Alloy stops shipping logs. Without this, the error panels above silently show stale zeros — false confidence.
-- **Stale/unknown is gray or purple, never green.** Missing data is a signal, not silence.
+- **Log Freshness uses rate with sparkline, not seconds-since-last.** The sparkline IS the signal — a steady line means healthy pipeline, a cliff to zero means Alloy stopped shipping, a sudden spike means log churn from an incident. The displayed number (lines/min) gives rough calibration, but the operator reads the shape, not the value. This replaces the previous `count_over_time` approach where non-zero values (500 vs 2) were meaningless without context — a busy service and a stale one looked equally "healthy."
+- **Stale/unknown is red, never green.** Zero lines/min maps to "STALE" via value mapping. Missing data shows "NO DATA." Both are red.
 - **Container Restarts removed from this section.** Restart counts are not a data freshness signal. Fleet-wide restarts are in Section 1 (Fleet Pulse). Per-VM/service restart attribution is in Section 3 (Top Offenders). The previous placement created duplication.
 
 **Links:** Stale host → D01a Host Workbench (scrape target investigation).
@@ -207,7 +207,7 @@ D00 uses a subset of the global variable contract:
 |----------|---------|-------|---------|-------|
 | `$datasource_prometheus` | yes | no | Prometheus | |
 | `$datasource_loki` | yes | no | Loki | |
-| `$node` | yes | yes | All | Proxmox node (future multi-node) |
+| `$node` | yes | yes | All | Proxmox node (currently single-node `pve1`; multi-node not planned but supported by the label contract) |
 | `$vm_role` | yes | yes | All | Primary axis. Selecting a role filters everything below. |
 | `$host` | yes | yes | All | Cascades from `$vm_role`. |
 | `$env` | hidden | no | `prod` | Hidden; future-proofing. |
@@ -244,17 +244,18 @@ The Top Offenders table is the most important drilldown on the dashboard. It's t
 ### Drilldown Link Format
 
 ```
-/d/<uid>?from=${__from}&to=${__to}&var-node=${node}&var-vm_role=${vm_role}&var-host=${__data.fields.host}
+/d/<uid>?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${__data.fields.host}
 ```
 
 For Top Offenders table rows (includes service):
 ```
-/d/<d02-uid>?from=${__from}&to=${__to}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error
+/d/<d02-uid>?${__url_time_range}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error
 ```
 
 Key rules:
-- Time range (`from`, `to`) is ALWAYS included — preserves the incident window
-- Use `${__data.fields.*}` to pass the specific row's values when clicking a table or stat
+- Time range: use `${__url_time_range}` (preferred shorthand, expands to `from=<epoch>&to=<epoch>`) — ALWAYS included to preserve the incident window
+- Use `${__data.fields.<name>}` to pass the specific row's values when clicking a table or stat
+- Use `${__field.labels.<labelname>}` as an alternative for accessing Prometheus/Loki labels directly from the series
 - Use `${vm_role}` (template variable value) for filter-wide drilldowns
 
 ### Incident Window Flow
@@ -298,7 +299,7 @@ Every number on D00 that invites deeper investigation MUST be a clickable link t
 1. Alloy sidecar on the new VM ships logs with `vm_role=security`, `host=security`
 2. node_exporter/cAdvisor on the new VM are added to Prometheus scrape targets
 3. On D00:
-   - `$vm_role` dropdown gains `security` automatically (`label_values()`)
+   - `$vm_role` dropdown gains `security` automatically (Label values query)
    - VM Availability gains a new UP/DOWN panel
    - Top Offenders table includes the new VM if it has errors (auto via label query)
    - Saturation gauges gain a new entry
@@ -308,7 +309,7 @@ Every number on D00 that invites deeper investigation MUST be a clickable link t
 ### When a VM is Decommissioned
 
 1. Remove scrape targets from Prometheus
-2. VM stops appearing in `label_values()` after retention window expires
+2. VM stops appearing in Label values queries after retention window expires
 3. Dashboard self-heals — no orphan panels
 
 ### Repeating Panels

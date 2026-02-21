@@ -192,7 +192,7 @@ This is a "while I'm here" panel rather than a primary signal. It's useful for p
 | `$service` | yes | yes | Cascades from `$host`. Primary investigation axis. |
 | `$level` | yes | yes | Custom variable: `error\|fatal`, `warn\|error\|fatal`, `All`. Defaults to `error\|fatal`. |
 
-**`$level` as a custom variable:** Unlike the other variables (which are `label_values()` queries), `$level` is a fixed custom list. Log levels are well-known; enumerating them from Loki is unnecessary and would surface `unknown` as an equal option to `error`.
+**`$level` as a custom variable:** Unlike the other variables (which use **Label values** query types in the Prometheus/Loki structured query editor), `$level` is a fixed custom list. Log levels are well-known; enumerating them from Loki is unnecessary and would surface `unknown` as an equal option to `error`.
 
 **Note on `$service` default:** When arriving via drilldown from D00 Top Offenders or D01b Container Resource Table, `$service` arrives pre-set. When opened directly, it defaults to All — which is intentional for exploration but produces a high-volume log stream. The Log Volume Rate panel (Section 1) helps the operator quickly identify which service to narrow down to.
 
