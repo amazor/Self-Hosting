@@ -492,8 +492,10 @@ loki.process "normalize" {{
 
   // --- (2) Try logfmt parsing (skip JSON / bare-equals lines to suppress parser noise) ---
   // Lines starting with {{ " [ or = are not logfmt — guard prevents noisy decode errors.
+  // Lines containing " anywhere often break logfmt (e.g. JSON fragments, quoted messages).
   stage.match {{
-    selector = `{{container=~".+"}} !~ "^[{{\\\"=\\\\[]"`
+    selector = `{{container=~".+"}} !~ "^[{{\\\"=\\\\[]" !~ \"\\\"\"
+`
     stage.logfmt {{
       mapping = {{
         level    = "level",

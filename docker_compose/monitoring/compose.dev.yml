@@ -1,0 +1,20 @@
+# Local development only — do not use in production.
+# Adds Grafana Image Renderer for dashboard/panel screenshots (PNG/PDF).
+# Use: docker compose -f compose.yml -f compose.dev.yml up -d
+# See: https://grafana.com/docs/grafana/latest/setup-grafana/image-rendering/
+
+services:
+  renderer:
+    image: grafana/grafana-image-renderer:latest
+    container_name: grafana-image-renderer
+    environment:
+      - AUTH_TOKEN=-
+    restart: unless-stopped
+    networks:
+      - monitoring_internal
+
+  grafana:
+    environment:
+      - GF_RENDERING_SERVER_URL=http://renderer:8081/render
+      - GF_RENDERING_CALLBACK_URL=http://grafana:3000/
+      - GF_RENDERING_RENDERER_TOKEN=-

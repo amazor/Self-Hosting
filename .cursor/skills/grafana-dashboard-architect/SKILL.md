@@ -5,34 +5,70 @@ description: Defines the architecture, philosophy, and structural contracts for 
 
 # Grafana Dashboard Architecture
 
-This skill defines the **structural philosophy** for the homelab's Grafana dashboard system. It governs hierarchy, ownership boundaries, variable contracts, and drilldown flow. Individual dashboard specs live in reference files.
-
-> **Grafana version:** This skill targets **Grafana v12.x** (current stable: v12.3). Dashboard JSON uses the legacy schema (v1). The experimental schema v2 (dynamic dashboards, `GridLayout`/`TabsLayout`) is not adopted — it requires feature toggles and may cause irreversible changes to saved dashboards.
->
-> **Reference docs:** [Variable syntax](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/variable-syntax/) · [Prometheus template variables](https://grafana.com/docs/grafana/latest/datasources/prometheus/template-variables) · [Data links & actions](https://grafana.com/docs/grafana/latest/panels-visualizations/configure-data-links) · [Dashboard URL variables](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/create-dashboard-url-variables) · [Global variables](https://grafana.com/docs/grafana/latest/dashboards/variables/add-template-variables/#global-variables)
+Structural rules for the homelab Grafana system: hierarchy, ownership, variable contract, drilldown flow. Per-dashboard specs live in reference files. Targets **Grafana v12.x** (legacy schema v1; schema v2 not adopted). Docs: [Variables](https://grafana.com/docs/grafana/latest/visualizations/dashboards/variables/variable-syntax/) · [Data links](https://grafana.com/docs/grafana/latest/panels-visualizations/configure-data-links) · [URL variables](https://grafana.com/docs/grafana/latest/dashboards/build-dashboards/create-dashboard-url-variables).
 
 ## Guiding Principles
 
-1. **Overview is triage, workbenches are investigation.** The overview tells you WHAT is wrong and WHERE. Workbenches tell you WHY.
-2. **Every dashboard knows its exit.** Every aggregated signal links to the next level of detail with context preserved.
-3. **Variables are the API contract.** Same names, same semantics, across every dashboard. Drilldown URLs work without translation.
-4. **Time is context.** Every drilldown preserves the time window. Grafana's time range IS the incident window.
-5. **Labels are the schema.** The Alloy label contract defines the dashboard schema. No dashboard should reference labels outside that contract.
-6. **Dashboards scale by labels, not by cloning.** New VMs appear automatically via label queries. Never hardcode VM names or service lists.
-7. **Fewer dashboards, more variables.** Fight sprawl. A well-built workbench with good variables covers more ground than ten bespoke dashboards.
+Overview = triage (what/where); workbenches = investigation (why). Every dashboard has an exit (links to next level). Variables are the API: same names/semantics everywhere. Time range = incident window; preserve it in drilldowns. Labels = schema (Alloy contract). Scale by labels, not by cloning. Fewer dashboards, more variables.
+
+---
+
+## MCP and Checking Your Own Work (Mandatory — Do Not Skip)
+
+**Grafana MCP server (user-grafana)** is the source of truth for create/update and validation. Use it for: dashboard create/update, PromQL/LogQL query validation, datasource checks, and panel/dashboard PNG rendering. **Do not assume hand-written JSON is correct.**
+
+### Phase 1 — Intent & Troubleshooting Goal
+
+- Identify the **purpose** of the dashboard.
+- Define **what problem** it helps detect.
+- Define **how** it helps find root cause.
+- Clarify the **main question** it should answer.
+
+### Phase 2 — Design Before Implementation
+
+Design the layout before writing JSON. Do not implement first and fix later.
+
+- **Visual hierarchy:** Most important signals top-left; logical flow overview → breakdown → deep dive.
+- **Grouping:** Use rows to separate sections (e.g. system overview, component breakdown, error/saturation, deep-dive).
+- **Density:** Limit to 3–4 panels per row; consistent panel sizing; avoid clutter and unnecessary panels.
+- **Clarity over density:** Prefer fewer strong panels over many small noisy ones. Do not overcrowd.
+
+### Phase 3 — Implementation with Validation
+
+When creating or modifying dashboards:
+
+- **Use MCP** (user-grafana server) to create or update dashboards — do not assume hand-written JSON is correct.
+- **Validate** that the dashboard saves successfully.
+- **Validate** that all queries return data; ensure datasources are reachable; check for syntax errors or broken expressions.
+
+Correctness is not confirmed until the dashboard saves and queries run. Do not assume correctness after writing JSON.
+
+### Phase 4 — Mandatory Visual Verification Loop
+
+After every dashboard creation or modification:
+
+1. **Render** the dashboard or panels to PNG using Grafana MCP rendering (user-grafana).
+2. **Inspect** the visual output for: overlapping legends, cluttered layouts, inconsistent panel sizes, poor spacing, bad color contrast, misleading Y-axis scales, empty or broken panels, unreadable labels.
+3. If issues exist: update JSON → re-upload via MCP → re-render → repeat until clean and readable.
+
+Rendering is **required**, not optional. Iterate until the result is clean and readable. Validate via API **and** visually; do not assume correctness after either step alone.
+
+### Workflow Summary
+
+Before building: (1) Define intent and troubleshooting goal. (2) Design layout first (hierarchy top-left → breakdown → deep dive; rows for sections; 3–4 panels per row; clarity over density). (3) Implement via MCP and validate save + queries. (4) Render → inspect → fix until clean.
 
 ---
 
 ## Dashboard Hierarchy
 
 ```
-D00: Homelab Overview               ← entry point (fleet health, triage)
- ├── D01a: Host Workbench           ← VM-level metrics (CPU, memory, disk, I/O)
- ├── D01b: Container Workbench      ← container resource consumption, lifecycle, per-service detail
+D00: Homelab Overview               ← entry (fleet health, triage)
+ ├── D01a: Host Workbench           ← VM CPU, memory, disk, I/O
+ ├── D01b: Container Workbench      ← container resources, lifecycle, per-service
  ├── D02: Log Workbench             ← log exploration, error triage
- ├── D03: Network/Connectivity      ← probe results, DNS, throughput, TLS
- ├── D04: Media Pipeline            ← queue depth, transcoding, sessions (planned)
- └── D05: Hardware/Host             ← Proxmox host, temperatures, SMART (planned)
+ ├── D03: Network/Connectivity      ← probes, DNS, throughput, TLS
+ ├── D04: Media Pipeline            ← queue, transcoding, sessions (planned)
+ └── D05: Hardware/Host             ← Proxmox host, temps, SMART (planned)
 ```
 
 ### Physical Topology Mapping
@@ -86,16 +122,9 @@ If in doubt, add a row to a workbench first.
 
 ---
 
-## Source of Truth (Read Before Building)
+## Source of Truth
 
-Before designing panels or writing queries, read these files for the live state of what signals are available:
-
-| File | What it tells you | Key functions / sections |
-|------|-------------------|--------------------------|
-| `docker_compose/monitoring/bootstrap.py` | Alloy label contract, Prometheus scrape targets, log normalization pipeline, Grafana datasource provisioning | `ensure_alloy_config()`, `ensure_prometheus_config()`, `ensure_grafana_provisioning()` |
-| `docker_compose/monitoring/compose.yml` | Which metric/log containers exist, ports, network topology | Full file (short) |
-
-The Alloy config in `ensure_alloy_config()` is the **canonical label contract** for logs. The Prometheus config in `ensure_prometheus_config()` mirrors the same contract for metrics via `metric_relabel_configs` on the cAdvisor job. If bootstrap.py and the tables below ever disagree, bootstrap.py wins.
+Read before building: **`docker_compose/monitoring/bootstrap.py`** — Alloy label contract (`ensure_alloy_config()`), Prometheus targets (`ensure_prometheus_config()`), Grafana provisioning. **`docker_compose/monitoring/compose.yml`** — containers, ports. Canonical labels: bootstrap.py wins over tables below.
 
 ### Planned Signal Sources (not yet in stack)
 
@@ -110,17 +139,13 @@ The Alloy config in `ensure_alloy_config()` is the **canonical label contract** 
 
 **NAS/NFS signal availability without extra tooling:** If a VM (e.g., `media`) has the NAS NFS-mounted, node_exporter on that VM already exports `node_filesystem_avail_bytes{fstype=~"nfs|nfs4"}` for the mount path. This is collected by Prometheus today with no changes. The D00 Disk panel and D04 NAS storage trend can use this immediately for the NAS volumes that are mounted on that VM.
 
-Do not design panels requiring these sources until the source is confirmed running and scraped by Prometheus.
+Do not design panels for these until the source is running and scraped.
 
 ---
 
 ## Label Contract (Quick Reference)
 
-Summary of the labels available for dashboard queries. Authoritative source: `ensure_alloy_config()` in `bootstrap.py`.
-
-### Required (always present on every log stream and metric series)
-
-The `M` column indicates whether the label is also present on **Prometheus metrics** (via static_configs or cAdvisor metric_relabel_configs).
+Authoritative: `ensure_alloy_config()` in `bootstrap.py`. `M` = on Prometheus metrics.
 
 | Label | Meaning | Example | On Metrics |
 |-------|---------|---------|------------|
@@ -132,7 +157,7 @@ The `M` column indicates whether the label is also present on **Prometheus metri
 | `container` | Container instance name | `grafana`, `sonarr-1` | M (cAdvisor via relabeling; alias for `name`) |
 | `source` | Log origin type | `docker` | — (logs only) |
 
-**`host` uniqueness constraint:** `host` MUST be globally unique across all Proxmox nodes. Every `by (host)` grouping and `{{host}}` legend format in the dashboard system relies on this. The Proxmox HA singleton model guarantees it: each VM role exists once in the cluster and migrates between nodes as needed, keeping its hostname. If two VMs on different nodes shared a hostname, queries would silently merge their metrics. The `(node, host)` pair provides additional context (which physical node is running this VM right now), but `host` alone is sufficient for identity.
+**`host`:** Must be globally unique (all `by (host)` and `{{host}}` rely on it). Proxmox singleton model guarantees one VM per hostname.
 
 ### Strong (present when available)
 
@@ -154,13 +179,18 @@ The `M` column indicates whether the label is also present on **Prometheus metri
 
 ## Variable Contract
 
-Every dashboard MUST use these variable names. This is what makes drilldown URLs portable.
+Same names everywhere so drilldown URLs work. Cascade: `$node → $vm_role → $host → $service`; each query filters by upstream.
 
-### Cascade Order
+| Variable | Type | Multi | Purpose |
+|----------|------|-------|---------|
+| `$datasource_prometheus` / `$datasource_loki` | datasource | no | Switch without editing queries |
+| `$node` | query | yes | Proxmox node |
+| `$vm_role` | query | yes | Primary grouping |
+| `$host` | query | yes | VM hostname |
+| `$service` | query | yes | Service identity |
+| `$env` | custom | no | `prod` (hidden) |
 
-```
-$node → $vm_role → $host → $service
-```
+**Formats:** `${host}` = regex for PromQL/LogQL. **Drilldown URLs:** use `${host:queryparam}` for multi-value (produces `var-host=media&var-host=core`); plain `var-host=${host}` is regex-escaped and wrong for URL params.
 
 Each variable's query filters by the selections upstream. This ensures selecting `vm_role=media` only shows hosts and services that belong to the media VM.
 
@@ -266,13 +296,7 @@ D01b (Container Workbench)
        passes: time, $host, $service
 ```
 
-### Incident Window Preservation
-
-The Grafana time range IS the incident window. No custom time variables needed.
-
-- Narrowing the time range on any dashboard focuses the investigation
-- Drilldown links carry `from` and `to` — the receiving dashboard opens at the exact same window
-- Annotations or alert markers that draw attention to a spike should be clickable entry points to drilldowns
+Time range = incident window; drilldowns carry `from`/`to`. Every anomaly should have a click path to the next level.
 
 ---
 
@@ -354,115 +378,13 @@ Each dashboard spec includes a **Click Flow Map** table documenting every clicka
 
 ## Scaling Rules
 
-### Adding a New VM (e.g., Security)
-
-Zero dashboard changes required if you follow this architecture:
-
-1. Deploy the VM with Alloy sidecar using the label contract (`vm_role=security`, `host=security`, etc.)
-2. Add Prometheus scrape targets for the new VM's node_exporter/cAdvisor
-3. The new VM appears automatically in all dashboards via label queries
-
-This works because:
-
-- All variable queries use **Label values** query types — new label values appear dynamically
-- All panels use variable-filtered queries (`{vm_role=~"$vm_role"}`) — new VMs are included by default
-- Repeating rows/panels (repeat by `$host` or `$vm_role`) generate new visual sections automatically
-
-### Adding a New Proxmox Node (e.g., pve2)
-
-> **Current state:** The homelab runs on a single Proxmox node (`pve1`). There are no plans to add a second node. This section documents the scaling path so the architecture remains future-proof without requiring dashboard changes if that decision changes.
-
-Zero dashboard changes required. The `$node` variable and label contract already handle multi-node:
-
-1. Deploy node_exporter on the new bare-metal host with labels `host=pve2`, `vm_role=hypervisor`, `node=pve2`
-2. Deploy VMs on the new node using the standard label contract (each VM gets a globally unique `host` name)
-3. Add Prometheus scrape targets for the new node's exporters and its VMs' node_exporter/cAdvisor
-4. The `$node` dropdown auto-populates with `pve2` via the Label values query. D05 filters to the new node. D00 aggregates across both nodes. D01a/D01b show the new VMs.
-
-This works because every query already filters by `node=~"$node"` and the variable cascade `$node → $vm_role → $host → $service` scopes downstream selections automatically. No dashboards need cloning, no queries need editing.
-
-**VM migration and time series continuity:** When Proxmox live-migrates a VM between nodes (HA failover or manual rebalancing), the VM keeps its `host` name but the `node` label changes (e.g., `node=pve1` → `node=pve2`). Prometheus treats this as a new time series. Over a time range that spans the migration, panels show two short series for that host instead of one continuous line. This is expected behavior — the break in the line marks exactly when the migration occurred, which is useful forensic context. It does not affect correctness: both series carry the same `host` label, so `by (host)` groupings still identify the VM correctly.
-
-### Adding a New Signal Source
-
-If you add a new exporter or metric source:
-
-1. It goes on the **workbench** that owns that signal type (host metrics → D01a, container metrics → D01b, logs → D02)
-2. Only if the signal reveals a fleet-level health condition does it get a **summary** on D00
-3. D00 summaries are always aggregations (counts, rates, max), never raw series
+**New VM:** Deploy with label contract + Prometheus scrape targets; no dashboard changes. Label values and variable-filtered queries include it automatically. **New Proxmox node:** Deploy node_exporter with `node=pve2`, etc.; `$node` and cascade handle it. (Current homelab is single-node; this is future-proofing.) **VM migration:** `host` stays, `node` changes → Prometheus shows two series over the migration window; expected, both have same `host`. **New signal source:** Put on the owning workbench; add D00 summary only if it indicates fleet-level health. D00 = aggregations only, never raw series.
 
 ---
 
 ## Visualization Reference
 
-Grafana ships a broad set of visualization types. Choosing the right one matters — a gauge where a stat belongs wastes space; a time series where a state timeline belongs hides discrete events. This catalog groups every built-in visualization by the kind of data it represents, with notes on when each is the right (and wrong) choice for this dashboard system.
-
-### Graphs & Charts (continuous data over time or categories)
-
-| Visualization | Data shape | When to use | When NOT to use |
-|--------------|------------|-------------|-----------------|
-| **Time series** | Metric values over time | Default for any `rate()`, `increase()`, or raw metric over time. Supports alerts. | Discrete states (use State timeline). Single values (use Stat). |
-| **Bar chart** | Categorical data (labels on one axis, values on the other) | Comparing values across categories at a point in time (e.g., CPU per VM as a snapshot). | Time-based trends (use Time series). |
-| **Histogram** | Distribution of values | Showing how values are distributed across buckets (e.g., request latency distribution). | Trends over time. Small sample sizes. |
-| **Heatmap** | Two-dimensional density (typically value × time) | Visualizing request latency percentiles over time, or any "how much of X falls in range Y at time T" question. | Simple time series. Categorical comparisons. |
-| **XY chart** | Arbitrary x/y numeric pairs | Scatter plots, correlation analysis (CPU vs. memory). | Time series data. |
-| **Candlestick** | OHLC (open/high/low/close) financial-style data | Price or stock data. Rarely used in infrastructure monitoring. | General metrics. |
-| **Pie chart** | Proportional breakdown of parts to a whole | Log level distribution, storage allocation breakdown. | Comparisons over time. More than 6–7 slices (becomes unreadable). |
-| **Trend** | Sequential numeric x (not time) | Datasets with a numeric sequence axis that isn't time. | Time-based data (use Time series). |
-
-### Stats & Gauges (single values, current state)
-
-| Visualization | Data shape | When to use | When NOT to use |
-|--------------|------------|-------------|-----------------|
-| **Stat** | Single value per series, optional sparkline | Fleet Pulse indicators, KPI numbers, any "big number" display. The sparkline adds trend context without a full graph. | Detailed breakdowns. Range comparisons. |
-| **Gauge** | Single value relative to min/max | Showing how close a value is to a limit (CPU % toward 100%, memory toward OOM threshold). | Values without meaningful min/max bounds. |
-| **Bar gauge** | Single value per series, shown as horizontal/vertical bar | Per-VM resource saturation (CPU/Memory/Disk %). Three display modes: basic, gradient, LCD. | Trend data. More than ~10 bars. |
-
-### State & Timeline (discrete events, status changes)
-
-| Visualization | Data shape | When to use | When NOT to use |
-|--------------|------------|-------------|-----------------|
-| **State timeline** | Discrete state values over time | Container lifecycle (running/stopped/restarting), service health states. Consecutive identical states merge into solid bands. Thresholds map numbers to state colors. | Continuous metrics. High-cardinality states. |
-| **Status history** | Periodic state samples over time | Similar to state timeline but does NOT merge consecutive values — each sample is a distinct colored box. Better for periodic polling data. | Continuous metrics. |
-
-### Tables & Data
-
-| Visualization | Data shape | When to use | When NOT to use |
-|--------------|------------|-------------|-----------------|
-| **Table** | Tabular rows × columns | Ranked lists (Top Offenders), bridge tables, any multi-column data. Supports cell display modes: colored background, sparkline, gauge, JSON view, image. Supports row coloring via `applyToRow`. | Simple single-value displays. |
-
-**Table cell display modes (v12):**
-- **Auto** — default rendering
-- **Color text** — colors the text based on thresholds
-- **Color background** — fills the cell background; supports `applyToRow: true` for full-row coloring (Grafana 11+)
-- **Color background (gradient)** — gradient fill based on value
-- **Gauge** — inline horizontal gauge within the cell
-- **Sparkline** — embedded mini time series within a table cell (requires time series data in the query)
-- **JSON view** — renders JSON objects with syntax highlighting
-- **Image** — renders URL values as images
-- **CSS styling** — (Grafana 12.3+) apply arbitrary CSS properties via a JSON field using the "Styling from field" cell option
-
-### Logs, Traces, Profiles
-
-| Visualization | Data shape | When to use | When NOT to use |
-|--------------|------------|-------------|-----------------|
-| **Logs** | Log streams from Loki or similar | D02 Log Workbench — the primary log viewing panel. | Metrics data. |
-| **Traces** | Distributed trace spans | Trace investigation. Not used in this homelab stack (no tracing). | Non-trace data. |
-| **Flame graph** | Profiling data (call stacks) | CPU/memory profiling investigation. Not used in this homelab stack. | Non-profiling data. |
-| **Node graph** | Directed graph (nodes + edges) | Service dependency maps, network topology. Potential use for inter-VM connectivity visualization on D03 if data source supports it. | Tabular or time series data. |
-
-### Spatial, Freeform, Widgets
-
-| Visualization | Data shape | When to use | When NOT to use |
-|--------------|------------|-------------|-----------------|
-| **Canvas** | Freeform element placement | Custom infrastructure diagrams, NOC-style status boards with positioned elements bound to data. Supports buttons with API actions, icons, shapes, server elements. One-click data links and actions are GA as of Grafana 12. | Standard metric display (use built-in panels). |
-| **Geomap** | Geospatial coordinates | Location-aware data. Not relevant for this homelab. | Non-geographic data. |
-| **Datagrid** | Editable tabular data | Manually creating/editing data that feeds other panels. Niche use. | Read-only data display. |
-| **Text** | Markdown or HTML | Dashboard instructions, notes, section headers. | Data display. |
-| **News** | RSS feeds | Showing external news/updates on a dashboard. | Internal metrics. |
-| **Annotations list** | Grafana annotation events | Listing deployment markers, incident notes. | General data. |
-| **Alert list** | Grafana alert states | Showing current alert states and recent alert transitions. | Non-alert data. |
-| **Dashboard list** | Dashboard metadata | Navigation panels linking to other dashboards. | Data display. |
+**Use:** Time series for `rate()`/`increase()`/metrics over time; Stat for KPIs/sparklines; Gauge for bounded % (e.g. CPU toward 100%); Bar gauge for per-VM saturation; State timeline for discrete states (container lifecycle, probe pass/fail); Table for Top Offenders, bridge tables, multi-column (cell modes: Color background, `applyToRow` for full-row, Sparkline, Gauge); Logs for D02. **Avoid:** Time series for discrete states; Stat for breakdowns; Pie for >6–7 slices or without absolute count. See [Grafana visualizations](https://grafana.com/docs/grafana/latest/panels-visualizations/) for full catalog.
 
 ---
 
@@ -510,55 +432,37 @@ Expressions run on the Grafana server, not the browser. They work with any backe
 
 ---
 
-## Best Practices & Non-Obvious Insights
+## Best Practices
 
-### Query Performance
+**Official reference:** [Grafana dashboard best practices](https://grafana.com/docs/grafana/latest/visualizations/dashboards/build-dashboards/best-practices/) — observability strategies (USE/RED, Four Golden Signals), dashboard maturity, creating and managing dashboards. The homelab rules below extend and align with that guidance.
 
-1. **`$__rate_interval` over hardcoded windows.** Always use `[$__rate_interval]` in `rate()` and `increase()` calls. It auto-calculates to at least 4× the scrape interval, preventing "no data" gaps when zooming in. Hardcoded `[5m]` breaks on scrape intervals that aren't 15s.
+### Strategy alignment
 
-2. **Max Data Points limits what Prometheus returns.** The "Max data points" panel setting (default: panel width in pixels) controls how many points Prometheus sends. For a 1200px-wide panel showing 30 days, Prometheus only sends ~1200 points — one every ~36 minutes. This is why zooming out doesn't slow queries but reduces resolution. Set explicitly only when you need to override (e.g., stat panels where you want exactly 1 point).
+- **USE** (Utilization, Saturation, Errors) for infrastructure — host/container CPU, memory, disk, queues. D01a/D01b and D05 own these.
+- **RED** (Rate, Errors, Duration) for services and user-facing behavior — alert on symptoms (RED) rather than causes (USE). D00 triage and D03/D04 service health follow RED where applicable.
+- **Four Golden Signals** (Latency, Traffic, Errors, Saturation) — when adding service-level panels, prefer these over ad-hoc metrics.
+- **Dashboard tells a story:** Logical progression (large → small, general → specific). Each dashboard answers a clear question; avoid dashboards without a goal.
+- **Reduce cognitive load:** Graphs should be obvious at a glance; use meaningful color (e.g. thresholds: blue = good, red = bad), normalize axes (e.g. CPU by % not raw cores) where it helps.
 
-3. **Instant queries for tables, range queries for time series.** Table panels showing "current value" should use instant queries (toggle in the Prometheus query editor). This returns one value per series instead of a full time range, reducing data transfer significantly.
+### Design and workflow (homelab)
 
-4. **Recording rules for expensive aggregations.** If a panel query takes >2s or uses complex `by()` / `without()` grouping across many series, create a Prometheus recording rule to pre-compute it. The dashboard queries the recording rule's output metric instead. Naming convention: `level:metric:operations` (e.g., `job:container_cpu_usage:rate5m`).
+Design first; verify with MCP + render (do not assume). Layout: overview → breakdown → deep dive; rows for sections; 3–4 panels per row; clarity over density. When editing existing dashboards: improve clarity and flow, don't add redundant panels. **Avoid stacking** unless intentional — it can hide important data; turn off in most cases.
 
-5. **`-- Mixed --` data source for cross-source panels.** To combine Prometheus metrics and Loki log counts in a single panel (like the Top Offenders table), select the `-- Mixed --` built-in data source. Each query row can then target a different data source. Combine the results with `merge` or `join` transformations.
+### Managing dashboards (from Grafana docs)
 
-### Panel Design
+- **Avoid sprawl:** No duplicate dashboards for "one change"; use template variables and URL parameters for view customization. Prefix temporary dashboards with `TEST` or `TMP`; delete when done.
+- **Don't copy then forget:** Copies miss updates; prefer links to the master dashboard + URL params. If you must copy, rename clearly and do **not** copy tags (tags drive search).
+- **Directed browsing:** Most dashboards should be reachable via alerts or links from overview/dashboard-of-dashboards; browsing by search is the exception.
+- **Documentation:** Add a Text panel for dashboard purpose, links, and instructions; add panel descriptions (visible on the (i) icon) for non-obvious panels.
+- **Refresh rate:** Match to data cadence; avoid aggressive refresh (e.g. 30s) when data changes hourly.
 
-6. **Value mappings bypass unit formatting.** When a value mapping matches, the unit format is skipped entirely. Use this to show "All Up" instead of "0" on the Container deficit stat, or "—" instead of "0.00%" for containers without memory limits. Mapping types: exact value, numeric range, regex, and special (null/NaN/boolean).
+### Query & panel essentials
 
-7. **Field overrides by regex for bulk styling.** Instead of overriding each field individually, use "Fields with name matching regex" to apply overrides to all fields matching a pattern. Example: `/.*(transmit|tx).*/i` to color all transmit series blue across a network panel, regardless of the exact field name.
+**Queries:** Use `[$__rate_interval]` in `rate()`/`increase()`; instant queries for "current value" tables; recording rules for expensive aggregations (`level:metric:operations`).
 
-8. **`applyToRow: true` for table row coloring.** In table panels, the `Color background` cell display mode with `applyToRow: true` in the field override colors the entire row based on one column's value — not just that cell. Used in D00 Containers Running table to make unhealthy rows immediately visible.
+**Panels:** Value mappings skip unit formatting (e.g. "All Up"); regex field overrides for bulk styling; `applyToRow: true` for full-row table color; state timeline for discrete states. Use left/right Y-axes when showing series with different units or ranges. **Variables:** `${host:queryparam}` for multi-value drilldown URLs. Repeat by variable: row = per-VM sections, panel = stat grids.
 
-9. **Annotations mark events on time series.** Annotations draw vertical lines on time series panels marking specific events (deployments, restarts, config changes). They can be added manually, via API, or from a data source query. Use annotation queries against Loki to auto-mark container restart events on D01a time series panels — `{service="alloy"} |= "container started"` as an annotation source makes restarts visible without a separate panel.
-
-10. **State timeline for binary/discrete state tracking.** For "is this container running?" or "is this probe passing?" over time, a state timeline is more informative than a time series. It renders solid colored bands for each state, making duration and transitions immediately visible. Map numeric values to state names via value mappings (0 → "Down"/red, 1 → "Up"/green).
-
-11. **Canvas panels for infrastructure diagrams.** Canvas panels allow free-form placement of shapes, icons, and server elements bound to data queries. Buttons can trigger API calls (start/stop containers). Consider a canvas panel on D00 as an alternative to the stat grid for VM Availability — showing a visual topology map instead of plain stat boxes.
-
-### Variable & URL Design
-
-12. **`:queryparam` for multi-value drilldowns.** When a drilldown link passes a multi-value variable, `${host:queryparam}` produces `var-host=media&var-host=core` — correct URL syntax that Grafana interprets as multiple selected values. Plain `var-host=${host}` produces a regex-escaped string that only works in PromQL matchers, not as URL parameters.
-
-13. **Repeating rows vs. repeating panels.** "Repeat by variable" on a **row** creates one collapsed row per variable value — good for per-VM sections on workbenches. "Repeat by variable" on a **panel** creates duplicate panels side-by-side — good for stat grids. Choose based on density: repeating panels for 3–5 items, repeating rows for more.
-
-14. **Config from query results for data-driven thresholds.** Rather than hardcoding CPU warning thresholds at 70%/85% for every VM, a config query can return different thresholds per `vm_role` (media VMs run hotter than core). The `Config from query results` transformation applies these dynamically, including threshold colors.
-
-15. **The `-- Dashboard --` data source.** A panel can query data from another panel on the same dashboard using the Dashboard data source. Combined with ad hoc filters, this enables filtering data from sources that don't natively support ad hoc filtering. Niche but useful when a visualization needs post-processed data from an existing panel.
-
-### Pitfalls
-
-16. **Transformations break when field names change.** `Organize fields` and `Join by field` reference fields by name. If a Prometheus label or query alias changes, the transformation silently produces empty results. Use `Filter by name` with regex patterns when possible — they're more resilient to minor naming changes.
-
-17. **`NoData` propagates through expressions.** If any query in a server-side expression chain returns no data, the entire expression returns `NoData`. Design defensive queries with `or on() vector(0)` fallbacks for metrics that might legitimately be absent (e.g., `node_vmstat_oom_kill` returns nothing if no OOM has ever occurred).
-
-18. **Pie charts hide magnitude.** A pie chart showing 95% info / 5% error looks alarming, but if total volume is 20 log lines, it's noise. Always pair proportional visualizations with an absolute count somewhere visible.
-
-19. **Stacking order in time series matters.** Stacked area charts render series bottom-to-top. Put the most stable/expected series at the bottom (idle CPU, used memory) and the anomalous series at the top (steal, OOM) so visual deviations are at the top edge where they're easiest to spot.
-
-20. **Sparkline limitations in stat panels.** Stat panel sparklines are trend indicators, not interactive graphs. They cannot be zoomed, hovered for values, or clicked for drilldowns. They answer "up or down?" — never "when exactly?" Design accordingly: if precision matters, use a time series panel.
+**Pitfalls:** Transformations break on field name changes (prefer regex in Filter by name). NoData in expressions → use `or on() vector(0)`. Pie charts hide magnitude — pair with absolute count. Stacked series: put anomalous at top. Stat sparklines are not interactive (no zoom/drilldown).
 
 ---
 
