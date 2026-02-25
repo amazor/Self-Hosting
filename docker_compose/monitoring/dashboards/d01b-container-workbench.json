@@ -90,7 +90,7 @@
         "name": "node",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{job=\"node-exporter\"}, node)",
+        "query": "label_values(up, node)",
         "current": {},
         "hide": 0,
         "includeAll": true,
@@ -104,7 +104,7 @@
         "name": "vm_role",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\"}, vm_role)",
+        "query": "label_values(up{node=~\"$node\"}, vm_role)",
         "current": {},
         "hide": 0,
         "includeAll": true,
@@ -118,7 +118,7 @@
         "name": "host",
         "type": "query",
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
+        "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
         "current": {},
         "hide": 0,
         "includeAll": true,
@@ -161,10 +161,204 @@
 
     {
       "type": "row",
-      "title": "Container Resources",
+      "title": "At a Glance",
       "collapsed": false,
       "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
       "id": 100,
+      "panels": []
+    },
+
+    {
+      "id": 1,
+      "type": "stat",
+      "title": "Containers Running",
+      "description": "Number of containers seen by cAdvisor within the last 120 seconds across the selected scope.",
+      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "count(container_last_seen{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} > (time() - 120))",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "color": { "mode": "fixed", "fixedColor": "green" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+
+    {
+      "id": 2,
+      "type": "stat",
+      "title": "CPU Heavy (>50%)",
+      "description": "Count of containers using more than 50% of a CPU core. Zero is healthy.",
+      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "count(sum by (host, service) (rate(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval])) > 0.5) or on() vector(0)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+
+    {
+      "id": 3,
+      "type": "stat",
+      "title": "Memory Pressure",
+      "description": "Containers above 70% of Docker memory limit. Only counts containers with explicit limits set.",
+      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "count(sum by (host, service) (container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}) / sum by (host, service) (container_spec_memory_limit_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} > 0) > 0.7) or on() vector(0)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 1 },
+              { "color": "red", "value": 3 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+
+    {
+      "id": 4,
+      "type": "stat",
+      "title": "Recent Restarts",
+      "description": "Containers that started within the current dashboard time range — indicates a restart or fresh deployment.",
+      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 4 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        {
+          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "count(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} > (time() - $__range_s)) or on() vector(0)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "noValue": "0",
+          "color": { "mode": "thresholds" },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "orange", "value": 1 },
+              { "color": "red", "value": 5 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "values": false,
+          "calcs": ["lastNotNull"],
+          "fields": ""
+        },
+        "orientation": "auto",
+        "textMode": "value",
+        "wideLayout": true,
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center"
+      }
+    },
+
+    {
+      "type": "row",
+      "title": "Container Resources",
+      "collapsed": false,
+      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 1 },
+      "id": 101,
       "panels": []
     },
 
@@ -173,7 +367,7 @@
       "type": "table",
       "title": "Container Resource Table",
       "description": "All containers on selected hosts ranked by CPU. Click a service name to focus this dashboard on that container, or use View Logs to jump to the Log Workbench.",
-      "gridPos": { "x": 0, "y": 1, "w": 24, "h": 8 },
+      "gridPos": { "x": 0, "y": 6, "w": 24, "h": 10 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -199,7 +393,7 @@
         {
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "sum by (host, service) (container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}) / clamp_min(sum by (host, service) (container_spec_memory_limit_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}), 1)",
+          "expr": "sum by (host, service) (container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}) / sum by (host, service) (container_spec_memory_limit_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} > 0)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -258,11 +452,16 @@
         "defaults": {},
         "overrides": [
           {
+            "matcher": { "id": "byName", "options": "Host" },
+            "properties": [
+              { "id": "custom.width", "value": 120 }
+            ]
+          },
+          {
             "matcher": { "id": "byName", "options": "CPU %" },
             "properties": [
               { "id": "unit", "value": "percentunit" },
               { "id": "decimals", "value": 2 },
-              { "id": "custom.width", "value": 80 },
               {
                 "id": "thresholds",
                 "value": {
@@ -274,15 +473,15 @@
                   ]
                 }
               },
-              { "id": "custom.cellOptions", "value": { "type": "color-text" } }
+              { "id": "color", "value": { "mode": "continuous-GrYlRd" } },
+              { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "Memory" },
             "properties": [
               { "id": "unit", "value": "bytes" },
-              { "id": "decimals", "value": 0 },
-              { "id": "custom.width", "value": 90 }
+              { "id": "decimals", "value": 0 }
             ]
           },
           {
@@ -290,7 +489,6 @@
             "properties": [
               { "id": "unit", "value": "percentunit" },
               { "id": "decimals", "value": 0 },
-              { "id": "custom.width", "value": 100 },
               {
                 "id": "thresholds",
                 "value": {
@@ -302,15 +500,15 @@
                   ]
                 }
               },
-              { "id": "custom.cellOptions", "value": { "type": "color-text" } },
+              { "id": "color", "value": { "mode": "continuous-GrYlRd" } },
+              { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } },
               {
                 "id": "mappings",
                 "value": [
                   {
-                    "type": "range",
+                    "type": "special",
                     "options": {
-                      "from": 0,
-                      "to": 0.001,
+                      "match": "null+nan",
                       "result": { "text": "\u2014", "index": 0 }
                     }
                   }
@@ -322,16 +520,14 @@
             "matcher": { "id": "byName", "options": "Net In" },
             "properties": [
               { "id": "unit", "value": "Bps" },
-              { "id": "decimals", "value": 0 },
-              { "id": "custom.width", "value": 80 }
+              { "id": "decimals", "value": 0 }
             ]
           },
           {
             "matcher": { "id": "byName", "options": "Net Out" },
             "properties": [
               { "id": "unit", "value": "Bps" },
-              { "id": "decimals", "value": 0 },
-              { "id": "custom.width", "value": 80 }
+              { "id": "decimals", "value": 0 }
             ]
           },
           {
@@ -368,8 +564,8 @@
       "type": "row",
       "title": "Container Lifecycle",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 9, "w": 24, "h": 1 },
-      "id": 101,
+      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
+      "id": 102,
       "panels": []
     },
 
@@ -378,7 +574,7 @@
       "type": "table",
       "title": "Recent Restarts",
       "description": "Containers that started within the current time range \u2014 indicates a restart or fresh deployment. Click a service name to view logs around the restart.",
-      "gridPos": { "x": 0, "y": 10, "w": 24, "h": 6 },
+      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 6 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -465,8 +661,8 @@
       "type": "row",
       "title": "Per-Container Detail",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 1 },
-      "id": 102,
+      "gridPos": { "x": 0, "y": 23, "w": 24, "h": 1 },
+      "id": 103,
       "panels": []
     },
 
@@ -475,7 +671,7 @@
       "type": "timeseries",
       "title": "Container CPU",
       "description": "CPU usage per container (fraction of one core). Narrow $service to focus on a single container.",
-      "gridPos": { "x": 0, "y": 17, "w": 8, "h": 8 },
+      "gridPos": { "x": 0, "y": 24, "w": 8, "h": 9 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -494,15 +690,15 @@
           "min": 0,
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "gradientMode": "none",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
             "spanNulls": false,
             "showPoints": "never",
             "stacking": { "mode": "none" },
             "axisSoftMin": 0
           },
-          "color": { "mode": "palette-classic" },
+          "color": { "mode": "palette-classic-by-name" },
           "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "links": [
             {
@@ -516,7 +712,12 @@
       },
       "options": {
         "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "max"]
+        }
       }
     },
 
@@ -525,7 +726,7 @@
       "type": "timeseries",
       "title": "Container Memory",
       "description": "Working set memory per container (what the OOM killer uses). The dashed line shows the Docker memory limit \u2014 when usage approaches it, the container is at risk of being OOM-killed.",
-      "gridPos": { "x": 8, "y": 17, "w": 8, "h": 8 },
+      "gridPos": { "x": 8, "y": 24, "w": 8, "h": 9 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -553,9 +754,9 @@
           "min": 0,
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "gradientMode": "none",
+            "lineWidth": 2,
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
             "spanNulls": false,
             "showPoints": "never",
             "stacking": { "mode": "none" },
@@ -585,7 +786,12 @@
       },
       "options": {
         "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "max"]
+        }
       }
     },
 
@@ -594,7 +800,7 @@
       "type": "timeseries",
       "title": "Container Network",
       "description": "Network throughput per container. Receive (positive) and transmit (negative) form a bidirectional view \u2014 asymmetry is immediately visible.",
-      "gridPos": { "x": 16, "y": 17, "w": 8, "h": 8 },
+      "gridPos": { "x": 16, "y": 24, "w": 8, "h": 9 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -621,9 +827,9 @@
           "unit": "Bps",
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 10,
-            "gradientMode": "none",
+            "lineWidth": 2,
+            "fillOpacity": 15,
+            "gradientMode": "scheme",
             "spanNulls": false,
             "showPoints": "never",
             "stacking": { "mode": "none" }
@@ -642,7 +848,8 @@
           {
             "matcher": { "id": "byRegexp", "options": "/rx$/" },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
+              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } },
+              { "id": "custom.fillOpacity", "value": 15 }
             ]
           },
           {
@@ -655,7 +862,12 @@
       },
       "options": {
         "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
+        "legend": {
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true,
+          "calcs": ["mean", "max"]
+        }
       }
     }
 
