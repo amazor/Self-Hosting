@@ -538,7 +538,7 @@
                 "value": [
                   {
                     "title": "Focus on ${__data.fields.Service}",
-                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}&var-node=${node}&var-vm_role=${vm_role}",
+                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}&${node:queryparam}&${vm_role:queryparam}",
                     "targetBlank": false
                   },
                   {
