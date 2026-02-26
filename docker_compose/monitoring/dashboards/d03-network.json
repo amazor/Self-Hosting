@@ -1,15 +1,12 @@
 {
   "uid": "homelab-network",
   "title": "Network & Connectivity",
-  "description": "Network investigation workbench. Why can't I reach it? Which probe is failing? Is something saturating the network?",
+  "description": "Can I reach it? Which probe is failing? Is a certificate about to expire? Who is using the bandwidth?",
   "tags": ["homelab", "network", "connectivity"],
   "timezone": "browser",
   "editable": true,
   "graphTooltip": 1,
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
+  "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "refresh": "30s",
   "schemaVersion": 39,
@@ -28,20 +25,10 @@
       "keepTime": true
     },
     {
-      "title": "Host Workbench",
-      "type": "link",
-      "url": "/d/homelab-host-workbench",
-      "tooltip": "VM-level metrics: CPU, memory, disk, I/O",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
       "title": "Container Workbench",
       "type": "link",
       "url": "/d/homelab-container-workbench",
-      "tooltip": "Container resource consumption, lifecycle, per-service detail",
+      "tooltip": "Container resources and per-service detail",
       "icon": "external link",
       "targetBlank": false,
       "includeVars": true,
@@ -63,8 +50,7 @@
       {
         "builtIn": 1,
         "datasource": { "type": "grafana", "uid": "-- Grafana --" },
-        "enable": true,
-        "hide": true,
+        "enable": true, "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
         "name": "Annotations & Alerts",
         "type": "dashboard"
@@ -74,80 +60,41 @@
   "templating": {
     "list": [
       {
-        "name": "datasource_prometheus",
-        "type": "datasource",
-        "query": "prometheus",
-        "current": {},
-        "hide": 0,
-        "includeAll": false,
-        "multi": false,
-        "label": "Prometheus",
-        "refresh": 1
+        "name": "datasource_prometheus", "type": "datasource", "query": "prometheus",
+        "current": {}, "hide": 0, "includeAll": false, "multi": false,
+        "label": "Prometheus", "refresh": 1
       },
       {
-        "name": "datasource_loki",
-        "type": "datasource",
-        "query": "loki",
-        "current": {},
-        "hide": 2,
-        "includeAll": false,
-        "multi": false,
-        "label": "Loki",
-        "refresh": 1
+        "name": "datasource_loki", "type": "datasource", "query": "loki",
+        "current": {}, "hide": 2, "includeAll": false, "multi": false,
+        "label": "Loki", "refresh": 1
       },
       {
-        "name": "node",
-        "type": "query",
+        "name": "node", "type": "query",
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "query": "label_values(up, node)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Node"
+        "current": {}, "hide": 0, "includeAll": true, "multi": true,
+        "allValue": ".+", "refresh": 1, "sort": 1, "label": "Node"
       },
       {
-        "name": "vm_role",
-        "type": "query",
+        "name": "vm_role", "type": "query",
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "query": "label_values(up{node=~\"$node\"}, vm_role)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "VM Role"
+        "current": {}, "hide": 0, "includeAll": true, "multi": true,
+        "allValue": ".+", "refresh": 1, "sort": 1, "label": "VM Role"
       },
       {
-        "name": "host",
-        "type": "query",
+        "name": "host", "type": "query",
         "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Host"
+        "current": {}, "hide": 0, "includeAll": true, "multi": true,
+        "allValue": ".+", "refresh": 1, "sort": 1, "label": "Host"
       },
       {
-        "name": "env",
-        "type": "custom",
+        "name": "env", "type": "custom",
         "current": { "text": "prod", "value": "prod", "selected": true },
-        "hide": 2,
-        "includeAll": false,
-        "multi": false,
-        "query": "prod",
-        "options": [
-          { "text": "prod", "value": "prod", "selected": true }
-        ]
+        "hide": 2, "includeAll": false, "multi": false, "query": "prod",
+        "options": [{ "text": "prod", "value": "prod", "selected": true }]
       }
     ]
   },
@@ -155,943 +102,294 @@
   "panels": [
 
     {
-      "type": "row",
-      "title": "Probe Overview",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
-      "id": 200,
-      "panels": []
+      "type": "row", "title": "Connectivity", "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "id": 200, "panels": []
     },
 
     {
-      "id": 1,
-      "type": "stat",
-      "title": "Probes Passing",
-      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 3 },
+      "id": 1, "type": "stat", "title": "Probes Failing",
+      "description": "Number of Blackbox probes returning failure. Zero means all endpoints are reachable.",
+      "gridPos": { "x": 0, "y": 1, "w": 8, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "count(probe_success == 1)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "green" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-
-    {
-      "id": 2,
-      "type": "stat",
-      "title": "Probes Failing",
-      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "count(probe_success == 0) or on() vector(0)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "count(probe_success == 0) or on() vector(0)",
+        "instant": true, "range": false, "refId": "A"
+      }],
       "fieldConfig": {
         "defaults": {
           "noValue": "0",
           "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ]
-          }
-        },
-        "overrides": []
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "red", "value": 1 }
+          ]}
+        }, "overrides": []
       },
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto", "textMode": "value", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center"
       }
     },
 
     {
-      "id": 3,
-      "type": "stat",
-      "title": "Avg Probe Latency",
-      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 3 },
+      "id": 2, "type": "stat", "title": "Nearest TLS Expiry",
+      "description": "Days until the soonest TLS certificate expires. Add your own domain\u2019s HTTPS probe to track your Caddy/Let\u2019s Encrypt certs.",
+      "gridPos": { "x": 8, "y": 1, "w": 8, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "avg(probe_duration_seconds)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "min((probe_ssl_earliest_cert_expiry - time()) / 86400 > 0)",
+        "instant": true, "range": false, "refId": "A"
+      }],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "decimals": 0,
+          "unit": "d", "decimals": 0, "noValue": "No HTTPS probes",
           "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.5 },
-              { "color": "red", "value": 2 }
-            ]
-          }
-        },
-        "overrides": []
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null },
+            { "color": "yellow", "value": 7 },
+            { "color": "green", "value": 14 }
+          ]}
+        }, "overrides": []
       },
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto", "textMode": "value", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center"
       }
     },
 
     {
-      "id": 4,
-      "type": "stat",
-      "title": "TLS Certs Expiring Soon",
-      "description": "Certificates expiring within 14 days",
-      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 3 },
+      "id": 3, "type": "stat", "title": "Avg Probe Latency",
+      "description": "Average response time across all probes. High latency with passing probes indicates a degraded but functional network.",
+      "gridPos": { "x": 16, "y": 1, "w": 8, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "count((probe_ssl_earliest_cert_expiry - time()) / 86400 < 14 and probe_ssl_earliest_cert_expiry > 0) or on() vector(0)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "avg(probe_duration_seconds)",
+        "instant": true, "range": false, "refId": "A"
+      }],
       "fieldConfig": {
         "defaults": {
-          "noValue": "0",
+          "unit": "s", "decimals": 0,
           "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 2 }
-            ]
-          }
-        },
-        "overrides": []
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "green", "value": null },
+            { "color": "yellow", "value": 0.5 },
+            { "color": "red", "value": 2 }
+          ]}
+        }, "overrides": []
       },
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto", "textMode": "value", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center"
       }
     },
 
     {
-      "id": 10,
-      "type": "table",
-      "title": "Probe Status Table",
-      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 8 },
+      "id": 10, "type": "table", "title": "Probe Status",
+      "description": "All Blackbox probes sorted by status (failures first). Click a probe name to view its container logs.",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "probe_success",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "probe_duration_seconds",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "probe_http_status_code",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "C"
-        }
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code", "expr": "probe_success",
+          "format": "table", "instant": true, "range": false, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code", "expr": "probe_duration_seconds",
+          "format": "table", "instant": true, "range": false, "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code", "expr": "probe_http_status_code",
+          "format": "table", "instant": true, "range": false, "refId": "C" }
       ],
       "transformations": [
         { "id": "merge", "options": {} },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "env": true,
-              "node": true,
-              "vm_role": true,
-              "host": true,
-              "job": true
-            },
-            "indexByName": {
-              "name": 0,
-              "instance": 1,
-              "Value #A": 2,
-              "Value #C": 3,
-              "Value #B": 4
-            },
-            "renameByName": {
-              "name": "Probe",
-              "instance": "Target",
-              "Value #A": "Status",
-              "Value #C": "HTTP Code",
-              "Value #B": "Latency"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              { "field": "Status", "desc": false }
-            ]
-          }
-        }
+        { "id": "organize", "options": {
+          "excludeByName": { "Time": true, "__name__": true, "env": true, "node": true, "vm_role": true, "host": true, "job": true },
+          "indexByName": { "name": 0, "instance": 1, "Value #A": 2, "Value #C": 3, "Value #B": 4 },
+          "renameByName": { "name": "Probe", "instance": "Target", "Value #A": "Status", "Value #C": "HTTP Code", "Value #B": "Latency" }
+        }},
+        { "id": "sortBy", "options": { "fields": {}, "sort": [{ "field": "Status", "desc": false }] }}
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Probe" },
-            "properties": [
-              { "id": "custom.width", "value": 160 },
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "View Logs \u2192",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Probe}",
-                    "targetBlank": true
-                  }
-                ]
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Target" },
-            "properties": [
-              { "id": "custom.width", "value": 300 }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Status" },
-            "properties": [
-              { "id": "custom.width", "value": 80 },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "0": { "text": "FAIL", "color": "red", "index": 0 },
-                      "1": { "text": "PASS", "color": "green", "index": 1 }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": { "type": "color-background", "applyToRow": false }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "HTTP Code" },
-            "properties": [
-              { "id": "custom.width", "value": 80 },
-              {
-                "id": "mappings",
-                "value": [
-                  {
-                    "type": "value",
-                    "options": {
-                      "0": { "text": "\u2014", "index": 0 }
-                    }
-                  }
-                ]
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    { "color": "green", "value": null },
-                    { "color": "yellow", "value": 400 },
-                    { "color": "red", "value": 500 }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": { "type": "color-text" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Latency" },
-            "properties": [
-              { "id": "unit", "value": "s" },
-              { "id": "decimals", "value": 1 },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    { "color": "green", "value": null },
-                    { "color": "yellow", "value": 0.5 },
-                    { "color": "red", "value": 2 }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": { "type": "color-text" }
-              }
-            ]
-          }
+          { "matcher": { "id": "byName", "options": "Probe" }, "properties": [
+            { "id": "custom.width", "value": 150 },
+            { "id": "links", "value": [
+              { "title": "View Logs \u2192", "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Probe}", "targetBlank": true }
+            ]}
+          ]},
+          { "matcher": { "id": "byName", "options": "Target" }, "properties": [
+            { "id": "custom.width", "value": 320 }
+          ]},
+          { "matcher": { "id": "byName", "options": "Status" }, "properties": [
+            { "id": "custom.width", "value": 80 },
+            { "id": "mappings", "value": [
+              { "type": "value", "options": { "0": { "text": "FAIL", "color": "red", "index": 0 }, "1": { "text": "PASS", "color": "green", "index": 1 } }}
+            ]},
+            { "id": "custom.cellOptions", "value": { "type": "color-background", "applyToRow": false }}
+          ]},
+          { "matcher": { "id": "byName", "options": "HTTP Code" }, "properties": [
+            { "id": "custom.width", "value": 90 },
+            { "id": "mappings", "value": [{ "type": "value", "options": { "0": { "text": "\u2014", "index": 0 }}}]},
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null }, { "color": "yellow", "value": 400 }, { "color": "red", "value": 500 }
+            ]}},
+            { "id": "custom.cellOptions", "value": { "type": "color-text" }}
+          ]},
+          { "matcher": { "id": "byName", "options": "Latency" }, "properties": [
+            { "id": "unit", "value": "s" }, { "id": "decimals", "value": 1 },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null }, { "color": "yellow", "value": 0.5 }, { "color": "red", "value": 2 }
+            ]}},
+            { "id": "custom.cellOptions", "value": { "type": "color-text" }}
+          ]}
         ]
       },
-      "options": {
-        "showHeader": true,
-        "sortBy": [{ "displayName": "Status", "desc": false }],
-        "cellHeight": "sm",
-        "footer": { "show": false }
-      }
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "Status", "desc": false }], "cellHeight": "sm", "footer": { "show": false } }
     },
 
     {
-      "type": "row",
-      "title": "TLS Certificates",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 12, "w": 24, "h": 1 },
-      "id": 201,
-      "panels": []
+      "type": "row", "title": "History & Certificates", "collapsed": false,
+      "gridPos": { "x": 0, "y": 11, "w": 24, "h": 1 }, "id": 201, "panels": []
     },
 
     {
-      "id": 11,
-      "type": "stat",
-      "title": "Certificate Expiry",
-      "gridPos": { "x": 0, "y": 13, "w": 24, "h": 4 },
+      "id": 11, "type": "state-timeline", "title": "Probe Uptime",
+      "description": "Green = reachable, red = down. Gaps in bars indicate scrape misses. Use this to see when an outage started and how long it lasted.",
+      "gridPos": { "x": 0, "y": 12, "w": 15, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400",
-          "legendFormat": "{{name}}",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code", "expr": "probe_success",
+        "legendFormat": "{{name}}", "range": true, "instant": false, "refId": "A"
+      }],
       "fieldConfig": {
         "defaults": {
-          "unit": "d",
-          "decimals": 0,
           "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "yellow", "value": 7 },
-              { "color": "green", "value": 14 }
-            ]
-          }
-        },
-        "overrides": []
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null }, { "color": "green", "value": 1 }
+          ]},
+          "mappings": [{ "type": "value", "options": {
+            "0": { "text": "DOWN", "index": 0 }, "1": { "text": "UP", "index": 1 }
+          }}]
+        }, "overrides": []
       },
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "horizontal",
-        "textMode": "value_and_name",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
+        "rowHeight": 0.75, "showValue": "auto", "mergeValues": true,
+        "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }
       }
     },
 
     {
-      "type": "row",
-      "title": "Probe Latency History",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 17, "w": 24, "h": 1 },
-      "id": 202,
-      "panels": []
+      "id": 12, "type": "stat", "title": "TLS Certificate Expiry",
+      "description": "Days until each HTTPS certificate expires. Green >14d, yellow 7\u201314d, red <7d. Add your own domain\u2019s HTTPS endpoint to blackbox-targets.json to monitor your Caddy/LE certs.",
+      "gridPos": { "x": 15, "y": 12, "w": 9, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400",
+        "legendFormat": "{{name}}", "instant": true, "range": false, "refId": "A"
+      }],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "d", "decimals": 0,
+          "color": { "mode": "thresholds" },
+          "thresholds": { "mode": "absolute", "steps": [
+            { "color": "red", "value": null }, { "color": "yellow", "value": 7 }, { "color": "green", "value": 14 }
+          ]}
+        }, "overrides": []
+      },
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "horizontal", "textMode": "value_and_name", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center"
+      }
     },
 
     {
-      "id": 12,
-      "type": "timeseries",
-      "title": "HTTP Probe Latency",
-      "description": "Server processing time per HTTP probe. Excludes DNS and TLS handshake \u2014 pure server think time.",
-      "gridPos": { "x": 0, "y": 18, "w": 12, "h": 8 },
+      "type": "row", "title": "Latency & Bandwidth", "collapsed": false,
+      "gridPos": { "x": 0, "y": 19, "w": 24, "h": 1 }, "id": 202, "panels": []
+    },
+
+    {
+      "id": 13, "type": "timeseries", "title": "Probe Response Time",
+      "description": "Total probe duration over time. Sustained increases indicate degrading connectivity even when probes still pass. Click a series to view that service\u2019s logs.",
+      "gridPos": { "x": 0, "y": 20, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "probe_http_duration_seconds{phase=\"processing\"}",
-          "legendFormat": "{{name}}",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        }
-      ],
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code", "expr": "probe_duration_seconds",
+        "legendFormat": "{{name}}", "range": true, "instant": false, "refId": "A"
+      }],
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "min": 0,
+          "unit": "s", "min": 0,
           "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "gradientMode": "scheme",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15, "gradientMode": "scheme",
+            "spanNulls": false, "showPoints": "never", "stacking": { "mode": "none" }
           },
           "color": { "mode": "palette-classic-by-name" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": []
+          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+          "links": [{
+            "title": "View Logs \u2192",
+            "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.name}",
+            "targetBlank": true
+          }]
+        }, "overrides": []
       },
       "options": {
         "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
-        }
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }
       }
     },
 
     {
-      "id": 13,
-      "type": "state-timeline",
-      "title": "Probe Success Over Time",
-      "description": "Timeline showing probe up/down state. Red bars indicate outage windows.",
-      "gridPos": { "x": 12, "y": 18, "w": 12, "h": 8 },
+      "id": 14, "type": "table", "title": "Top Bandwidth Consumers",
+      "description": "Containers ranked by combined rx+tx throughput. Click a service name to investigate on the Container Workbench or view its logs.",
+      "gridPos": { "x": 12, "y": 20, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "probe_success",
-          "legendFormat": "{{name}}",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "DOWN", "index": 0 },
-                "1": { "text": "UP", "index": 1 }
-              }
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "rowHeight": 0.8,
-        "showValue": "auto",
-        "mergeValues": true,
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": true
-        }
-      }
-    },
-
-    {
-      "type": "row",
-      "title": "DNS Resolution",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 26, "w": 24, "h": 1 },
-      "id": 203,
-      "panels": []
-    },
-
-    {
-      "id": 14,
-      "type": "timeseries",
-      "title": "DNS Query Latency",
-      "description": "DNS query latency per resolver. Spike or increase indicates resolver issues.",
-      "gridPos": { "x": 0, "y": 27, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "probe_dns_duration_seconds{phase=\"request\"}",
-          "legendFormat": "{{name}}",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 20,
-            "gradientMode": "scheme",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic-by-name" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
-        }
-      }
-    },
-
-    {
-      "id": 15,
-      "type": "stat",
-      "title": "DNS Probe Status",
-      "gridPos": { "x": 12, "y": 27, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "probe_dns_query_succeeded",
-          "legendFormat": "{{name}}",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "FAIL", "color": "red", "index": 0 },
-                "1": { "text": "PASS", "color": "green", "index": 1 }
-              }
-            }
-          ],
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "horizontal",
-        "textMode": "value_and_name",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-
-    {
-      "type": "row",
-      "title": "Network Throughput",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 },
-      "id": 204,
-      "panels": []
-    },
-
-    {
-      "id": 16,
-      "type": "timeseries",
-      "title": "Container Network Throughput",
-      "description": "Per-container receive (positive) / transmit (negative). Identifies which container is saturating the network.",
-      "gridPos": { "x": 0, "y": 35, "w": 12, "h": 9 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (service) (rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\".+\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "{{service}} rx",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "- sum by (service) (rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\".+\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "{{service}} tx",
-          "range": true,
-          "instant": false,
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "gradientMode": "scheme",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byRegexp", "options": "/rx$/" },
-            "properties": [
-              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }
-            ]
-          },
-          {
-            "matcher": { "id": "byRegexp", "options": "/tx$/" },
-            "properties": [
-              { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }
-            ]
-          }
-        ]
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
-        }
-      }
-    },
-
-    {
-      "id": 17,
-      "type": "table",
-      "title": "Top Bandwidth Consumers",
-      "gridPos": { "x": 12, "y": 35, "w": 12, "h": 9 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "topk(10, sum by (host, service) (rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval])))",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
+      "targets": [{
+        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "topk(10, sum by (host, service) (rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval])))",
+        "format": "table", "instant": true, "range": false, "refId": "A"
+      }],
       "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": { "Time": true },
-            "indexByName": {
-              "host": 0,
-              "service": 1,
-              "Value": 2
-            },
-            "renameByName": {
-              "host": "Host",
-              "service": "Service",
-              "Value": "Bandwidth"
-            }
-          }
-        }
+        { "id": "organize", "options": {
+          "excludeByName": { "Time": true },
+          "indexByName": { "host": 0, "service": 1, "Value": 2 },
+          "renameByName": { "host": "Host", "service": "Service", "Value": "Bandwidth" }
+        }}
       ],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Bandwidth" },
-            "properties": [
-              { "id": "unit", "value": "Bps" },
-              { "id": "decimals", "value": 0 },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    { "color": "green", "value": null },
-                    { "color": "yellow", "value": 1048576 },
-                    { "color": "red", "value": 10485760 }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": { "type": "color-text" }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Service" },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "title": "Focus on container \u2192",
-                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}",
-                    "targetBlank": false
-                  }
-                ]
-              }
-            ]
-          }
+          { "matcher": { "id": "byName", "options": "Bandwidth" }, "properties": [
+            { "id": "unit", "value": "Bps" }, { "id": "decimals", "value": 0 },
+            { "id": "thresholds", "value": { "mode": "absolute", "steps": [
+              { "color": "green", "value": null }, { "color": "yellow", "value": 1048576 }, { "color": "red", "value": 10485760 }
+            ]}},
+            { "id": "custom.cellOptions", "value": { "type": "color-text" }}
+          ]},
+          { "matcher": { "id": "byName", "options": "Service" }, "properties": [
+            { "id": "links", "value": [
+              { "title": "Container detail \u2192", "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}", "targetBlank": false },
+              { "title": "View Logs \u2192", "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}", "targetBlank": true }
+            ]}
+          ]}
         ]
       },
-      "options": {
-        "showHeader": true,
-        "sortBy": [{ "displayName": "Bandwidth", "desc": true }],
-        "cellHeight": "sm",
-        "footer": { "show": false }
-      }
-    },
-
-    {
-      "type": "row",
-      "title": "Packet Health",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 44, "w": 24, "h": 1 },
-      "id": 205,
-      "panels": []
-    },
-
-    {
-      "id": 18,
-      "type": "timeseries",
-      "title": "Container Packet Errors",
-      "description": "Any non-zero value indicates network issues. Healthy networks have zero errors.",
-      "gridPos": { "x": 0, "y": 45, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (service) (rate(container_network_receive_errors_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "{{service}} rx errors",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (service) (rate(container_network_transmit_errors_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "{{service}} tx errors",
-          "range": true,
-          "instant": false,
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "pps",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "fixed", "fixedColor": "semi-dark-red" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
-        }
-      }
-    },
-
-    {
-      "id": 19,
-      "type": "timeseries",
-      "title": "Container Packet Drops",
-      "description": "Dropped packets indicate buffer overflow or congestion. Non-zero values need investigation.",
-      "gridPos": { "x": 12, "y": 45, "w": 12, "h": 7 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (service) (rate(container_network_receive_packets_dropped_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "{{service}} rx drops",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (service) (rate(container_network_transmit_packets_dropped_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "{{service}} tx drops",
-          "range": true,
-          "instant": false,
-          "refId": "B"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "pps",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 10,
-            "gradientMode": "none",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "fixed", "fixedColor": "semi-dark-orange" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
-        }
-      }
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "Bandwidth", "desc": true }], "cellHeight": "sm", "footer": { "show": false } }
     }
 
   ]
