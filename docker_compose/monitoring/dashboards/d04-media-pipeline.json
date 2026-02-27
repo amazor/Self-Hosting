@@ -1,0 +1,400 @@
+{
+  "uid": "homelab-media-pipeline",
+  "title": "Media Pipeline",
+  "description": "Media automation troubleshooting. Is the pipeline flowing? Why can\u2019t I reach Sonarr? Why is Plex buffering? Where is the bottleneck?",
+  "tags": ["homelab", "media", "pipeline"],
+  "timezone": "browser",
+  "editable": true,
+  "graphTooltip": 1,
+  "time": { "from": "now-3h", "to": "now" },
+  "timepicker": {},
+  "refresh": "30s",
+  "schemaVersion": 39,
+  "fiscalYearStartMonth": 0,
+  "liveNow": false,
+  "weekStart": "",
+  "links": [
+    { "title": "\u2190 Overview", "type": "link", "url": "/d/homelab-overview",
+      "tooltip": "Back to fleet triage", "icon": "arrow-left",
+      "targetBlank": false, "includeVars": true, "keepTime": true },
+    { "title": "Container Workbench", "type": "link", "url": "/d/homelab-container-workbench",
+      "tooltip": "Per-container CPU, memory, network detail", "icon": "external link",
+      "targetBlank": false, "includeVars": true, "keepTime": true },
+    { "title": "Network", "type": "link", "url": "/d/homelab-network",
+      "tooltip": "Connectivity probes and bandwidth", "icon": "external link",
+      "targetBlank": false, "includeVars": true, "keepTime": true },
+    { "title": "Log Workbench", "type": "link", "url": "/d/homelab-log-workbench",
+      "tooltip": "Log exploration and error triage", "icon": "external link",
+      "targetBlank": false, "includeVars": true, "keepTime": true }
+  ],
+  "annotations": { "list": [
+    { "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+      "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)",
+      "name": "Annotations & Alerts", "type": "dashboard" }
+  ]},
+  "templating": { "list": [
+    { "name": "datasource_prometheus", "type": "datasource", "query": "prometheus",
+      "current": {}, "hide": 0, "includeAll": false, "multi": false,
+      "label": "Prometheus", "refresh": 1 },
+    { "name": "datasource_loki", "type": "datasource", "query": "loki",
+      "current": {}, "hide": 0, "includeAll": false, "multi": false,
+      "label": "Loki", "refresh": 1 },
+    { "name": "node", "type": "query",
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "query": "label_values(up, node)",
+      "current": {}, "hide": 0, "includeAll": true, "multi": true,
+      "allValue": ".+", "refresh": 1, "sort": 1, "label": "Node" },
+    { "name": "vm_role", "type": "query",
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "query": "label_values(up{node=~\"$node\"}, vm_role)",
+      "current": {}, "hide": 0, "includeAll": true, "multi": true,
+      "allValue": ".+", "refresh": 1, "sort": 1, "label": "VM Role" },
+    { "name": "host", "type": "query",
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
+      "current": {}, "hide": 0, "includeAll": true, "multi": true,
+      "allValue": ".+", "refresh": 1, "sort": 1, "label": "Host" },
+    { "name": "env", "type": "custom",
+      "current": { "text": "prod", "value": "prod", "selected": true },
+      "hide": 2, "includeAll": false, "multi": false, "query": "prod",
+      "options": [{ "text": "prod", "value": "prod", "selected": true }] },
+    { "name": "media_services", "type": "custom",
+      "current": { "text": "sonarr|radarr|prowlarr|qbittorrent|vpn|flaresolverr|plex|jellyfin|bazarr|sabnzbd|recyclarr|buildarr", "value": "sonarr|radarr|prowlarr|qbittorrent|vpn|flaresolverr|plex|jellyfin|bazarr|sabnzbd|recyclarr|buildarr", "selected": true },
+      "hide": 2, "includeAll": false, "multi": false,
+      "query": "sonarr|radarr|prowlarr|qbittorrent|vpn|flaresolverr|plex|jellyfin|bazarr|sabnzbd|recyclarr|buildarr",
+      "options": [{ "text": "sonarr|radarr|prowlarr|qbittorrent|vpn|flaresolverr|plex|jellyfin|bazarr|sabnzbd|recyclarr|buildarr", "value": "sonarr|radarr|prowlarr|qbittorrent|vpn|flaresolverr|plex|jellyfin|bazarr|sabnzbd|recyclarr|buildarr", "selected": true }],
+      "label": "Media Services Regex" }
+  ]},
+
+  "panels": [
+
+    { "type": "row", "title": "Media Services", "collapsed": false,
+      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "id": 300, "panels": [] },
+
+    {
+      "id": 1, "type": "stat", "title": "Services Running",
+      "description": "Media containers detected by cAdvisor. Auto-populates when the media stack is deployed.",
+      "gridPos": { "x": 0, "y": 1, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "count(container_last_seen{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"} > (time() - 120)) or on() vector(0)",
+        "instant": true, "range": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "0",
+        "color": { "mode": "thresholds" },
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "red", "value": null }, { "color": "yellow", "value": 1 },
+          { "color": "green", "value": 5 }
+        ]}}, "overrides": [] },
+      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto", "textMode": "value", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center" }
+    },
+
+    {
+      "id": 2, "type": "stat", "title": "Health Issues",
+      "description": "Media containers with failing Docker health checks.",
+      "gridPos": { "x": 6, "y": 1, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "count(container_health_state{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"} == 0 or container_health_state{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"} >= 2) or on() vector(0)",
+        "instant": true, "range": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "0",
+        "color": { "mode": "thresholds" },
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "green", "value": null }, { "color": "red", "value": 1 }
+        ]}}, "overrides": [] },
+      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto", "textMode": "value", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center" }
+    },
+
+    {
+      "id": 3, "type": "stat", "title": "VPN Traffic",
+      "description": "Current throughput on the VPN container (Gluetun). This IS the media stack\u2019s internet egress \u2014 all torrent traffic routes through VPN. Zero when nothing is downloading.",
+      "gridPos": { "x": 12, "y": 1, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "sum(rate(container_network_receive_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+        "instant": true, "range": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "Bps", "decimals": 0,
+        "noValue": "VPN not deployed",
+        "color": { "mode": "thresholds" },
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "blue", "value": null }
+        ]}}, "overrides": [] },
+      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto", "textMode": "value", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center" }
+    },
+
+    {
+      "id": 4, "type": "stat", "title": "Recent Restarts",
+      "description": "Media containers that restarted within the time range. Frequent restarts = crash loop.",
+      "gridPos": { "x": 18, "y": 1, "w": 6, "h": 3 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "count(container_start_time_seconds{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"} > (time() - $__range_s)) or on() vector(0)",
+        "instant": true, "range": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "noValue": "0",
+        "color": { "mode": "thresholds" },
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "green", "value": null }, { "color": "orange", "value": 1 },
+          { "color": "red", "value": 3 }
+        ]}}, "overrides": [] },
+      "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto", "textMode": "value", "wideLayout": true,
+        "colorMode": "background", "graphMode": "none", "justifyMode": "center" }
+    },
+
+    {
+      "id": 10, "type": "table", "title": "Media Service Status",
+      "description": "All media containers with resources and uptime. Click a service to investigate on the Container Workbench or view its logs. If a service is missing from this table, it\u2019s not running.",
+      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "sum by (host, service) (rate(container_cpu_usage_seconds_total{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "format": "table", "instant": true, "range": false, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "sum by (host, service) (container_memory_working_set_bytes{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"})",
+          "format": "table", "instant": true, "range": false, "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "time() - max by (host, service) (container_start_time_seconds{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"})",
+          "format": "table", "instant": true, "range": false, "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "sum by (host, service) (rate(container_network_receive_bytes_total{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "format": "table", "instant": true, "range": false, "refId": "D" }
+      ],
+      "transformations": [
+        { "id": "merge", "options": {} },
+        { "id": "organize", "options": {
+          "excludeByName": { "Time": true },
+          "indexByName": { "host": 0, "service": 1, "Value #A": 2, "Value #B": 3, "Value #C": 4, "Value #D": 5 },
+          "renameByName": { "host": "Host", "service": "Service", "Value #A": "CPU %", "Value #B": "Memory", "Value #C": "Uptime", "Value #D": "Network" }
+        }}
+      ],
+      "fieldConfig": { "defaults": {}, "overrides": [
+        { "matcher": { "id": "byName", "options": "CPU %" }, "properties": [
+          { "id": "unit", "value": "percentunit" }, { "id": "decimals", "value": 2 },
+          { "id": "color", "value": { "mode": "continuous-GrYlRd" } },
+          { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } }
+        ]},
+        { "matcher": { "id": "byName", "options": "Memory" }, "properties": [
+          { "id": "unit", "value": "bytes" }, { "id": "decimals", "value": 0 }
+        ]},
+        { "matcher": { "id": "byName", "options": "Uptime" }, "properties": [
+          { "id": "unit", "value": "s" }, { "id": "decimals", "value": 0 }
+        ]},
+        { "matcher": { "id": "byName", "options": "Network" }, "properties": [
+          { "id": "unit", "value": "Bps" }, { "id": "decimals", "value": 0 }
+        ]},
+        { "matcher": { "id": "byName", "options": "Service" }, "properties": [
+          { "id": "links", "value": [
+            { "title": "Container detail \u2192", "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}", "targetBlank": false },
+            { "title": "View Logs \u2192", "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}", "targetBlank": true }
+          ]}
+        ]}
+      ]},
+      "options": { "showHeader": true, "sortBy": [{ "displayName": "CPU %", "desc": true }], "cellHeight": "sm", "footer": { "show": false } }
+    },
+
+    { "type": "row", "title": "Bottleneck Investigation", "collapsed": false,
+      "gridPos": { "x": 0, "y": 11, "w": 24, "h": 1 }, "id": 301, "panels": [] },
+
+    {
+      "id": 11, "type": "timeseries", "title": "CPU per Service",
+      "description": "If Plex/Jellyfin CPU is pinned \u2192 transcoding bottleneck. If Sonarr/Radarr CPU spikes \u2192 likely processing a large import or search.",
+      "gridPos": { "x": 0, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "sum by (service) (rate(container_cpu_usage_seconds_total{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+        "legendFormat": "{{service}}", "range": true, "instant": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20,
+          "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
+          "stacking": { "mode": "none" } },
+        "color": { "mode": "palette-classic-by-name" },
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+        "links": [{ "title": "View Logs \u2192",
+          "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.service}",
+          "targetBlank": true }]
+      }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }}
+    },
+
+    {
+      "id": 12, "type": "timeseries", "title": "Memory per Service",
+      "description": "Sonarr/Radarr memory leaks are common (especially with large libraries). Watch for upward trends. Plex transcoding allocates temporary buffers that spike during playback.",
+      "gridPos": { "x": 8, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "sum by (service) (container_memory_working_set_bytes{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"})",
+        "legendFormat": "{{service}}", "range": true, "instant": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "bytes", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20,
+          "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
+          "stacking": { "mode": "none" } },
+        "color": { "mode": "palette-classic-by-name" },
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+        "links": [{ "title": "View Logs \u2192",
+          "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.service}",
+          "targetBlank": true }]
+      }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }}
+    },
+
+    {
+      "id": 13, "type": "timeseries", "title": "Network per Service",
+      "description": "VPN container traffic = actual internet download/upload speed (all torrent traffic routes through it). Plex/Jellyfin traffic = streaming bandwidth to clients. High Sonarr/Radarr network = API calls to indexers.",
+      "gridPos": { "x": 16, "y": 12, "w": 8, "h": 8 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "sum by (service) (rate(container_network_receive_bytes_total{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+        "legendFormat": "{{service}}", "range": true, "instant": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "Bps", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20,
+          "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
+          "stacking": { "mode": "normal" } },
+        "color": { "mode": "palette-classic-by-name" },
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
+        "links": [{ "title": "Container detail \u2192",
+          "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__field.labels.service}&${host:queryparam}",
+          "targetBlank": false }]
+      }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }}
+    },
+
+    { "type": "row", "title": "Disk I/O & Storage", "collapsed": false,
+      "gridPos": { "x": 0, "y": 20, "w": 24, "h": 1 }, "id": 302, "panels": [] },
+
+    {
+      "id": 14, "type": "timeseries", "title": "Disk Write Rate",
+      "description": "Which media service is writing to disk. High write rates from qBittorrent = actively downloading. High from Sonarr/Radarr = importing/moving files. Sustained high writes from Plex = thumbnail generation or transcoding temp files.",
+      "gridPos": { "x": 0, "y": 21, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "sum by (service) (rate(container_fs_writes_bytes_total{host=~\"$host\", service=~\"${media_services}\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+        "legendFormat": "{{service}}", "range": true, "instant": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "Bps", "min": 0,
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20,
+          "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
+          "stacking": { "mode": "none" } },
+        "color": { "mode": "palette-classic-by-name" },
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+      }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }}
+    },
+
+    {
+      "id": 15, "type": "timeseries", "title": "NAS / Media Storage",
+      "description": "Available space on NFS-mounted media volumes. Requires node_exporter on the media VM. A full NAS silently stops completed downloads from being imported. Red zone (<10% free) = immediate action needed.",
+      "gridPos": { "x": 12, "y": 21, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "editorMode": "code",
+        "expr": "node_filesystem_avail_bytes{host=~\"$host\", fstype=~\"nfs|nfs4\", mountpoint=~\"/mnt/media.*|/data.*\"} / node_filesystem_size_bytes{host=~\"$host\", fstype=~\"nfs|nfs4\", mountpoint=~\"/mnt/media.*|/data.*\"}",
+        "legendFormat": "{{mountpoint}}", "range": true, "instant": false, "refId": "A" }],
+      "fieldConfig": { "defaults": { "unit": "percentunit", "min": 0, "max": 1,
+        "noValue": "NAS not mounted (requires node_exporter on media VM)",
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15,
+          "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
+          "stacking": { "mode": "none" } },
+        "color": { "mode": "thresholds" },
+        "thresholds": { "mode": "absolute", "steps": [
+          { "color": "red", "value": null }, { "color": "yellow", "value": 0.1 },
+          { "color": "green", "value": 0.2 }
+        ]}
+      }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }}
+    },
+
+    { "type": "row", "title": "Automation Pipeline \u2014 Requires exportarr", "collapsed": false,
+      "gridPos": { "x": 0, "y": 28, "w": 24, "h": 1 }, "id": 303, "panels": [] },
+
+    {
+      "id": 16, "type": "timeseries", "title": "Queue Depth",
+      "description": "Items queued in Sonarr/Radarr. A healthy pipeline shows brief spikes (new content added) then returns to 0. A flat non-zero line = stalled downloads.\n\nRequires: exportarr (ghcr.io/onedr0p/exportarr) deployed per arr service.",
+      "gridPos": { "x": 0, "y": 29, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "sonarr_queue_total{host=~\"$host\"}",
+          "legendFormat": "Sonarr", "range": true, "instant": false, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "radarr_queue_total{host=~\"$host\"}",
+          "legendFormat": "Radarr", "range": true, "instant": false, "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "min": 0,
+        "noValue": "Install exportarr",
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15,
+          "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
+          "stacking": { "mode": "none" } },
+        "color": { "mode": "palette-classic-by-name" },
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+      }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull", "max"] }}
+    },
+
+    {
+      "id": 17, "type": "timeseries", "title": "Download Speed",
+      "description": "qBittorrent download/upload speed. Zero speed + non-empty queue = stalled. Check VPN container health and network.\n\nRequires: qbittorrent-exporter (esanchezm/prometheus-qbittorrent-exporter).",
+      "gridPos": { "x": 12, "y": 29, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "targets": [
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "qbittorrent_global_download_speed_bytes{host=~\"$host\"}",
+          "legendFormat": "Download", "range": true, "instant": false, "refId": "A" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "qbittorrent_global_upload_speed_bytes{host=~\"$host\"}",
+          "legendFormat": "Upload", "range": true, "instant": false, "refId": "B" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "Bps", "min": 0,
+        "noValue": "Install qbittorrent-exporter",
+        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15,
+          "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
+          "stacking": { "mode": "none" } },
+        "color": { "mode": "palette-classic" },
+        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+      }, "overrides": [
+        { "matcher": { "id": "byName", "options": "Download" }, "properties": [
+          { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } }]},
+        { "matcher": { "id": "byName", "options": "Upload" }, "properties": [
+          { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }]}
+      ]},
+      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
+        "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["mean", "max"] }}
+    },
+
+    {
+      "id": 18, "type": "text", "title": "",
+      "gridPos": { "x": 0, "y": 36, "w": 24, "h": 4 },
+      "options": {
+        "mode": "markdown",
+        "content": "### Setup Guide for Full Pipeline Visibility\n\nThe panels above auto-populate when you install the matching exporter. Add these to your `docker_compose/media/` stack:\n\n| Exporter | What it unlocks | Image |\n|----------|----------------|-------|\n| **exportarr** (one per arr) | Queue depth, library size, wanted/missing, indexer health | `ghcr.io/onedr0p/exportarr:latest` |\n| **qbittorrent-exporter** | Download/upload speed, torrent counts, stalled detection | `esanchezm/prometheus-qbittorrent-exporter` |\n| **Plex/Jellyfin metrics** | Active sessions, transcoding vs direct play, buffer health | Built-in `/metrics` endpoint or jellystat |\n\nAdd scrape targets to Prometheus config after deploying. See `docker_compose/monitoring/config/prometheus/prometheus.yml`."
+      }
+    }
+
+  ]
+}
