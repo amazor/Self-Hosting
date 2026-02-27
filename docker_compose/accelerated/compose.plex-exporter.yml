@@ -1,0 +1,22 @@
+# Plex Prometheus exporter — optional overlay for accelerated stack
+#
+# Exposes Plex metrics (library, playback, sessions) for Prometheus.
+# Enabled when ENABLE_OBSERVABILITY=1 (same as observability sidecars).
+# Requires PLEX_TOKEN in .env (admin token; see Plex docs for finding it).
+#
+# Service: prom-plex-exporter (port 9000). Joins accelerated_internal to reach
+# Plex at http://plex:32400. Monitoring VM scrapes this via PLEX_EXPORTER_TARGETS.
+# Ref: https://github.com/jsclayton/prometheus-plex-exporter
+
+services:
+  prom-plex-exporter:
+    image: ghcr.io/jsclayton/prometheus-plex-exporter:${PLEX_EXPORTER_TAG:-latest}
+    container_name: prom-plex-exporter
+    environment:
+      - PLEX_SERVER=${PLEX_SERVER:-http://plex:32400}
+      - PLEX_TOKEN=${PLEX_TOKEN:-}
+    ports:
+      - "9000:9000/tcp"
+    restart: unless-stopped
+    networks:
+      - accelerated_internal

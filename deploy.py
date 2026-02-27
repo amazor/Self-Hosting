@@ -65,6 +65,12 @@ REQUIRED_VARS: dict[str, list[str]] = {
     "monitoring": [
         "GRAFANA_ADMIN_PASSWORD",
     ],
+    "accelerated": [
+        "MEDIA_LIBRARY_ROOT",
+        "IMMICH_UPLOAD_ROOT",
+        "IMMICH_DB_ROOT",
+        "DB_PASSWORD",
+    ],
 }
 
 
@@ -200,6 +206,10 @@ def _build_compose_files(stack: str, sdir: Path) -> list[str]:
     obs_file = sdir / "compose.observability.yml"
     if env.get("ENABLE_OBSERVABILITY", "1") == "1" and obs_file.exists():
         files += ["-f", str(obs_file)]
+    if stack == "accelerated" and env.get("ENABLE_OBSERVABILITY", "1") == "1":
+        plex_exporter_file = sdir / "compose.plex-exporter.yml"
+        if plex_exporter_file.exists():
+            files += ["-f", str(plex_exporter_file)]
 
     return files
 
@@ -266,6 +276,19 @@ core() {
 }
 """
 
+_ACCELERATED_HELPER = """\
+accelerated() {
+  local dir="%s"
+  local compose_files="-f $dir/compose.yml"
+  if [[ -f "$dir/.env" ]]; then
+    source "$dir/.env" 2>/dev/null
+    [[ "${ENABLE_OBSERVABILITY:-1}" = "1" ]] && [[ -f "$dir/compose.observability.yml" ]] && compose_files="$compose_files -f $dir/compose.observability.yml"
+    [[ "${ENABLE_OBSERVABILITY:-1}" = "1" ]] && [[ -f "$dir/compose.plex-exporter.yml" ]] && compose_files="$compose_files -f $dir/compose.plex-exporter.yml"
+  fi
+  (cd "$dir" && docker compose $compose_files "$@")
+}
+"""
+
 _MEDIA_HELPER = """\
 media() {
   local dir="%s"
@@ -323,6 +346,8 @@ def _write_stack_functions(
             lines.append(_CORE_HELPER % helper_dir)
         elif name == "media":
             lines.append(_MEDIA_HELPER % helper_dir)
+        elif name == "accelerated":
+            lines.append(_ACCELERATED_HELPER % helper_dir)
         else:
             lines.append(
                 f'{name}() {{\n'
@@ -497,6 +522,9 @@ def _print_deploy_summary(stacks: list[str]) -> None:
                 (enabled if env.get(var, "0") == "1" else disabled).append(
                     label
                 )
+        elif stack == "accelerated":
+            if env.get("ENABLE_OBSERVABILITY", "1") == "1":
+                enabled.append("Plex exporter")
         elif stack == "media":
             overlay_labels = {
                 "ENABLE_BUILDARR_RECYCLARR": "Buildarr+Recyclarr",

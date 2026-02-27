@@ -77,6 +77,7 @@ def _update_env_example(
     Returns:
         List of variable names that were actually updated.
     """
+    present: set[str] = set()
     lines = path.read_text().splitlines()
     output: list[str] = []
     updated: list[str] = []
@@ -90,6 +91,7 @@ def _update_env_example(
 
         if stripped and not stripped.startswith("#") and "=" in stripped:
             key = stripped.split("=", 1)[0].strip()
+            present.add(key)
             if key in updates:
                 new_val, note = updates[key]
                 output.append(f"{_PREFILL_MARKER}: {note})")
@@ -98,6 +100,13 @@ def _update_env_example(
                 continue
 
         output.append(line)
+
+    # Append any new variables that did not already exist in the file.
+    for key, (new_val, note) in updates.items():
+        if key not in present and key not in updated:
+            output.append(f"{_PREFILL_MARKER}: {note})")
+            output.append(f"{key}={new_val}")
+            updated.append(key)
 
     path.write_text("\n".join(output) + "\n")
     return updated
@@ -116,6 +125,11 @@ def main() -> None:
     uid = os.getuid()
     gid = os.getgid()
     docker_gid = _detect_docker_gid()
+    proxmox_node = None
+    proxmox_node_path = Path("/etc/homelab/proxmox-node")
+    if proxmox_node_path.is_file():
+        proxmox_node = proxmox_node_path.read_text().strip() or None
+    hostname = socket.gethostname()
 
     # -- Core stack --
     core_example = REPO_ROOT / "docker_compose" / "core" / ".env.example"
@@ -142,6 +156,17 @@ def main() -> None:
                 str(docker_gid),
                 f"host docker group GID ({docker_gid})",
             )
+        # VM identity
+        core_updates["VM_HOSTNAME"] = (
+            hostname,
+            f"detected hostname ({hostname}); override if needed",
+        )
+        core_updates["VM_ROLE"] = ("core", "stack role (core)")
+        if proxmox_node:
+            core_updates["PROXMOX_NODE"] = (
+                proxmox_node,
+                f"Proxmox node name ({proxmox_node}); override if needed",
+            )
 
         updated = _update_env_example(core_example, core_updates)
         if updated:
@@ -162,6 +187,17 @@ def main() -> None:
             media_updates["DOCKER_GID"] = (
                 str(docker_gid),
                 f"host docker group GID ({docker_gid})",
+            )
+        # VM identity
+        media_updates["VM_HOSTNAME"] = (
+            hostname,
+            f"detected hostname ({hostname}); override if needed",
+        )
+        media_updates["VM_ROLE"] = ("media", "stack role (media)")
+        if proxmox_node:
+            media_updates["PROXMOX_NODE"] = (
+                proxmox_node,
+                f"Proxmox node name ({proxmox_node}); override if needed",
             )
 
         updated = _update_env_example(media_example, media_updates)
@@ -187,6 +223,17 @@ def main() -> None:
                 str(docker_gid),
                 f"host docker group GID ({docker_gid})",
             )
+        # VM identity
+        mon_updates["VM_HOSTNAME"] = (
+            hostname,
+            f"detected hostname ({hostname}); override if needed",
+        )
+        mon_updates["VM_ROLE"] = ("monitoring", "stack role (monitoring)")
+        if proxmox_node:
+            mon_updates["PROXMOX_NODE"] = (
+                proxmox_node,
+                f"Proxmox node name ({proxmox_node}); override if needed",
+            )
 
         updated = _update_env_example(mon_example, mon_updates)
         if updated:
@@ -197,6 +244,40 @@ def main() -> None:
             log.info("Monitoring .env.example: nothing to update")
     else:
         log.warning(f"Monitoring .env.example not found: {mon_example}")
+
+    # -- Accelerated stack --
+    acc_example = REPO_ROOT / "docker_compose" / "accelerated" / ".env.example"
+    if acc_example.is_file():
+        acc_updates: dict[str, tuple[str, str]] = {}
+
+        acc_updates["PUID"] = (str(uid), f"current user UID ({uid})")
+        acc_updates["PGID"] = (str(gid), f"current user GID ({gid})")
+        if docker_gid is not None:
+            acc_updates["DOCKER_GID"] = (
+                str(docker_gid),
+                f"host docker group GID ({docker_gid})",
+            )
+        # VM identity
+        acc_updates["VM_HOSTNAME"] = (
+            hostname,
+            f"detected hostname ({hostname}); override if needed",
+        )
+        acc_updates["VM_ROLE"] = ("accelerated", "stack role (accelerated)")
+        if proxmox_node:
+            acc_updates["PROXMOX_NODE"] = (
+                proxmox_node,
+                f"Proxmox node name ({proxmox_node}); override if needed",
+            )
+
+        updated = _update_env_example(acc_example, acc_updates)
+        if updated:
+            log.info(
+                f"Accelerated .env.example: pre-filled {', '.join(updated)}"
+            )
+        else:
+            log.info("Accelerated .env.example: nothing to update")
+    else:
+        log.warning(f"Accelerated .env.example not found: {acc_example}")
 
     log.info("")
     log.info(
@@ -210,6 +291,10 @@ def main() -> None:
     log.info(
         "  cp docker_compose/monitoring/.env.example "
         "docker_compose/monitoring/.env"
+    )
+    log.info(
+        "  cp docker_compose/accelerated/.env.example "
+        "docker_compose/accelerated/.env"
     )
 
 

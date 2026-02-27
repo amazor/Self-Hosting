@@ -320,6 +320,13 @@ scrape_configs:
       - action: labeldrop
         regex: 'id|container_label_.*'
 
+  # --- Plex exporter (accelerated VM; port 9000) ---
+  # Targets from PLEX_EXPORTER_TARGETS in .env (hostname:ip). Re-run bootstrap to regenerate.
+  - job_name: "plex-exporter"
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/scrape-targets-plex-exporter.json"]
+        refresh_interval: 5m
+
   # --- Blackbox exporter self-scrape (exporter health metrics) ---
   - job_name: "blackbox-exporter"
     static_configs:
@@ -486,9 +493,10 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
     Always regenerates (not skip-if-exists) so the file reflects the current
     .env on every bootstrap run.  Empty SCRAPE_TARGETS = empty JSON arrays.
 
-    Writes two files so each Prometheus job only scrapes the correct exporter:
+    Writes per-job file_sd files so each Prometheus job only scrapes the correct exporter:
       - scrape-targets-node-exporter.json  (port 9100)
       - scrape-targets-cadvisor.json       (port 8081)
+      - scrape-targets-plex-exporter.json  (port 9000, from PLEX_EXPORTER_TARGETS)
 
     A single shared file caused the node-exporter job to also scrape cAdvisor
     endpoints (and vice-versa), doubling container metrics on remote VMs.
@@ -533,10 +541,41 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
                 "labels": {**base_labels, "service": "cadvisor"},
             })
 
+    # Plex exporter (port 9000) — optional; only on accelerated (or wherever Plex exporter runs).
+    plex_raw = env.get("PLEX_EXPORTER_TARGETS", "").strip()
+    plex_entries: list[dict] = []
+    if plex_raw:
+        for pair in plex_raw.split(","):
+            pair = pair.strip()
+            if ":" not in pair:
+                continue
+            parts = pair.split(":")
+            if len(parts) < 2:
+                continue
+            name, ip = parts[0].strip(), parts[1].strip()
+            if not name or not ip:
+                continue
+            vm_role = name
+            node = default_node
+            base_labels = {
+                "instance": name,
+                "host": name,
+                "vm_role": vm_role,
+                "node": node,
+                "env": "prod",
+                "service": "plex-exporter",
+            }
+            plex_entries.append({
+                "targets": [f"{ip}:9000"],
+                "labels": base_labels,
+            })
+
     ne_file = targets_dir / "scrape-targets-node-exporter.json"
     ca_file = targets_dir / "scrape-targets-cadvisor.json"
+    plex_file = targets_dir / "scrape-targets-plex-exporter.json"
     ne_file.write_text(json.dumps(ne_entries, indent=2) + "\n")
     ca_file.write_text(json.dumps(ca_entries, indent=2) + "\n")
+    plex_file.write_text(json.dumps(plex_entries, indent=2) + "\n")
 
     bb_file = targets_dir / "blackbox-targets.json"
     if not bb_file.is_file():
@@ -559,6 +598,8 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
         log.info(f"Generated scrape targets for {count} remote VM(s): {targets_dir}")
     else:
         log.info(f"No remote scrape targets (SCRAPE_TARGETS empty): {targets_dir}")
+    if plex_entries:
+        log.info(f"Plex exporter targets: {len(plex_entries)} (port 9000)")
 
 
 def ensure_grafana_provisioning(config_base: Path) -> None:

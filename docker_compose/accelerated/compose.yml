@@ -1,0 +1,153 @@
+# Accelerated VM — Plex + Immich (Chapter 2D / 3D)
+#
+# Services:
+#   - plex               — Media server reading /mnt/media/library (from Media VM)
+#   - immich-server      — Immich API + backend
+#   - immich-microservices
+#   - immich-machine-learning
+#   - immich-postgres    — Postgres DB for Immich (local disk, no network shares)
+#   - immich-redis       — Redis for Immich
+#
+# Storage:
+#   - MEDIA_LIBRARY_ROOT → /data/library  (Plex, read-only)
+#   - IMMICH_UPLOAD_ROOT → /photos/library (Immich originals/derived)
+#   - IMMICH_DB_ROOT     → /var/lib/postgresql/data (local disk, not NFS)
+#
+# GPU:
+#   - Intel Quick Sync / VAAPI via /dev/dri
+#
+# Network:
+#   - Single internal bridge: accelerated_internal
+#   - Host ports: Plex (32400), Immich web/API (2283)
+
+services:
+  # --- Plex — Media server (library-only view) ---
+  plex:
+    image: lscr.io/linuxserver/plex:${PLEX_TAG:-latest}
+    container_name: plex
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+      # Optional: first-run claim token from plex.tv; leave empty after initial registration.
+      - PLEX_CLAIM=${PLEX_CLAIM:-}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/plex:/config
+      # Read-only view of final media library from Media VM.
+      - ${MEDIA_LIBRARY_ROOT:-/mnt/media/library}:/data/library:ro
+    devices:
+      # Intel Quick Sync / VAAPI
+      - /dev/dri:/dev/dri
+    ports:
+      - "32400:32400"
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
+  # --- Immich database (Postgres) ---
+  immich-postgres:
+    image: postgres:16-alpine
+    container_name: immich-postgres
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
+      - POSTGRES_DB=immich
+    volumes:
+      - ${IMMICH_DB_ROOT:-./config/immich-postgres}:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
+  # --- Immich Redis ---
+  immich-redis:
+    image: redis:7-alpine
+    container_name: immich-redis
+    command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
+  # --- Immich server (API + backend) ---
+  immich-server:
+    image: ghcr.io/immich-app/immich-server:${IMMICH_VERSION:-v2}
+    container_name: immich-server
+    depends_on:
+      immich-postgres:
+        condition: service_healthy
+      immich-redis:
+        condition: service_started
+    environment:
+      - DB_HOST=immich-postgres
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_DATABASE_NAME=immich
+      # Upload location is backed by IMMICH_UPLOAD_ROOT → /photos/library.
+      - UPLOAD_LOCATION=/photos/library
+      - REDIS_HOSTNAME=immich-redis
+      - REDIS_PORT=6379
+      - NODE_ENV=production
+      - IMMICH_LOG_LEVEL=info
+    volumes:
+      - ${IMMICH_UPLOAD_ROOT:-/mnt/photos/library}:/photos/library
+    devices:
+      # Video transcoding via Intel Quick Sync / VAAPI
+      - /dev/dri:/dev/dri
+    ports:
+      # Immich web/API; Core VM reverse-proxies this.
+      - "2283:2283"
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
+  # --- Immich microservices ---
+  immich-microservices:
+    image: ghcr.io/immich-app/immich-microservices:${IMMICH_VERSION:-v2}
+    container_name: immich-microservices
+    depends_on:
+      immich-postgres:
+        condition: service_healthy
+      immich-redis:
+        condition: service_started
+    environment:
+      - DB_HOST=immich-postgres
+      - DB_PORT=5432
+      - DB_USERNAME=postgres
+      - DB_PASSWORD=${DB_PASSWORD:-postgres}
+      - DB_DATABASE_NAME=immich
+      - UPLOAD_LOCATION=/photos/library
+      - REDIS_HOSTNAME=immich-redis
+      - REDIS_PORT=6379
+      - NODE_ENV=production
+      - IMMICH_LOG_LEVEL=info
+    volumes:
+      - ${IMMICH_UPLOAD_ROOT:-/mnt/photos/library}:/photos/library
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
+  # --- Immich machine learning (CPU by default) ---
+  immich-machine-learning:
+    image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v2}
+    container_name: immich-machine-learning
+    depends_on:
+      immich-redis:
+        condition: service_started
+    environment:
+      - REDIS_HOSTNAME=immich-redis
+      - REDIS_PORT=6379
+      - NODE_ENV=production
+      - IMMICH_LOG_LEVEL=info
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
+networks:
+  accelerated_internal:
+    driver: bridge
+
