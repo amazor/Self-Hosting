@@ -181,6 +181,7 @@ _MEDIA_OVERLAYS: dict[str, str] = {
     "ENABLE_SABNZBD": "compose.sabnzbd.yml",
     "ENABLE_BAZARR": "compose.bazarr.yml",
     "ENABLE_NTFY": "compose.ntfy.yml",
+    "ENABLE_EXPORTERS": "compose.exporters.yml",
 }
 
 
@@ -286,6 +287,7 @@ media() {
     [[ "${ENABLE_SABNZBD:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.sabnzbd.yml"
     [[ "${ENABLE_BAZARR:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.bazarr.yml"
     [[ "${ENABLE_NTFY:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.ntfy.yml"
+    [[ "${ENABLE_EXPORTERS:-1}" = "1" ]] && [[ -f "$dir/compose.exporters.yml" ]] && compose_files="$compose_files -f $dir/compose.exporters.yml"
     [[ "${ENABLE_OBSERVABILITY:-1}" = "1" ]] && [[ -f "$dir/compose.observability.yml" ]] && compose_files="$compose_files -f $dir/compose.observability.yml"
   fi
   (cd "$dir" && docker compose $compose_files "$@")
@@ -502,6 +504,7 @@ def _print_deploy_summary(stacks: list[str]) -> None:
                 "ENABLE_SABNZBD": "SABnzbd",
                 "ENABLE_BAZARR": "Bazarr",
                 "ENABLE_NTFY": "ntfy",
+                "ENABLE_EXPORTERS": "Exporters (scraparr+qbt)",
             }
             for var, label in overlay_labels.items():
                 (enabled if env.get(var, "0") == "1" else disabled).append(

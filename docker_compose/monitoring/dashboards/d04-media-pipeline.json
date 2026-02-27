@@ -325,26 +325,34 @@
         "legend": { "displayMode": "table", "placement": "bottom", "showLegend": true, "calcs": ["lastNotNull"] }}
     },
 
-    { "type": "row", "title": "Automation Pipeline \u2014 Requires exportarr", "collapsed": false,
+    { "type": "row", "title": "Automation Pipeline", "collapsed": false,
       "gridPos": { "x": 0, "y": 28, "w": 24, "h": 1 }, "id": 303, "panels": [] },
 
     {
       "id": 16, "type": "timeseries", "title": "Queue Depth",
-      "description": "Items queued in Sonarr/Radarr. A healthy pipeline shows brief spikes (new content added) then returns to 0. A flat non-zero line = stalled downloads.\n\nRequires: exportarr (ghcr.io/onedr0p/exportarr) deployed per arr service.",
+      "description": "Items queued in Sonarr/Radarr. A healthy pipeline shows brief spikes (new content added) then returns to 0. A flat non-zero line = stalled downloads. Queue errors/warnings indicate failed grabs that may need manual intervention.\n\nPowered by scraparr (ghcr.io/thecfu/scraparr).",
       "gridPos": { "x": 0, "y": 29, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "sonarr_queue_total{host=~\"$host\"}",
-          "legendFormat": "Sonarr", "range": true, "instant": false, "refId": "A" },
+          "expr": "sonarr_queue_count{host=~\"$host\"}",
+          "legendFormat": "Sonarr queue", "range": true, "instant": false, "refId": "A" },
         { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
-          "expr": "radarr_queue_total{host=~\"$host\"}",
-          "legendFormat": "Radarr", "range": true, "instant": false, "refId": "B" }
+          "expr": "radarr_queue_count{host=~\"$host\"}",
+          "legendFormat": "Radarr queue", "range": true, "instant": false, "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "sonarr_queue_error{host=~\"$host\"}",
+          "legendFormat": "Sonarr errors", "range": true, "instant": false, "refId": "C" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "radarr_queue_error{host=~\"$host\"}",
+          "legendFormat": "Radarr errors", "range": true, "instant": false, "refId": "D" }
       ],
       "fieldConfig": { "defaults": { "min": 0,
-        "noValue": "Install exportarr",
+        "noValue": "Deploy scraparr",
         "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15,
           "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
           "stacking": { "mode": "none" } },
@@ -357,7 +365,7 @@
 
     {
       "id": 17, "type": "timeseries", "title": "Download Speed",
-      "description": "qBittorrent download/upload speed. Zero speed + non-empty queue = stalled. Check VPN container health and network.\n\nRequires: qbittorrent-exporter (esanchezm/prometheus-qbittorrent-exporter).",
+      "description": "qBittorrent download/upload speed. Zero speed + non-empty queue = stalled. Check VPN container health and network.\n\nPowered by caseyscarborough/qbittorrent-exporter (port 17871).",
       "gridPos": { "x": 12, "y": 29, "w": 12, "h": 7 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
@@ -368,10 +376,14 @@
         { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "editorMode": "code",
           "expr": "qbittorrent_global_upload_speed_bytes{host=~\"$host\"}",
-          "legendFormat": "Upload", "range": true, "instant": false, "refId": "B" }
+          "legendFormat": "Upload", "range": true, "instant": false, "refId": "B" },
+        { "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "editorMode": "code",
+          "expr": "qbittorrent_global_torrents{host=~\"$host\"}",
+          "legendFormat": "Total torrents", "range": true, "instant": false, "refId": "C" }
       ],
       "fieldConfig": { "defaults": { "unit": "Bps", "min": 0,
-        "noValue": "Install qbittorrent-exporter",
+        "noValue": "Deploy qbittorrent-exporter",
         "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15,
           "gradientMode": "scheme", "spanNulls": false, "showPoints": "never",
           "stacking": { "mode": "none" } },
@@ -392,7 +404,7 @@
       "gridPos": { "x": 0, "y": 36, "w": 24, "h": 4 },
       "options": {
         "mode": "markdown",
-        "content": "### Setup Guide for Full Pipeline Visibility\n\nThe panels above auto-populate when you install the matching exporter. Add these to your `docker_compose/media/` stack:\n\n| Exporter | What it unlocks | Image |\n|----------|----------------|-------|\n| **exportarr** (one per arr) | Queue depth, library size, wanted/missing, indexer health | `ghcr.io/onedr0p/exportarr:latest` |\n| **qbittorrent-exporter** | Download/upload speed, torrent counts, stalled detection | `esanchezm/prometheus-qbittorrent-exporter` |\n| **Plex/Jellyfin metrics** | Active sessions, transcoding vs direct play, buffer health | Built-in `/metrics` endpoint or jellystat |\n\nAdd scrape targets to Prometheus config after deploying. See `docker_compose/monitoring/config/prometheus/prometheus.yml`."
+        "content": "### Exporter Status\n\nThe pipeline panels above are powered by these exporters. Enable via `ENABLE_EXPORTERS=1` in `.env` (default: on).\n\n| Exporter | What it unlocks | Image | Compose overlay |\n|----------|----------------|-------|-----------------|\n| **scraparr** | Queue depth, library size, missing content, indexer health, quality breakdown | `ghcr.io/thecfu/scraparr:latest` | `compose.exporters.yml` |\n| **qbittorrent-exporter** | Download/upload speed, torrent counts/states, ratios, stalled detection | `caseyscarborough/qbittorrent-exporter:latest` | `compose.exporters.yml` |\n| **prometheus-plex-exporter** (future) | Active sessions, transcoding vs direct play, library stats | `ghcr.io/jsclayton/prometheus-plex-exporter:latest` | Accelerated VM stack |\n\n**API keys:** After first deployment, retrieve from each app: Settings \u2192 General \u2192 API Key. Set `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY` in `.env` or write `config/scraparr/config.yaml`.\n\n**Tracing tip:** To trace a specific media request (\"I added a movie, why isn\u2019t it downloading?\"), use Grafana Explore with Loki: `{service=~\"sonarr|radarr|prowlarr|qbittorrent\"} |= \"Movie Title\"`. This shows the full lifecycle across all services in one query \u2014 poor man\u2019s distributed tracing with zero app changes."
       }
     }
 
