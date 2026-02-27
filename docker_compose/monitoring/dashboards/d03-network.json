@@ -102,18 +102,18 @@
     },
 
     {
-      "id": 3, "type": "stat", "title": "Avg Response Time",
-      "description": "Average probe round-trip time. High values with all probes passing means degraded but functional connectivity.",
+      "id": 3, "type": "stat", "title": "Probe Uptime",
+      "description": "Average probe success rate over the dashboard time range. 100% = every probe passed every check. Drops below 100% indicate intermittent connectivity issues even if everything is passing right now.",
       "gridPos": { "x": 16, "y": 1, "w": 8, "h": 3 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "editorMode": "code", "expr": "avg(probe_duration_seconds)",
+        "editorMode": "code", "expr": "avg(avg_over_time(probe_success{job=\"blackbox\"}[$__range]))",
         "instant": true, "range": false, "refId": "A" }],
-      "fieldConfig": { "defaults": { "unit": "s", "decimals": 0,
+      "fieldConfig": { "defaults": { "unit": "percentunit", "decimals": 1,
         "color": { "mode": "thresholds" },
         "thresholds": { "mode": "absolute", "steps": [
-          { "color": "green", "value": null }, { "color": "yellow", "value": 0.5 },
-          { "color": "red", "value": 2 }
+          { "color": "red", "value": null }, { "color": "yellow", "value": 0.95 },
+          { "color": "green", "value": 0.999 }
         ]}}, "overrides": [] },
       "options": { "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
         "orientation": "auto", "textMode": "value", "wideLayout": true,
@@ -188,7 +188,7 @@
       "gridPos": { "x": 0, "y": 11, "w": 12, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "editorMode": "code", "expr": "probe_duration_seconds",
+        "editorMode": "code", "expr": "probe_duration_seconds{job=\"blackbox\", name=~\"internet|dns|grafana|prometheus|loki\"}",
         "legendFormat": "{{name}}", "range": true, "instant": false, "refId": "A" }],
       "fieldConfig": { "defaults": { "unit": "s", "min": 0,
         "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 15,
@@ -255,11 +255,11 @@
 
     {
       "id": 13, "type": "state-timeline", "title": "Uptime History",
-      "description": "Green = reachable, red = unreachable. Shows when outages started, how long they lasted, and whether they were isolated to one probe or affected everything (total outage vs single-service failure).",
-      "gridPos": { "x": 0, "y": 19, "w": 24, "h": 5 },
+      "description": "Green = reachable, red = unreachable. If all probes go red simultaneously \u2192 total internet outage. If only one goes red \u2192 that specific service is down. Gaps indicate Prometheus scrape misses.",
+      "gridPos": { "x": 0, "y": 19, "w": 24, "h": 6 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "editorMode": "code", "expr": "probe_success",
+        "editorMode": "code", "expr": "probe_success{job=\"blackbox\", name=~\"internet|dns|grafana|prometheus|loki\"}",
         "legendFormat": "{{name}}", "range": true, "instant": false, "refId": "A" }],
       "fieldConfig": { "defaults": {
         "color": { "mode": "thresholds" },
@@ -269,18 +269,18 @@
         "mappings": [{ "type": "value", "options": {
           "0": { "text": "DOWN", "index": 0 }, "1": { "text": "UP", "index": 1 } }}]
       }, "overrides": [] },
-      "options": { "rowHeight": 0.7, "showValue": "auto", "mergeValues": true,
+      "options": { "rowHeight": 0.85, "showValue": "auto", "mergeValues": true,
         "tooltip": { "mode": "multi", "sort": "desc" },
         "legend": { "displayMode": "list", "placement": "bottom", "showLegend": false }}
     },
 
-    { "type": "row", "title": "Bandwidth", "collapsed": false,
-      "gridPos": { "x": 0, "y": 24, "w": 24, "h": 1 }, "id": 202, "panels": [] },
+    { "type": "row", "title": "Traffic", "collapsed": false,
+      "gridPos": { "x": 0, "y": 25, "w": 24, "h": 1 }, "id": 202, "panels": [] },
 
     {
-      "id": 14, "type": "timeseries", "title": "Bandwidth History",
-      "description": "Stacked bandwidth per container over time. Shows who is using the network and when. Spikes during media downloads or backups are normal; sustained high usage from unexpected containers needs investigation. Click a series for container detail.",
-      "gridPos": { "x": 0, "y": 25, "w": 14, "h": 8 },
+      "id": 14, "type": "timeseries", "title": "Container Traffic",
+      "description": "Total network traffic (rx+tx) per container, stacked. This includes both internal (container-to-container) and external (internet) traffic \u2014 cAdvisor cannot distinguish them. For media/VPN stacks, the VPN container (Gluetun) traffic is a good proxy for actual internet egress. To measure true internet-only bandwidth, add node_exporter to the host and monitor the physical NIC.",
+      "gridPos": { "x": 0, "y": 26, "w": 14, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "editorMode": "code",
@@ -301,9 +301,9 @@
     },
 
     {
-      "id": 15, "type": "table", "title": "Top Bandwidth",
-      "description": "Containers ranked by current combined bandwidth (rx+tx). The top consumer is often the bottleneck during slowdowns. Click to investigate on the Container Workbench or check logs.",
-      "gridPos": { "x": 14, "y": 25, "w": 10, "h": 8 },
+      "id": 15, "type": "table", "title": "Top Traffic",
+      "description": "Containers ranked by current combined network traffic. Includes internal + external. In a VPN media stack, the vpn container\u2019s traffic represents actual internet usage. Click to investigate.",
+      "gridPos": { "x": 14, "y": 26, "w": 10, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [{ "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
         "editorMode": "code",
