@@ -299,7 +299,17 @@ Authentik provides the SSO and identity UI. The core stack’s Caddyfile is alre
 - **If you set** `AUTHENTIK_BOOTSTRAP_EMAIL` and `AUTHENTIK_BOOTSTRAP_PASSWORD` in `.env` before first start: the `akadmin` user already exists. Log in at `https://<AUTHENTIK_FQDN>` with those credentials.
 - **If you did not:** open `https://<AUTHENTIK_FQDN>` and complete the initial setup wizard (create admin user, set password). No bootstrap env vars are required for this path.
 
-#### Create a Proxy Provider (forward auth for Caddy)
+#### Option A: Apply the generated blueprint (recommended)
+
+Bootstrap generates an Authentik blueprint from your `.env`: **AUTHENTIK_FQDN** and every `:sso` entry in **CADDY_EXTRA_SERVICES**. The file is written to `<CONFIG_ROOT>/authentik/blueprints/homelab-sso.yaml` (only when at least one SSO service is configured). To apply it:
+
+1. After bootstrap (or after changing **CADDY_EXTRA_SERVICES**), open Authentik → **Customization** → **Blueprints**.
+2. Click **Create**, then paste the contents of `homelab-sso.yaml` (or upload the file if the create form offers that). Save; Authentik will create one Proxy Provider (forward auth) and one Application per SSO FQDN.
+3. **Directory → Users** (or **Groups**) → assign **Application access** to each application for the users/groups that should have access.
+
+Re-run bootstrap whenever you add or remove SSO services in **CADDY_EXTRA_SERVICES** so the blueprint file stays in sync; then create/update the blueprint in Authentik again to refresh providers and applications.
+
+#### Option B: Create a Proxy Provider manually (GUI)
 
 **TODO (image):** Screenshot of Providers list (Applications → Providers) and/or Proxy Provider create form with Mode and Forward auth URL fields.
 
@@ -312,7 +322,7 @@ Authentik provides the SSO and identity UI. The core stack’s Caddyfile is alre
 7. **Forward auth URL** — Leave default `/outpost.goauthentik.io/auth/caddy` (must match what Caddy uses; see `.env` [AUTHENTIK_FORWARD_AUTH_URI](#environment-envexample) if you override it).
 8. **Save**.
 
-#### Create an Application and link the provider
+#### Create an Application and link the provider (GUI only; skip if you used the blueprint)
 
 **TODO (image):** Screenshot of Application create form (Name, Slug, Provider dropdown).
 

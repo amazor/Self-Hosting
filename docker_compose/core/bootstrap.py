@@ -49,6 +49,7 @@ from scripts.homelab_common import (
     try_sudo_chown,
 )
 
+import gen_authentik_blueprint
 import gen_caddyfile
 
 
@@ -145,6 +146,7 @@ def ensure_config_directories(
         config_base / "authentik" / "media",
         config_base / "authentik" / "media" / "public",
         config_base / "authentik" / "custom-templates",
+        config_base / "authentik" / "blueprints",
         config_base / "authentik" / "postgresql",
         config_base / "authentik" / "redis",
         config_base / "dnsmasq",
@@ -392,9 +394,16 @@ def print_summary(
     log.info("")
     log.info(f"Config: {config_base}")
     log.info(
-        "Caddyfile is generated from .env (set CADDY_EXTRA_SERVICES for "
-        "more services). Re-run bootstrap or deploy to apply .env changes."
+        "Caddyfile and Authentik blueprint are generated from .env "
+        "(CADDY_EXTRA_SERVICES, AUTHENTIK_FQDN). Re-run bootstrap or deploy "
+        "to apply .env changes."
     )
+    blueprint_path = config_base / "authentik" / "blueprints" / "homelab-sso.yaml"
+    if blueprint_path.is_file():
+        log.info(
+            "Authentik: paste %s via Customization → Blueprints → Create.",
+            blueprint_path.name,
+        )
     log.info("")
     log.info(
         "If Caddy or dnsmasq can't find their config, run bootstrap from "
@@ -441,6 +450,7 @@ def main(argv: list[str] | None = None) -> None:
 
     gen_caddyfile.generate(env, SCRIPT_DIR)
     validate_file_ready(config_base / "caddy" / "Caddyfile", "Caddyfile")
+    gen_authentik_blueprint.generate(env, SCRIPT_DIR)
 
     ensure_starter_dnsmasq_conf(config_base, env)
     validate_file_ready(
