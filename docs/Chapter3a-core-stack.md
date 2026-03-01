@@ -42,6 +42,8 @@ You will walk through the environment template (`.env.example`), important parts
 | **.env.example** | Template for required and optional env vars (no secrets; copy to `.env` and fill) |
 | **bootstrap.py** | Idempotent first-run: creates/validates `.env`, config dirs, Caddyfile, dnsmasq.conf, optional ddclient starter (when **ENABLE_DDNS=1**), optional `docker compose up` |
 | **gen_caddyfile.py** | Generates `config/caddy/Caddyfile` from `.env` (used by bootstrap and by [update-caddyfile.sh](#after-first-run)) |
+| **gen_authentik_blueprint.py** | Generates `config/authentik/blueprints/homelab-sso.yaml` from `.env` (proxy providers, applications, and embedded outpost assignment for each `:sso` entry in **CADDY_EXTRA_SERVICES**) |
+| **apply_authentik_blueprint.py** | Applies the generated blueprint to Authentik via its API after the stack is up. Called automatically by `deploy.py` when **AUTHENTIK_BOOTSTRAP_TOKEN** is set; also runnable standalone |
 | **update-caddyfile.sh** | Regenerate Caddyfile from `.env` and reload Caddy without full bootstrap |
 | **restart-ddclient.sh** | Restart the ddclient container after editing `ddclient.conf` (only when **ENABLE_DDNS=1**). Use `core restart ddclient` if you have the alias. |
 
@@ -83,7 +85,7 @@ If you set these *before* the first `docker compose up`, Authentik creates the d
 
 - **AUTHENTIK_BOOTSTRAP_EMAIL** — email for the admin user.
 - **AUTHENTIK_BOOTSTRAP_PASSWORD** — password for the admin user.
-- **AUTHENTIK_BOOTSTRAP_TOKEN** — optional API token for `akadmin` (useful for automation).
+- **AUTHENTIK_BOOTSTRAP_TOKEN** — optional API token for `akadmin`. When set, `deploy.py` will also **apply the generated SSO blueprint automatically** after starting the stack (creates proxy providers, applications, and outpost assignment from `:sso` entries in `CADDY_EXTRA_SERVICES` — no manual Authentik GUI setup needed).
 
 Leave them empty to use the web UI flow after first start.
 
@@ -121,7 +123,11 @@ Examples (from `.env.example`):
 # CADDY_EXTRA_SERVICES=sonarr.example.com/api:192.168.1.130:8989
 ```
 
-The Caddyfile is **generated** from `.env` by `gen_caddyfile.py`; after changing `CADDY_EXTRA_SERVICES`, re-run bootstrap or [update-caddyfile.sh](#after-first-run) and reload Caddy.
+Bootstrap uses `:sso` entries to generate **both**:
+1. **Caddyfile** routes (`gen_caddyfile.py`) — `forward_auth` + `reverse_proxy` per FQDN
+2. **Authentik blueprint** (`gen_authentik_blueprint.py`) — proxy providers, applications, and embedded outpost assignment per SSO FQDN
+
+After changing `CADDY_EXTRA_SERVICES`, re-run bootstrap or [update-caddyfile.sh](#after-first-run) to regenerate the Caddyfile. If **AUTHENTIK_BOOTSTRAP_TOKEN** is set, `deploy.py` also re-applies the blueprint automatically; otherwise apply manually (see [Authentik — Option A](#option-a-apply-the-generated-blueprint-recommended)).
 
 ### DDNS (optional overlay)
 
@@ -187,12 +193,13 @@ A single **core_internal** bridge network connects all services. Nothing is expo
 6. **Authentik media** — Set ownership of `authentik/media` to the Authentik UID/GID (default 1000) so uploads and migrations work.
 7. **Caddyfile** — Run `gen_caddyfile.py` to generate `config/caddy/Caddyfile` from `.env`.
 8. **Caddyfile validation** — Fail if Caddyfile is missing or is a directory (e.g. from an old bind-mount).
-9. **dnsmasq.conf** — If missing, write a starter `dnsmasq.conf` from env (upstreams, local domain, optional **DNS_LOCAL_RECORDS**).
-10. **dnsmasq validation** — Fail if the config file is missing or a directory.
-11. **ddclient.conf** — When **ENABLE_DDNS=1**, if missing, create a commented starter at `CONFIG_ROOT/ddclient/ddclient.conf`.
-12. **Compose validation** — Run `docker compose` with base compose and, when **ENABLE_DDNS=1**, the **compose.ddclient.yml** overlay.
-13. **Optional bring-up** — If `--up` was passed, run `docker compose up -d` (overlay included automatically when **ENABLE_DDNS=1**).
-14. **Caddy reload** — If Caddy is already running, reload config so the new Caddyfile is applied.
+9. **Authentik blueprint** — Run `gen_authentik_blueprint.py` to generate `config/authentik/blueprints/homelab-sso.yaml` from `:sso` entries in **CADDY_EXTRA_SERVICES**. Creates proxy providers, applications, and embedded outpost assignment. Skipped when no SSO entries are configured.
+10. **dnsmasq.conf** — If missing, write a starter `dnsmasq.conf` from env (upstreams, local domain, optional **DNS_LOCAL_RECORDS**).
+11. **dnsmasq validation** — Fail if the config file is missing or a directory.
+12. **ddclient.conf** — When **ENABLE_DDNS=1**, if missing, create a commented starter at `CONFIG_ROOT/ddclient/ddclient.conf`.
+13. **Compose validation** — Run `docker compose` with base compose and, when **ENABLE_DDNS=1**, the **compose.ddclient.yml** overlay.
+14. **Optional bring-up** — If `--up` was passed, run `docker compose up -d` (overlay included automatically when **ENABLE_DDNS=1**).
+15. **Caddy reload** — If Caddy is already running, reload config so the new Caddyfile is applied.
 
 ### Flags
 
@@ -257,9 +264,10 @@ From the **repo root** on a machine that can run the deploy script (e.g. your la
 
    Deploy will:
    - Validate required env vars for `core` (e.g. `AUTHENTIK_SECRET_KEY`, `AUTHENTIK_POSTGRES_PASSWORD`, `PUBLIC_BASE_DOMAIN`, `AUTHENTIK_FQDN`, `WHOAMI_FQDN`).
-   - Run `docker_compose/core/bootstrap.py`.
+   - Run `docker_compose/core/bootstrap.py` (generates Caddyfile, blueprint, dnsmasq config, etc.).
    - Create a symlink `~/core` → repo’s `docker_compose/core` (if not already installed).
    - Run `docker compose up -d` in the stack directory (including the ddclient overlay when **ENABLE_DDNS=1**).
+   - **Apply the Authentik SSO blueprint via API** (when **AUTHENTIK_BOOTSTRAP_TOKEN** is set and `:sso` entries exist in **CADDY_EXTRA_SERVICES**). Creates proxy providers, applications, and outpost assignment — no manual Authentik GUI setup needed.
    - Update shell helpers (e.g. `core up -d`, `core logs -f`, `core restart ddclient`) in `~/.bashrc.d/stack-functions.sh`.
 
    **If ENABLE_DDNS=1:** DDNS will not update your domain until you configure ddclient. Either: (a) before deploy, set **ENABLE_DDNS=1**, run bootstrap once to create the ddclient dir and starter config, edit `config/ddclient/ddclient.conf`, then run deploy; or (b) run deploy first, then edit `ddclient.conf` and run `core restart ddclient` (or `./restart-ddclient.sh` from the stack directory). See [ddclient](#ddclient).
@@ -301,13 +309,26 @@ Authentik provides the SSO and identity UI. The core stack’s Caddyfile is alre
 
 #### Option A: Apply the generated blueprint (recommended)
 
-Bootstrap generates an Authentik blueprint from your `.env`: **AUTHENTIK_FQDN** and every `:sso` entry in **CADDY_EXTRA_SERVICES**. The file is written to `<CONFIG_ROOT>/authentik/blueprints/homelab-sso.yaml` (only when at least one SSO service is configured). To apply it:
+Bootstrap generates an Authentik blueprint from your `.env`: **AUTHENTIK_FQDN** and every `:sso` entry in **CADDY_EXTRA_SERVICES**. The file is written to `<CONFIG_ROOT>/authentik/blueprints/homelab-sso.yaml` (only when at least one SSO service is configured). The blueprint creates:
 
-1. After bootstrap (or after changing **CADDY_EXTRA_SERVICES**), open Authentik → **Customization** → **Blueprints**.
-2. Click **Create**, then paste the contents of `homelab-sso.yaml` (or upload the file if the create form offers that). Save; Authentik will create one Proxy Provider (forward auth) and one Application per SSO FQDN.
-3. **Directory → Users** (or **Groups**) → assign **Application access** to each application for the users/groups that should have access.
+- One **Proxy Provider** (`forward_single` mode) per SSO FQDN
+- One **Application** per SSO FQDN (linked to its provider)
+- An **embedded outpost assignment** linking all providers to the built-in outpost (required for the `/outpost.goauthentik.io/` forward-auth endpoint to work)
 
-Re-run bootstrap whenever you add or remove SSO services in **CADDY_EXTRA_SERVICES** so the blueprint file stays in sync; then create/update the blueprint in Authentik again to refresh providers and applications.
+**Automated apply (recommended):** Set **AUTHENTIK_BOOTSTRAP_TOKEN** in `.env` before first deploy. After `docker compose up`, `deploy.py` automatically waits for Authentik to be healthy and applies the blueprint via the API — no manual GUI steps needed. The apply is **idempotent**: on subsequent deploys it detects the existing blueprint, updates it, and re-applies.
+
+You can also apply the blueprint standalone at any time:
+
+```bash
+cd docker_compose/core
+python3 apply_authentik_blueprint.py
+```
+
+**Manual apply (without token):** If **AUTHENTIK_BOOTSTRAP_TOKEN** is not set, open Authentik → **Customization** → **Blueprints**, click **Create**, and paste the contents of `homelab-sso.yaml`.
+
+**After apply (automated or manual):** Go to **Directory → Users** (or **Groups**) → assign **Application access** to each application for the users/groups that should have access.
+
+Re-run bootstrap or deploy whenever you add or remove SSO services in **CADDY_EXTRA_SERVICES** to regenerate the blueprint. With the token set, `deploy.py` re-applies automatically.
 
 #### Option B: Create a Proxy Provider manually (GUI)
 
