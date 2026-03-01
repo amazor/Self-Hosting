@@ -108,6 +108,23 @@ def _build_blueprint_yaml(env: dict[str, str]) -> str:
             "",
         ])
 
+    # Assign all proxy providers to the embedded outpost so forward auth works.
+    # Without this, the /outpost.goauthentik.io/ endpoint won't serve any providers.
+    lines.extend([
+        "  # --- Embedded Outpost (forward auth endpoint) ---",
+        "  - model: authentik_outposts.outpost",
+        "    state: present",
+        "    identifiers:",
+        "      managed: 'goauthentik.io/outposts/embedded'",
+        "    attrs:",
+        "      name: 'authentik Embedded Outpost'",
+        "      type: proxy",
+        "      providers:",
+    ])
+    for _fqdn, slug, _name in sso_apps:
+        lines.append("        - !KeyOf provider_" + slug)
+    lines.append("")
+
     return "\n".join(lines)
 
 
