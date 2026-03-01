@@ -107,9 +107,11 @@ python3 deploy.py core --force -y
 
 - **Whoami:** `https://whoami.test.arpa` — should return a simple response; confirms Caddy + TLS.
 - **Authentik:** `https://auth.test.arpa` — first run: complete the setup wizard (or set `AUTHENTIK_BOOTSTRAP_EMAIL` / `AUTHENTIK_BOOTSTRAP_PASSWORD` in core `.env` and restart to skip it).
-- **SSO:** Either **import the generated blueprint** (see below) or create provider and applications in the GUI using the exact values in the table.
+- **SSO:** Use **automated blueprint apply** (Option A, recommended), **manual blueprint** (Option A alt), or create provider and applications in the GUI (Option B).
 
-**Option A — Blueprint (no GUI):** Bootstrap generates `config/authentik/blueprints/homelab-sso.yaml` from **CADDY_EXTRA_SERVICES** (entries with `:sso`) and **AUTHENTIK_FQDN**. In Authentik go to **Customization → Blueprints**, click **Create**, and paste the contents of that file (or upload it if the form allows). Then assign applications to your user under **Directory → Users** → **Application access**.
+**Option A — Automated blueprint (recommended, no GUI):** Set `AUTHENTIK_BOOTSTRAP_EMAIL`, `AUTHENTIK_BOOTSTRAP_PASSWORD`, and `AUTHENTIK_BOOTSTRAP_TOKEN` in core `.env` before first deploy. When the token is set, `deploy.py` automatically applies the generated SSO blueprint via the Authentik API after starting the stack — it creates proxy providers, applications, and assigns them to the embedded outpost. No manual Authentik GUI setup needed. Then assign applications to your user under **Directory → Users** → **Application access**.
+
+**Option A alt — Manual blueprint (no token):** Bootstrap generates `config/authentik/blueprints/homelab-sso.yaml` from **CADDY_EXTRA_SERVICES** (entries with `:sso`) and **AUTHENTIK_FQDN**. In Authentik go to **Customization → Blueprints**, click **Create**, and paste the contents of that file. Then assign applications to your user under **Directory → Users** → **Application access**.
 
 **Option B — Authentik GUI — exact values for local testing**
 
