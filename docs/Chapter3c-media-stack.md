@@ -173,8 +173,9 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 7. Ensure base path strategy is the single `/data` mapping.
 8. Enforce VPN guardrail: qBittorrent must route through `vpn`.
 9. Create config directories for base and enabled overlays.
-10. When `ENABLE_BUILDARR_RECYCLARR=1`, copy `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml` into the config dirs **only if the target files do not exist** (same as `.env` from `.env.example`).
-11. Print stack summary.
+10. Pre-seed `config.xml` for Sonarr, Radarr, and Prowlarr (only if config.xml does not already exist). Sets `AuthenticationMethod=External` (delegates auth to Authentik/Caddy forward auth) and `AuthenticationRequired=DisabledForLocalAddresses` (so inter-container API calls work without credentials). Also generates a random API key for each app. Set `ARR_AUTH_METHOD=Forms` in `.env` to use app-level username/password login instead. Ref: [Authentik Sonarr integration](https://integrations.goauthentik.io/media/sonarr/).
+11. When `ENABLE_BUILDARR_RECYCLARR=1`, copy `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml` into the config dirs **only if the target files do not exist** (same as `.env` from `.env.example`).
+12. Print stack summary.
 
 ### Flags
 
@@ -256,12 +257,14 @@ Optional deploy flags:
 
 ## After first run
 
+**Authentication:** Bootstrap pre-seeds Sonarr, Radarr, and Prowlarr with `AuthenticationMethod=External` and a generated API key. When these apps are behind Authentik SSO (via Caddy forward auth), they will not show their own login page — authentication is handled by Authentik. If you are NOT using Authentik, set `ARR_AUTH_METHOD=Forms` in `.env` before first bootstrap so the apps use their built-in login page.
+
 Recommended order:
 
 1. Confirm VPN is healthy and qBittorrent UI is reachable.
 2. Configure qBittorrent categories and automatic management.
 3. Configure Sonarr/Radarr root folders and download clients.
-4. Configure Prowlarr indexers and app sync.
+4. Configure Prowlarr indexers and app sync (API keys are in each app's `config/*/config.xml` or Settings → General).
 5. If enabled, configure SABnzbd and Bazarr.
 6. Run `media boot` to apply Recyclarr/Buildarr sync if enabled.
 

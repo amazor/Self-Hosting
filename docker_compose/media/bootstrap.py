@@ -19,6 +19,7 @@ from __future__ import annotations
 import argparse
 import os
 import re
+import secrets
 import shutil
 import subprocess
 import sys
@@ -364,6 +365,77 @@ def ensure_config_directories(
     )
 
 
+def _generate_api_key() -> str:
+    """Generate a 32-char hex API key matching the *arr format."""
+    return secrets.token_hex(16)
+
+
+# Starr apps (Sonarr, Radarr, Prowlarr) require authentication even behind a
+# reverse proxy.  Pre-seeding config.xml with External auth tells the app to
+# delegate authentication to the proxy (Authentik forward auth via Caddy).
+# DisabledForLocalAddresses lets inter-container API calls (e.g. Prowlarr →
+# Sonarr) work without credentials.
+#
+# Reference: https://integrations.goauthentik.io/media/sonarr/
+
+_ARR_CONFIG_XML = """\
+<Config>
+  <LogLevel>info</LogLevel>
+  <AuthenticationMethod>{auth_method}</AuthenticationMethod>
+  <AuthenticationRequired>DisabledForLocalAddresses</AuthenticationRequired>
+  <ApiKey>{api_key}</ApiKey>
+  <UrlBase></UrlBase>
+  <InstanceName>{instance_name}</InstanceName>
+</Config>
+"""
+
+_ARR_APPS = ("sonarr", "radarr", "prowlarr")
+
+
+def seed_arr_configs(
+    config_base: Path,
+    env: dict[str, str],
+    real_user: str,
+) -> None:
+    """Pre-seed config.xml for *arr apps so they start without auth dialogs.
+
+    Only writes config.xml if it does not already exist.  The auth method
+    defaults to External (for use behind Authentik/Caddy forward auth).
+    Set ARR_AUTH_METHOD=Forms in .env to use app-level Forms login instead.
+    """
+    auth_method = env.get("ARR_AUTH_METHOD", "External")
+    seeded: list[str] = []
+
+    for app in _ARR_APPS:
+        conf_dir = config_base / app
+        conf_file = conf_dir / "config.xml"
+        if conf_file.is_file():
+            continue
+
+        conf_dir.mkdir(parents=True, exist_ok=True)
+        api_key = _generate_api_key()
+        conf_file.write_text(
+            _ARR_CONFIG_XML.format(
+                auth_method=auth_method,
+                api_key=api_key,
+                instance_name=app.title(),
+            )
+        )
+        try:
+            shutil.chown(conf_file, user=real_user)
+        except (PermissionError, LookupError):
+            pass
+        seeded.append(app)
+
+    if seeded:
+        log.info(
+            "Pre-seeded config.xml for %s (auth=%s, ApiKey generated). "
+            "Apps will start without the authentication setup dialog.",
+            ", ".join(seeded),
+            auth_method,
+        )
+
+
 def copy_example_configs(
     config_base: Path,
     env: dict[str, str],
@@ -496,6 +568,7 @@ def main(argv: list[str] | None = None) -> None:
         env.get("CONFIG_ROOT", "./config"), SCRIPT_DIR
     )
     ensure_config_directories(config_base, env, real_user)
+    seed_arr_configs(config_base, env, real_user)
     copy_example_configs(config_base, env, real_user)
 
     if env.get("ENABLE_OBSERVABILITY", "1") == "1":
