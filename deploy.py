@@ -403,6 +403,41 @@ def _ensure_shell_rc(real_user: str, real_home: Path) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Post-deploy hooks
+# ---------------------------------------------------------------------------
+
+
+def _post_deploy_core(sdir: Path) -> None:
+    """Apply Authentik blueprint via API after core stack is up."""
+    env_file = sdir / ".env"
+    if not env_file.is_file():
+        return
+    env = load_env(env_file)
+    if not env.get("AUTHENTIK_BOOTSTRAP_TOKEN"):
+        return
+
+    blueprint_path = (
+        sdir / env.get("CONFIG_ROOT", "./config")
+        / "authentik" / "blueprints" / "homelab-sso.yaml"
+    )
+    if not blueprint_path.resolve().is_file():
+        return
+
+    sys.path.insert(0, str(sdir))
+    try:
+        import apply_authentik_blueprint
+        apply_authentik_blueprint.apply(env, sdir)
+    except Exception as exc:
+        log.warning("Authentik blueprint apply failed: %s", exc)
+        log.warning(
+            "Apply manually: Customization → Blueprints → Create, "
+            "then paste config/authentik/blueprints/homelab-sso.yaml."
+        )
+    finally:
+        sys.path.pop(0)
+
+
+# ---------------------------------------------------------------------------
 # Deploy one stack
 # ---------------------------------------------------------------------------
 
@@ -492,6 +527,9 @@ def _deploy_one(
             f"Compose up failed for {stack}. Fix the error and re-run deploy."
         )
         return False
+
+    if stack == "core":
+        _post_deploy_core(sdir)
 
     _write_stack_functions(installed_dir, real_home, default_file)
     return True

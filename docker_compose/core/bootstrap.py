@@ -389,7 +389,7 @@ def reload_caddy_if_running(env: dict[str, str]) -> None:
 
 
 def print_summary(
-    config_base: Path, enable_ddns: bool
+    config_base: Path, enable_ddns: bool, env: dict[str, str]
 ) -> None:
     log.info("")
     log.info(f"Config: {config_base}")
@@ -400,10 +400,17 @@ def print_summary(
     )
     blueprint_path = config_base / "authentik" / "blueprints" / "homelab-sso.yaml"
     if blueprint_path.is_file():
-        log.info(
-            "Authentik: paste %s via Customization → Blueprints → Create.",
-            blueprint_path.name,
-        )
+        if env.get("AUTHENTIK_BOOTSTRAP_TOKEN"):
+            log.info(
+                "Authentik: blueprint will be applied automatically via API "
+                "after 'docker compose up' (AUTHENTIK_BOOTSTRAP_TOKEN is set)."
+            )
+        else:
+            log.info(
+                "Authentik: paste %s via Customization → Blueprints → Create,\n"
+                "  or set AUTHENTIK_BOOTSTRAP_TOKEN in .env to apply automatically on deploy.",
+                blueprint_path.name,
+            )
     log.info("")
     log.info(
         "If Caddy or dnsmasq can't find their config, run bootstrap from "
@@ -479,7 +486,7 @@ def main(argv: list[str] | None = None) -> None:
 
     reload_caddy_if_running(env)
     if not deploy_mode:
-        print_summary(config_base, enable_ddns)
+        print_summary(config_base, enable_ddns, env)
 
 
 if __name__ == "__main__":
