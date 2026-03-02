@@ -11,7 +11,7 @@ services:
   # --- VPN (Gluetun) — Torrent traffic must exit through VPN only ---
   # qBittorrent attaches via network_mode: service:vpn and shares this container's network.
   # Docs: https://github.com/qdm12/gluetun-wiki
-  # ExpressVPN: https://github.com/qdm12/gluetun-wiki/blob/main/setup/providers/expressvpn.md
+  # Provider setup: https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers
   vpn:
     image: qmcgaw/gluetun:${GLUETUN_TAG:-latest}
     container_name: vpn
@@ -30,20 +30,19 @@ services:
     #   - ${CONFIG_ROOT:-./config}/gluetun:/gluetun
     environment:
       - TZ=${TZ:-Etc/UTC}
-      # --- ExpressVPN (required) ---
-      - VPN_SERVICE_PROVIDER=expressvpn
+      # --- VPN provider and protocol (configurable via .env) ---
+      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-expressvpn}
+      - VPN_TYPE=${VPN_TYPE:-openvpn}
+      # --- OpenVPN credentials (ExpressVPN, NordVPN, Surfshark, PIA, etc.) ---
       - OPENVPN_USER=${OPENVPN_USER:-}
       - OPENVPN_PASSWORD=${OPENVPN_PASSWORD:-}
-      # --- Optional: restrict to country/city (comma-separated) ---
+      # --- WireGuard credentials (Mullvad, custom, etc. — set VPN_TYPE=wireguard) ---
+      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY:-}
+      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES:-}
+      # --- Server selection (optional, comma-separated) ---
       - SERVER_COUNTRIES=${SERVER_COUNTRIES:-}
       - SERVER_CITIES=${SERVER_CITIES:-}
       # - SERVER_HOSTNAMES=  # narrowest filter; avoid if you want auto server updates
-      # --- Optional: protocol ---
-      # - VPN_TYPE=openvpn
-      # - VPN_PROTOCOL=udp
-      # --- Optional: built-in proxies (uncomment ports above if you use these) ---
-      # - HTTPPROXY_PORT=8888
-      # - SHADOWSOCKS_PORT=8388
     restart: unless-stopped
 
   # --- qBittorrent — Torrent client (all traffic via VPN) ---

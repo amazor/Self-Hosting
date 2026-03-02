@@ -57,8 +57,6 @@ REQUIRED_VARS: dict[str, list[str]] = {
         "DNS_BIND_IP",
     ],
     "media": [
-        "OPENVPN_USER",
-        "OPENVPN_PASSWORD",
         "MEDIA_ROOT",
         "CONFIG_ROOT",
     ],
