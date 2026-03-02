@@ -58,6 +58,15 @@ PROWLARR_INDEXERS = [
 
 FLARESOLVERR_TAG_NAME = "flaresolverr"
 
+# Prowlarr sync categories per TRaSH (Newznab standard).
+# TV: 5000–5050  Movies: 2000–2050
+PROWLARR_SONARR_SYNC_CATEGORIES = [5000, 5010, 5020, 5030, 5040, 5045, 5050]
+PROWLARR_RADARR_SYNC_CATEGORIES = [2000, 2010, 2020, 2030, 2040, 2045, 2050]
+
+# qBittorrent default credentials (LinuxServer image default).
+QBIT_DEFAULT_USER = "admin"
+QBIT_DEFAULT_PASS = "adminadmin"
+
 # qBittorrent categories per TRaSH guide.
 # Ref: https://trash-guides.info/Downloaders/qBittorrent/
 QBIT_CATEGORIES = {
@@ -232,6 +241,253 @@ def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Prowlarr app sync (Sonarr + Radarr)
+# ---------------------------------------------------------------------------
+
+
+def setup_prowlarr_apps(
+    prowlarr_url: str, prowlarr_key: str, config_base: Path,
+) -> None:
+    """Add Sonarr and Radarr as Prowlarr applications for indexer sync.
+
+    Uses Docker service hostnames (sonarr, radarr, prowlarr) which are
+    stable and do not depend on IP addresses.
+    """
+    headers = {"X-Api-Key": prowlarr_key, "Content-Type": "application/json"}
+
+    sonarr_key = _read_api_key(config_base, "sonarr")
+    radarr_key = _read_api_key(config_base, "radarr")
+
+    if not sonarr_key and not radarr_key:
+        log.warning("No Sonarr/Radarr API keys found; skipping Prowlarr app sync.")
+        return
+
+    existing = _api(f"{prowlarr_url}/api/v1/applications", headers)
+    if existing is None:
+        log.warning("Could not list Prowlarr applications.")
+        return
+    existing_impls = {
+        a.get("implementation", "").lower() for a in existing
+    }
+
+    schemas = _api(f"{prowlarr_url}/api/v1/applications/schema", headers)
+    if not schemas:
+        log.warning("Could not fetch Prowlarr application schemas.")
+        return
+
+    apps_config = []
+    if sonarr_key and "sonarr" not in existing_impls:
+        apps_config.append(
+            ("Sonarr", "Sonarr", "http://sonarr:8989",
+             sonarr_key, PROWLARR_SONARR_SYNC_CATEGORIES)
+        )
+    if radarr_key and "radarr" not in existing_impls:
+        apps_config.append(
+            ("Radarr", "Radarr", "http://radarr:7878",
+             radarr_key, PROWLARR_RADARR_SYNC_CATEGORIES)
+        )
+
+    if not apps_config:
+        log.info("Prowlarr apps: Sonarr and Radarr already configured.")
+        return
+
+    added = 0
+    for name, impl, base_url, api_key, categories in apps_config:
+        schema = None
+        for s in schemas:
+            if s.get("implementation") == impl:
+                schema = {k: v for k, v in s.items()}
+                break
+        if not schema:
+            log.warning("No schema for %s in Prowlarr apps.", name)
+            continue
+
+        schema["name"] = name
+        schema["syncLevel"] = "fullSync"
+        for field in schema.get("fields", []):
+            fname = field.get("name", "")
+            if fname == "prowlarrUrl":
+                field["value"] = "http://prowlarr:9696"
+            elif fname == "baseUrl":
+                field["value"] = base_url
+            elif fname == "apiKey":
+                field["value"] = api_key
+            elif fname == "syncCategories":
+                field["value"] = categories
+
+        for key in ("id", "presets"):
+            schema.pop(key, None)
+
+        result = _api(
+            f"{prowlarr_url}/api/v1/applications", headers,
+            method="POST", data=schema,
+        )
+        if result and result.get("id"):
+            added += 1
+            log.info("Added %s to Prowlarr apps (indexer sync enabled).", name)
+        else:
+            log.warning("Failed to add %s to Prowlarr apps.", name)
+
+    log.info("Prowlarr apps: %d added for indexer sync.", added)
+
+
+# ---------------------------------------------------------------------------
+# Prowlarr download client
+# ---------------------------------------------------------------------------
+
+
+def setup_prowlarr_download_client(
+    prowlarr_url: str, prowlarr_key: str,
+    qbit_user: str, qbit_pass: str,
+) -> None:
+    """Add qBittorrent as a download client in Prowlarr.
+
+    The host is ``vpn`` because qBittorrent shares the VPN container's
+    network namespace (network_mode: service:vpn in compose).
+    """
+    headers = {"X-Api-Key": prowlarr_key, "Content-Type": "application/json"}
+
+    existing = _api(f"{prowlarr_url}/api/v1/downloadclient", headers)
+    if existing is None:
+        log.warning("Could not list Prowlarr download clients.")
+        return
+    if any("qbittorrent" in c.get("name", "").lower() for c in (existing or [])):
+        log.info("qBittorrent already configured in Prowlarr.")
+        return
+
+    schemas = _api(f"{prowlarr_url}/api/v1/downloadclient/schema", headers)
+    if not schemas:
+        log.warning("Could not fetch Prowlarr download client schemas.")
+        return
+
+    schema = None
+    for s in schemas:
+        if s.get("implementation") == "QBittorrent":
+            schema = {k: v for k, v in s.items()}
+            break
+    if not schema:
+        log.warning("No qBittorrent schema in Prowlarr download clients.")
+        return
+
+    schema["name"] = "qBittorrent"
+    schema["enable"] = True
+    schema["priority"] = 1
+    for field in schema.get("fields", []):
+        fname = field.get("name", "")
+        if fname == "host":
+            field["value"] = "vpn"
+        elif fname == "port":
+            field["value"] = 8080
+        elif fname == "username":
+            field["value"] = qbit_user
+        elif fname == "password":
+            field["value"] = qbit_pass
+        elif fname == "category":
+            field["value"] = "prowlarr"
+
+    for key in ("id", "presets"):
+        schema.pop(key, None)
+
+    result = _api(
+        f"{prowlarr_url}/api/v1/downloadclient", headers,
+        method="POST", data=schema,
+    )
+    if result and result.get("id"):
+        log.info("Added qBittorrent to Prowlarr download clients.")
+    else:
+        log.warning("Failed to add qBittorrent to Prowlarr.")
+
+
+# ---------------------------------------------------------------------------
+# Sonarr / Radarr download clients
+# ---------------------------------------------------------------------------
+
+
+def setup_arr_download_clients(
+    config_base: Path, qbit_user: str, qbit_pass: str,
+) -> None:
+    """Add qBittorrent as download client in Sonarr and Radarr.
+
+    Both Sonarr and Radarr **need** their own download client configured —
+    Prowlarr syncs indexers to them, but each *arr app sends grabs to the
+    download client itself.  The category ensures downloads land in the
+    correct subfolder (tv / movies) for hardlink-compatible importing.
+    """
+    apps = [
+        ("sonarr", "http://localhost:8989", "/api/v3/downloadclient",
+         "tvCategory", "tv"),
+        ("radarr", "http://localhost:7878", "/api/v3/downloadclient",
+         "movieCategory", "movies"),
+    ]
+
+    for app_name, base_url, dc_path, cat_field, category in apps:
+        api_key = _read_api_key(config_base, app_name)
+        if not api_key:
+            log.warning("No %s API key; skipping download client.", app_name)
+            continue
+
+        headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+
+        if not _wait_for_service(
+            app_name.title(), f"{base_url}/api/v3/health", headers,
+        ):
+            continue
+
+        existing = _api(f"{base_url}{dc_path}", headers)
+        if existing is None:
+            log.warning("Could not list %s download clients.", app_name)
+            continue
+        if any("qbittorrent" in c.get("name", "").lower()
+               for c in (existing or [])):
+            log.info("qBittorrent already configured in %s.", app_name.title())
+            continue
+
+        schemas = _api(f"{base_url}{dc_path}/schema", headers)
+        if not schemas:
+            log.warning("Could not fetch %s download client schemas.", app_name)
+            continue
+
+        schema = None
+        for s in schemas:
+            if s.get("implementation") == "QBittorrent":
+                schema = {k: v for k, v in s.items()}
+                break
+        if not schema:
+            log.warning("No qBittorrent schema in %s.", app_name)
+            continue
+
+        schema["name"] = "qBittorrent"
+        schema["enable"] = True
+        schema["priority"] = 1
+        for field in schema.get("fields", []):
+            fname = field.get("name", "")
+            if fname == "host":
+                field["value"] = "vpn"
+            elif fname == "port":
+                field["value"] = 8080
+            elif fname == "username":
+                field["value"] = qbit_user
+            elif fname == "password":
+                field["value"] = qbit_pass
+            elif fname == cat_field:
+                field["value"] = category
+
+        for key in ("id", "presets"):
+            schema.pop(key, None)
+
+        result = _api(
+            f"{base_url}{dc_path}", headers, method="POST", data=schema,
+        )
+        if result and result.get("id"):
+            log.info(
+                "Added qBittorrent to %s (category=%s).",
+                app_name.title(), category,
+            )
+        else:
+            log.warning("Failed to add qBittorrent to %s.", app_name)
+
+
+# ---------------------------------------------------------------------------
 # qBittorrent setup
 # ---------------------------------------------------------------------------
 
@@ -336,11 +592,21 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
 
     prowlarr_key = _read_api_key(config_base, "prowlarr")
     if prowlarr_key:
-        setup_prowlarr_indexers("http://localhost:9696", prowlarr_key)
+        prowlarr_url = "http://localhost:9696"
+        setup_prowlarr_indexers(prowlarr_url, prowlarr_key)
+        setup_prowlarr_apps(prowlarr_url, prowlarr_key, config_base)
+        setup_prowlarr_download_client(
+            prowlarr_url, prowlarr_key,
+            QBIT_DEFAULT_USER, QBIT_DEFAULT_PASS,
+        )
     else:
-        log.warning("Prowlarr API key not found; skipping indexer setup.")
+        log.warning("Prowlarr API key not found; skipping indexer/app setup.")
 
     setup_qbittorrent("http://localhost:8080")
+
+    setup_arr_download_clients(
+        config_base, QBIT_DEFAULT_USER, QBIT_DEFAULT_PASS,
+    )
 
     return True
 
