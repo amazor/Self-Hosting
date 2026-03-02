@@ -492,6 +492,13 @@ In any homelab journey, the "Hardcoded Defaults" are rarely accidental. They rep
 **Q: Does this work on Raspberry Pi / ARM?**
 * **A:** No. This specific script pulls `amd64` (x86) images and uses Intel/AMD chipset configurations. For ARM, you would need to point to an ARM64 cloud image and adjust the machine type.
 
+**Q: How does Tailscale fit into the homelab?**
+* **A:** Tailscale provides an always-on, encrypted overlay network for admin access — SSH, Proxmox UI, and direct-IP debugging — without exposing any management ports to the public internet. Install Tailscale on the **Proxmox host** and on each **VM** you want to reach remotely. The core VM is the best candidate for hosting internal DNS: it already runs dnsmasq with records for every Caddy-handled FQDN, so Tailscale clients can resolve `sonarr.example.com` and similar hostnames through the same DNS. See the [core `.env.example`](../docker_compose/core/.env.example) Tailscale DNS section for setup steps.
+  * **On the Proxmox host:** `curl -fsSL https://tailscale.com/install.sh | sh && tailscale up`. This gives you remote Proxmox UI access at `https://100.x.x.x:8006` from any Tailscale device.
+  * **On VMs (especially core):** Install Tailscale and advertise the LAN subnet (`tailscale up --advertise-routes=192.168.1.0/24 --accept-dns=false`), then approve the route in the Tailscale admin console. This lets Tailscale clients reach every LAN service — including dnsmasq on the core VM.
+  * **DNS integration:** In the Tailscale admin console, add the core VM's LAN IP as a Split DNS nameserver for your domain. Tailscale clients then resolve all your FQDNs through dnsmasq, reaching Caddy for HTTPS access.
+  * **Escape hatch:** If the core stack crashes (Caddy, Authentik, dnsmasq), Tailscale still works — you can SSH to any VM by its Tailscale IP to diagnose and recover without depending on the access plane.
+
 **Q: Clone fails with "no such logical volume pve/vm-9000-disk-0"?**
 * **A:** Proxmox is looking for an LVM volume that isn’t there. Common cases:
   * **You use ZFS:** There is no `local-lvm`. Delete template 9000 and recreate with `./create_template.sh -s local-zfs`, then add SSH key and convert to template again.
