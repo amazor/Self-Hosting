@@ -234,6 +234,28 @@ def validate_file_ready(path: Path, label: str) -> None:
         raise SystemExit(1)
 
 
+def _collect_caddy_fqdns(env: dict[str, str]) -> list[str]:
+    """Return all FQDNs that Caddy handles (for dnsmasq address records)."""
+    fqdns: list[str] = []
+    for var in ("AUTHENTIK_FQDN", "WHOAMI_FQDN"):
+        val = env.get(var, "").strip()
+        if val and not is_placeholder(val):
+            fqdns.append(val)
+
+    seen: set[str] = set(fqdns)
+    raw = env.get("CADDY_EXTRA_SERVICES", "")
+    for token in raw.split(","):
+        token = token.strip()
+        if not token:
+            continue
+        fqdn_part = token.split(":")[0]
+        fqdn = fqdn_part.split("/")[0]
+        if fqdn and fqdn not in seen and not is_placeholder(fqdn):
+            seen.add(fqdn)
+            fqdns.append(fqdn)
+    return fqdns
+
+
 def ensure_starter_dnsmasq_conf(
     config_base: Path, env: dict[str, str]
 ) -> None:
@@ -261,19 +283,46 @@ def ensure_starter_dnsmasq_conf(
         "expand-hosts",
         f"domain={domain}",
         "cache-size=1000",
-        "",
-        "# Optional static records:",
-        f"# address=/apps.{domain}/192.168.1.120",
-        f"# address=/media.{domain}/192.168.1.130",
     ]
 
-    for pair in (env.get("DNS_LOCAL_RECORDS") or "").split(","):
+    # VM hostname records (host:ip from DNS_LOCAL_RECORDS)
+    local_records = env.get("DNS_LOCAL_RECORDS") or ""
+    has_local = False
+    for pair in local_records.split(","):
         pair = pair.strip()
         if ":" not in pair:
             continue
         host, ip = pair.split(":", 1)
         if host and ip and host != ip:
+            if not has_local:
+                lines.append("")
+                lines.append("# VM hostname records (from DNS_LOCAL_RECORDS)")
+                has_local = True
             lines.append(f"address=/{host}.{domain}/{ip}")
+
+    # Caddy FQDN records — all hostnames that Caddy reverse-proxies resolve
+    # to the core VM so Tailscale/LAN clients can use hostnames instead of IPs.
+    core_ip = env.get("DNS_BIND_IP", "").strip()
+    caddy_fqdns = _collect_caddy_fqdns(env)
+    if caddy_fqdns and core_ip and not is_placeholder(core_ip):
+        lines.append("")
+        lines.append(
+            "# Caddy FQDN records (auto-generated from AUTHENTIK_FQDN, WHOAMI_FQDN,"
+        )
+        lines.append(
+            "# and CADDY_EXTRA_SERVICES). All resolve to the core VM so Caddy"
+        )
+        lines.append(
+            "# can reverse-proxy them. Use with Tailscale DNS for hostname access."
+        )
+        for fqdn in caddy_fqdns:
+            lines.append(f"address=/{fqdn}/{core_ip}")
+
+    if not has_local and not caddy_fqdns:
+        lines.append("")
+        lines.append("# Optional static records:")
+        lines.append(f"# address=/apps.{domain}/192.168.1.120")
+        lines.append(f"# address=/media.{domain}/192.168.1.130")
 
     conf.write_text("\n".join(lines) + "\n")
     log.info(f"Created starter dnsmasq config: {conf}")
