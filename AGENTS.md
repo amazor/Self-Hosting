@@ -24,9 +24,12 @@ This is a homelab IaC/documentation repo. There are no traditional package manag
 ### Docker-in-Docker caveats (Cloud Agent sandbox)
 
 - **node-exporter** container will fail to start due to missing host mount propagation (`rslave` on `/`). This is expected and does not affect other services.
+- **VPN (Gluetun)** container requires `/dev/net/tun` which is not available in the sandbox kernel. qBittorrent (which shares VPN's network) will also fail. Sonarr, Radarr, Prowlarr, and FlareSolverr start independently. Set placeholder VPN credentials (`OPENVPN_USER`/`OPENVPN_PASSWORD`) to pass bootstrap validation.
 - When running multiple stacks on the same host, **disable observability sidecars** on non-monitoring stacks to avoid container name conflicts (e.g. `ENABLE_OBSERVABILITY=0` in `.env`). In production, each stack runs on a separate VM so this is not an issue.
 - Docker daemon must be started manually: `sudo dockerd &>/tmp/dockerd.log &` then wait a few seconds before using Docker commands.
 - Use `--force` flag with `deploy.py` to skip `.env` placeholder validation (required in Cloud Agent since there are no real secrets/domains).
+- **Caddy cross-stack routing**: When all stacks run on one host, Caddy needs `extra_hosts: ["host.docker.internal:host-gateway"]` in `compose.yml` to reach other stacks' services. This is already added to the core compose.
+- **Grafana behind Caddy**: Set `GF_SERVER_ROOT_URL=https://grafana.<domain>` in the monitoring `.env` when Grafana is behind Caddy's HTTPS frontend. Without it, Grafana generates `http://` redirects causing mixed-content errors.
 
 ### Stack deploy workflow
 
