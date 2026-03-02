@@ -129,6 +129,40 @@ def _build_blueprint_yaml(env: dict[str, str]) -> str:
         lines.append("        - !KeyOf provider_" + slug)
     lines.append("")
 
+    # Create a "Homelab Users" group and bind all SSO apps to it.
+    # Adding a user to this group grants access to every SSO-protected app.
+    group_name = env.get("AUTHENTIK_SSO_GROUP", "Homelab Users")
+    lines.extend([
+        "  # --- SSO access group ---",
+        "  # Add users to this group to grant access to all SSO-protected apps.",
+        "  - model: authentik_core.group",
+        "    id: group_homelab_users",
+        "    state: present",
+        "    identifiers:",
+        "      name: " + repr(group_name),
+        "    attrs:",
+        "      name: " + repr(group_name),
+        "      is_superuser: false",
+        "",
+    ])
+    for i, (_fqdn, slug, _name) in enumerate(sso_apps):
+        lines.extend([
+            "  - model: authentik_policies.policybinding",
+            "    state: present",
+            "    identifiers:",
+            "      order: " + str(i),
+            "      target: !KeyOf app_" + slug,
+            "      group: !KeyOf group_homelab_users",
+            "    attrs:",
+            "      target: !KeyOf app_" + slug,
+            "      group: !KeyOf group_homelab_users",
+            "      order: " + str(i),
+            "      enabled: true",
+            "      negate: false",
+            "      timeout: 30",
+        ])
+    lines.append("")
+
     return "\n".join(lines)
 
 

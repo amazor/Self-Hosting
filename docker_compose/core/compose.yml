@@ -178,7 +178,7 @@ services:
     cap_add:
       # NET_ADMIN is commonly required for dnsmasq network operations.
       - NET_ADMIN
-    entrypoint: ["webproc", "--config", "/etc/dnsmasq/dnsmasq.conf", "--", "dnsmasq", "--no-daemon"]
+    entrypoint: ["webproc", "--config", "/etc/dnsmasq/dnsmasq.conf", "--", "dnsmasq", "--no-daemon", "-C", "/etc/dnsmasq/dnsmasq.conf"]
     ports:
       # Bind DNS on host. If the VM has multiple NICs, set DNS_BIND_IP in .env.
       - "${DNS_BIND_IP:-0.0.0.0}:53:53/tcp"
