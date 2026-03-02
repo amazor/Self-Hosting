@@ -437,6 +437,55 @@ def _post_deploy_core(sdir: Path) -> None:
         sys.path.pop(0)
 
 
+def _post_deploy_media(sdir: Path) -> None:
+    """Configure Prowlarr indexers, qBittorrent, and run Buildarr/Recyclarr."""
+    env_file = sdir / ".env"
+    if not env_file.is_file():
+        return
+    env = load_env(env_file)
+
+    # Phase 1: API-based setup (indexers + qBittorrent categories)
+    sys.path.insert(0, str(sdir))
+    try:
+        import setup_media_apps
+        setup_media_apps.setup(env, sdir)
+    except Exception as exc:
+        log.warning("Media app setup (indexers/qBit) failed: %s", exc)
+    finally:
+        sys.path.pop(0)
+
+    # Phase 2: Buildarr + Recyclarr (quality profiles, download clients, app sync)
+    if env.get("ENABLE_BUILDARR_RECYCLARR", "0") == "1":
+        compose_files = _build_compose_files("media", sdir)
+        log.info("Running Buildarr (root folders, download clients, app sync)...")
+        result = subprocess.run(
+            ["docker", "compose"] + compose_files
+            + ["--profile", "bootstrap", "run", "--rm", "buildarr", "run"],
+            cwd=sdir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            log.info("Buildarr completed successfully.")
+        else:
+            log.warning("Buildarr failed (may need manual config). stderr: %s",
+                        result.stderr[-500:] if result.stderr else "(empty)")
+
+        log.info("Running Recyclarr (quality profiles, custom formats)...")
+        result = subprocess.run(
+            ["docker", "compose"] + compose_files
+            + ["--profile", "bootstrap", "run", "--rm", "recyclarr", "sync"],
+            cwd=sdir,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode == 0:
+            log.info("Recyclarr completed successfully.")
+        else:
+            log.warning("Recyclarr failed (may need manual config). stderr: %s",
+                        result.stderr[-500:] if result.stderr else "(empty)")
+
+
 # ---------------------------------------------------------------------------
 # Deploy one stack
 # ---------------------------------------------------------------------------
@@ -530,6 +579,8 @@ def _deploy_one(
 
     if stack == "core":
         _post_deploy_core(sdir)
+    elif stack == "media":
+        _post_deploy_media(sdir)
 
     _write_stack_functions(installed_dir, real_home, default_file)
     return True

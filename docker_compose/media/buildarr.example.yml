@@ -1,15 +1,8 @@
-# Buildarr example configuration for the media stack (Chapter 2C / 3C).
-# Copy to config/buildarr/buildarr.yml (bootstrap can do this when ENABLE_BUILDARR_RECYCLARR=1).
-# Aligns with TRaSH Guides and this repo's single-root path layout: /data = MEDIA_ROOT in containers.
-# Replace YOUR_* placeholders with real values (API keys from each app: Settings -> General -> Security).
-# Schema may vary by Buildarr version — see https://buildarr.github.io/configuration/ and plugin docs.
-# TRaSH: https://trash-guides.info/
-#
-# Workflow: First-time setup — start with this example (or minimal settings), configure apps in UI
-# and/or add to YAML as you go. Once happy, dump config from each *arr and save under config/buildarr/
-# (or version-control a copy). On VM rebuild, restore that saved buildarr.yml so the stack comes back
-# from a known state (cattle, not pets). You can also sanitize a saved config (remove API keys, secrets,
-# replace with YOUR_* placeholders) and contribute it as an example so others can copy your exact setup.
+# Buildarr configuration for the media stack.
+# Copy to config/buildarr/buildarr.yml (bootstrap does this when ENABLE_BUILDARR_RECYCLARR=1).
+# Configures Sonarr, Radarr, Prowlarr declaratively: root folders, download clients, app sync, FlareSolverr.
+# API keys are auto-populated by bootstrap from the pre-seeded config.xml keys.
+# Schema: https://buildarr.github.io/configuration/  TRaSH: https://trash-guides.info/
 
 ---
 buildarr:
@@ -17,18 +10,25 @@ buildarr:
   update_days: ["monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday"]
   update_times: ["03:00"]
 
-# Sonarr — hostname must match compose service name for same-network API access
+# --- Sonarr ---
 sonarr:
   hostname: "sonarr"
   port: 8989
   protocol: "http"
   api_key: "YOUR_SONARR_API_KEY"
   settings:
-    # Root folders: same paths as in Chapter 3c (single root /data)
+    media_management:
+      rename_episodes: true
+      replace_illegal_characters: true
+      standard_episode_format: "{Series TitleYear} - S{season:00}E{episode:00} - {Episode CleanTitle} [{Custom Formats}{Quality Full}]{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}{-Release Group}"
+      daily_episode_format: "{Series TitleYear} - {Air-Date} - {Episode CleanTitle} [{Custom Formats}{Quality Full}]{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}{-Release Group}"
+      anime_episode_format: "{Series TitleYear} - S{season:00}E{episode:00} - {absolute:000} - {Episode CleanTitle} [{Custom Formats}{Quality Full}]{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}{-Release Group}"
+      series_folder_format: "{Series TitleYear} [tvdbid-{TvdbId}]"
+      season_folder_format: "Season {season:00}"
+      multi_episode_style: "prefixed-range"
     root_folders:
       - path: "/data/library/tv"
       - path: "/data/library/anime"
-    # Download clients: qBittorrent (and optionally SABnzbd) with categories from TRaSH layout
     download_clients:
       definitions:
         qBittorrent:
@@ -37,19 +37,22 @@ sonarr:
           host: "qbittorrent"
           port: 8080
           category: "tv"
-          recent_priority: 1
-          older_priority: 2
+          recent_priority: "last"
+          older_priority: "last"
           initial_state: "start"
-          # url_base: ""  # set if using reverse proxy path
-          # username/password if set in qBittorrent
 
-# Radarr
+# --- Radarr ---
 radarr:
   hostname: "radarr"
   port: 7878
   protocol: "http"
   api_key: "YOUR_RADARR_API_KEY"
   settings:
+    media_management:
+      rename_movies: true
+      replace_illegal_characters: true
+      standard_movie_format: "{Movie CleanTitle} {(Release Year)} {edition-{Edition Tags}} [{Custom Formats}{Quality Full}]{[MediaInfo VideoDynamicRangeType]}{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}{[MediaInfo VideoCodec]}{-Release Group}"
+      movie_folder_format: "{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]"
     root_folders:
       - path: "/data/library/movies"
     download_clients:
@@ -60,46 +63,59 @@ radarr:
           host: "qbittorrent"
           port: 8080
           category: "movies"
-          recent_priority: 1
-          older_priority: 2
+          recent_priority: "last"
+          older_priority: "last"
           initial_state: "start"
 
-# Prowlarr — indexer manager; add indexers and app sync per TRaSH Prowlarr guide
-# Dump current config: buildarr prowlarr dump-config http://prowlarr:9696 (paste API key when prompted)
-# Docs: https://buildarr.github.io/plugins/prowlarr/
+# --- Prowlarr ---
+# Manages indexer sync to Sonarr/Radarr and FlareSolverr proxy.
+# Indexers themselves are added via the setup_media_apps.py post-deploy script (API).
 prowlarr:
   hostname: "prowlarr"
   port: 9696
   protocol: "http"
   api_key: "YOUR_PROWLARR_API_KEY"
   settings:
-    # Apps: sync indexers to Sonarr/Radarr (TRaSH: Settings -> Apps). Use instance_name to link
-    # Buildarr-defined instances (then api_key can be omitted); or set api_key per app and omit instance_name.
-    # Single-instance Buildarr often uses instance name "default" — if link fails, try that or set api_key.
+    indexers:
+      proxies:
+        definitions:
+          FlareSolverr:
+            type: "flaresolverr"
+            host_url: "http://flaresolverr:8191"
+            request_timeout: 60
+            tags:
+              - "flaresolverr"
     apps:
       applications:
         definitions:
           Sonarr:
             type: "sonarr"
-            instance_name: "default"  # or "Sonarr" if you use sonarr.instances."Sonarr"; else set api_key
             prowlarr_url: "http://prowlarr:9696"
             base_url: "http://sonarr:8989"
-            sync_level: "add-and-remove-only"  # full-sync | add-and-remove-only | disable
-            sync_categories: ["tv/web-dl", "tv/foreign", "tv/sd", "tv/hd", "tv/uhd", "tv/other"]
-            anime_sync_categories: ["tv/anime"]
-            # tags: []
+            api_key: "YOUR_SONARR_API_KEY"
+            sync_level: "add-and-remove-only"
+            sync_categories:
+              - "tv/web-dl"
+              - "tv/foreign"
+              - "tv/sd"
+              - "tv/hd"
+              - "tv/uhd"
+              - "tv/other"
+            anime_sync_categories:
+              - "tv/anime"
           Radarr:
             type: "radarr"
-            instance_name: "default"  # or "Radarr" if you use radarr.instances."Radarr"; else set api_key
             prowlarr_url: "http://prowlarr:9696"
             base_url: "http://radarr:7878"
+            api_key: "YOUR_RADARR_API_KEY"
             sync_level: "add-and-remove-only"
-            sync_categories: ["movies/foreign", "movies/other", "movies/sd", "movies/hd", "movies/uhd", "movies/bluray", "movies/3d", "movies/dvd", "movies/web-dl"]
-            # tags: []
-    # Optional: general (instance name, backup, analytics), indexers, proxies, tags, ui — add after dump or from docs
-    # general:
-    #   host:
-    #     instance_name: "Prowlarr"
-    #   backup:
-    #     interval: 7
-    #     retention: 28
+            sync_categories:
+              - "movies/foreign"
+              - "movies/other"
+              - "movies/sd"
+              - "movies/hd"
+              - "movies/uhd"
+              - "movies/bluray"
+              - "movies/3d"
+              - "movies/dvd"
+              - "movies/web-dl"
