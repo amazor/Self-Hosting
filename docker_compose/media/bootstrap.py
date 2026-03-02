@@ -24,6 +24,7 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+from xml.etree import ElementTree
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
@@ -471,6 +472,71 @@ def copy_example_configs(
             pass
 
 
+def _read_api_key(config_base: Path, app: str) -> str | None:
+    """Read ApiKey from a *arr app's config.xml."""
+    config_xml = config_base / app / "config.xml"
+    if not config_xml.is_file():
+        return None
+    try:
+        tree = ElementTree.parse(config_xml)
+        elem = tree.find("ApiKey")
+        return elem.text.strip() if elem is not None and elem.text else None
+    except ElementTree.ParseError:
+        return None
+
+
+def populate_api_keys(
+    config_base: Path,
+    real_user: str,
+) -> None:
+    """Replace YOUR_*_API_KEY placeholders in Buildarr/Recyclarr configs with real keys.
+
+    Reads API keys from the pre-seeded *arr config.xml files and writes them
+    into buildarr.yml and recyclarr secrets.yml so those tools can authenticate.
+    """
+    keys = {
+        app: _read_api_key(config_base, app)
+        for app in ("sonarr", "radarr", "prowlarr")
+    }
+    if not any(keys.values()):
+        return
+
+    replacements = {
+        "YOUR_SONARR_API_KEY": keys.get("sonarr", ""),
+        "YOUR_RADARR_API_KEY": keys.get("radarr", ""),
+        "YOUR_PROWLARR_API_KEY": keys.get("prowlarr", ""),
+    }
+
+    files_to_patch = [
+        config_base / "buildarr" / "buildarr.yml",
+        config_base / "recyclarr" / "secrets.yml",
+    ]
+
+    patched: list[str] = []
+    for fpath in files_to_patch:
+        if not fpath.is_file():
+            continue
+        content = fpath.read_text(encoding="utf-8")
+        changed = False
+        for placeholder, real_key in replacements.items():
+            if real_key and placeholder in content:
+                content = content.replace(placeholder, real_key)
+                changed = True
+        if changed:
+            fpath.write_text(content, encoding="utf-8")
+            try:
+                shutil.chown(fpath, user=real_user)
+            except (PermissionError, LookupError):
+                pass
+            patched.append(fpath.name)
+
+    if patched:
+        log.info(
+            "Populated API keys in %s from pre-seeded config.xml.",
+            ", ".join(patched),
+        )
+
+
 def print_summary(env: dict[str, str]) -> None:
     """Print a clean stack-status block at the end."""
     overlays = {
@@ -570,6 +636,7 @@ def main(argv: list[str] | None = None) -> None:
     ensure_config_directories(config_base, env, real_user)
     seed_arr_configs(config_base, env, real_user)
     copy_example_configs(config_base, env, real_user)
+    populate_api_keys(config_base, real_user)
 
     if env.get("ENABLE_OBSERVABILITY", "1") == "1":
         setup_observability_config(config_base, env, SCRIPT_DIR)
