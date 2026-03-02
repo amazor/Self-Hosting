@@ -150,14 +150,17 @@ Then regenerate the Caddyfile and reload Caddy (re-run bootstrap or `./update-ca
 
 On the **media** VM:
 
-1. Fill **ExpressVPN** in `docker_compose/media/.env`: `OPENVPN_USER` and `OPENVPN_PASSWORD`. Without these, the VPN and qBittorrent containers will not start.
+1. Fill **VPN credentials** in `docker_compose/media/.env`. The VPN provider is configurable via `VPN_SERVICE_PROVIDER` (default: `expressvpn`):
+   - **OpenVPN** (default): set `OPENVPN_USER` and `OPENVPN_PASSWORD`.
+   - **WireGuard**: set `VPN_TYPE=wireguard` and `WIREGUARD_PRIVATE_KEY` instead.
+   Without valid VPN credentials, the VPN and qBittorrent containers will not start.
 2. Deploy:
 
 ```bash
 python3 deploy.py media --force -y
 ```
 
-Containers: Gluetun (VPN) → qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr (and overlays if enabled).
+Containers: Gluetun (VPN) → qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr (and overlays if enabled). After compose up, deploy automatically runs **setup_media_apps.py** (adds Prowlarr indexers, configures qBittorrent categories/settings), then **Buildarr** (root folders, download clients, app sync) and **Recyclarr** (TRaSH quality profiles including anime).
 
 ### 3.5 Accelerated (Plex + Immich)
 
@@ -215,26 +218,31 @@ This walks through one TV show and one movie so the full pipeline works.
 ### 5.1 Prowlarr — indexers
 
 1. Open **https://prowlarr.test.arpa** and log in (SSO or direct).
-2. **Indexers** → Add your indexers (torrent and/or Usenet). Save.
-3. **Apps** → Add **Sonarr** and **Radarr** (URLs like `http://sonarr:8989` and `http://radarr:7878` from Prowlarr’s perspective, or use the host IP and port if different). Use each app’s **Settings → General → API Key**. Sync indexers to the apps.
+2. **Indexers:** Deploy now adds 13 public torrent indexers (with FlareSolverr proxy) automatically via `setup_media_apps.py`. Verify they appear under **Indexers** and are healthy. Add additional indexers (private trackers, Usenet) if desired.
+3. **Apps** → Verify **Sonarr** and **Radarr** are listed (Buildarr syncs these automatically). If not, add them manually (URLs like `http://sonarr:8989` and `http://radarr:7878` from Prowlarr’s perspective). Sync indexers to the apps.
 
 ### 5.2 qBittorrent — categories
 
-1. Open **https://qbittorrent.test.arpa** (default login `admin` / `adminadmin`; change in qBittorrent or set `QBITTORRENT_USERNAME` / `QBITTORRENT_PASSWORD` in media `.env`).
-2. **Options → Downloads:** set default save path to `/data/downloads/qbittorrent` (or your chosen path under `/data`).
-3. **Options → Downloads → Category:** add categories e.g. `tv` and `movies` with save paths `tv` and `movies` (relative to default save path). Set **Default Torrent Management Mode** to **Automatic** (TRaSH recommendation).
+Deploy now pre-configures qBittorrent automatically via `setup_media_apps.py`: categories (`tv`, `movies`, `anime`) with correct save paths, default save path, and Automatic torrent management mode. Open **https://qbittorrent.test.arpa** and verify the settings are applied. Adjust if needed:
+
+1. **Options → Downloads:** default save path should be `/data/downloads/qbittorrent`.
+2. **Categories:** `tv`, `movies`, `anime` should exist with save paths relative to the default save path. **Default Torrent Management Mode** should be **Automatic** (TRaSH recommendation).
 
 ### 5.3 Sonarr — root folder and download client
 
-1. **https://sonarr.test.arpa** → **Settings → Media Management → Root Folders:** add `/data/library/tv`.
-2. **Settings → Download Clients:** add qBittorrent (host `qbittorrent` or the service name, port 8080, category e.g. `tv`). Test and save.
-3. **Settings → General:** set **URL Base** to empty if you use `sonarr.test.arpa`; if behind a path, set it there. Note the **API Key** for Prowlarr.
+Buildarr automatically configures Sonarr on deploy: root folder (`/data/library/tv`), qBittorrent download client (category `tv`), and Prowlarr app sync. Verify in the UI:
+
+1. **https://sonarr.test.arpa** → **Settings → Media Management → Root Folders:** `/data/library/tv` should be present.
+2. **Settings → Download Clients:** qBittorrent should be listed (host `qbittorrent`, port 8080, category `tv`).
+3. **Settings → General:** note the **API Key** if you need it for manual Prowlarr configuration.
 
 ### 5.4 Radarr — root folder and download client
 
-1. **https://radarr.test.arpa** → **Settings → Media Management → Root Folders:** add `/data/library/movies`.
-2. **Settings → Download Clients:** add qBittorrent (category e.g. `movies`). Test and save.
-3. **Settings → General:** API Key for Prowlarr.
+Buildarr automatically configures Radarr on deploy: root folder (`/data/library/movies`), qBittorrent download client (category `movies`), and Prowlarr app sync. Verify in the UI:
+
+1. **https://radarr.test.arpa** → **Settings → Media Management → Root Folders:** `/data/library/movies` should be present.
+2. **Settings → Download Clients:** qBittorrent should be listed (category `movies`).
+3. **Settings → General:** API Key for Prowlarr (if needed for manual config).
 
 ### 5.5 Trigger a download
 
