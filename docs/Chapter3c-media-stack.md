@@ -54,6 +54,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 | **compose.ntfy.yml** | Optional lightweight push notifications overlay |
 | **.env.example** | Template for required values and optional feature toggles |
 | **bootstrap.py** | Idempotent first-run checks: env validation, mount checks, config directory creation, VPN guardrail |
+| **setup_media_apps.py** | Post-deploy setup: adds Prowlarr indexers (13 public torrent sites including 1337x, TPB, EZTV, YTS, Nyaa.si, and others), FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, and qBittorrent categories/settings via API. Called automatically by `deploy.py` after compose up. |
 
 All overlays are selected from `.env` by `ENABLE_*` flags and are automatically included by `deploy.py` and the generated `media` shell helper.
 
@@ -99,17 +100,25 @@ Use `id your_user` on the host to get `PUID` and `PGID`.
 
 | Variable | Purpose |
 |----------|---------|
-| **OPENVPN_USER** | VPN username (ExpressVPN with current compose defaults). |
-| **OPENVPN_PASSWORD** | VPN password. |
+| **VPN_SERVICE_PROVIDER** | VPN provider for Gluetun. Default: `expressvpn`. Common alternatives: `nordvpn`, `surfshark`, `mullvad`, `protonvpn`, `private-internet-access`, `custom`. See the [Gluetun provider wiki](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) for provider-specific setup. |
+| **VPN_TYPE** | Protocol: `openvpn` (default) or `wireguard`. |
+| **OPENVPN_USER / OPENVPN_PASSWORD** | OpenVPN credentials (required for OpenVPN providers). |
+| **WIREGUARD_PRIVATE_KEY / WIREGUARD_ADDRESSES** | WireGuard credentials (only when `VPN_TYPE=wireguard`). |
 | **SERVER_COUNTRIES / SERVER_CITIES** | Optional narrowing of endpoint selection. |
 
-`OPENVPN_USER` and `OPENVPN_PASSWORD` are required and validated by `bootstrap.py` and `deploy.py`.
+OpenVPN credentials are required and validated by `bootstrap.py` and `deploy.py` when using OpenVPN providers.
+
+### *arr app authentication
+
+| Variable | Purpose |
+|----------|---------|
+| **ARR_AUTH_METHOD** | Controls Sonarr/Radarr/Prowlarr authentication. Default: `External` (delegates to Authentik/Caddy forward auth). Set to `Forms` for built-in username/password login. Ref: [Authentik Sonarr integration](https://integrations.goauthentik.io/media/sonarr/). |
 
 ### Optional overlays
 
 Set the following to `1` to enable extra compose files:
 
-- `ENABLE_BUILDARR_RECYCLARR`
+- `ENABLE_BUILDARR_RECYCLARR` — **enabled by default** (`1` in `.env.example`). API keys are auto-populated from pre-seeded `config.xml` by bootstrap.
 - `ENABLE_CLEANUPARR`
 - `ENABLE_SABNZBD`
 - `ENABLE_BAZARR`
@@ -175,7 +184,8 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 9. Create config directories for base and enabled overlays.
 10. Pre-seed `config.xml` for Sonarr, Radarr, and Prowlarr (only if config.xml does not already exist). Sets `AuthenticationMethod=External` (delegates auth to Authentik/Caddy forward auth) and `AuthenticationRequired=DisabledForLocalAddresses` (so inter-container API calls work without credentials). Also generates a random API key for each app. Set `ARR_AUTH_METHOD=Forms` in `.env` to use app-level username/password login instead. Ref: [Authentik Sonarr integration](https://integrations.goauthentik.io/media/sonarr/).
 11. When `ENABLE_BUILDARR_RECYCLARR=1`, copy `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml` into the config dirs **only if the target files do not exist** (same as `.env` from `.env.example`).
-12. Print stack summary.
+12. Auto-populate API keys: reads the generated API keys from the pre-seeded *arr `config.xml` files (step 10) and injects them into the Buildarr and Recyclarr config files (step 11). No manual API key filling is needed.
+13. Print stack summary.
 
 ### Flags
 
@@ -232,6 +242,8 @@ From repo root:
 - validate required env vars for media
 - run `docker_compose/media/bootstrap.py` in deploy mode
 - include overlay compose files based on `ENABLE_*` flags
+- run `docker compose up -d`
+- **post-deploy automation:** run `setup_media_apps.py` (adds Prowlarr indexers + FlareSolverr proxy, configures qBittorrent categories and settings via API), then Buildarr (root folders, download clients, Prowlarr app sync to Sonarr/Radarr, TRaSH naming), then Recyclarr (quality profiles including anime, custom formats) — all automatically when enabled
 - create/update `~/media` symlink to this stack
 - install shell helpers so you can run media commands from any directory
 
@@ -259,14 +271,21 @@ Optional deploy flags:
 
 **Authentication:** Bootstrap pre-seeds Sonarr, Radarr, and Prowlarr with `AuthenticationMethod=External` and a generated API key. When these apps are behind Authentik SSO (via Caddy forward auth), they will not show their own login page — authentication is handled by Authentik. If you are NOT using Authentik, set `ARR_AUTH_METHOD=Forms` in `.env` before first bootstrap so the apps use their built-in login page.
 
-Recommended order:
+**What's already automated:** After a successful `deploy.py media` run, the following are configured automatically — no manual UI work needed:
+
+- **qBittorrent** — save path (`/data/downloads/qbittorrent/`), auto torrent management mode, and categories (`tv`, `movies`, `anime`) via `setup_media_apps.py`
+- **Prowlarr** — 13 public torrent indexers (1337x, TPB, EZTV, KAT, LimeTorrents, YTS, Torrent Downloads, Knaben, Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`
+- **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming via Buildarr; quality profiles (including anime), custom formats, and quality settings via Recyclarr
+- **Prowlarr → Sonarr/Radarr app sync** via Buildarr
+
+Recommended post-deploy checks:
 
 1. Confirm VPN is healthy and qBittorrent UI is reachable.
-2. Configure qBittorrent categories and automatic management.
-3. Configure Sonarr/Radarr root folders and download clients.
-4. Configure Prowlarr indexers and app sync (API keys are in each app's `config/*/config.xml` or Settings → General).
-5. If enabled, configure SABnzbd and Bazarr.
-6. Run `media boot` to apply Recyclarr/Buildarr sync if enabled.
+2. Verify qBittorrent categories and save paths look correct (should be pre-configured).
+3. Verify Sonarr/Radarr root folders and download clients are present (should be set by Buildarr).
+4. Verify Prowlarr indexers and app sync (should be configured by `setup_media_apps.py` and Buildarr).
+5. If enabled, configure SABnzbd and Bazarr (these are not yet covered by automation).
+6. Run `media boot` to re-apply Recyclarr/Buildarr sync if you make manual changes or want to force a refresh.
 
 ---
 
@@ -381,13 +400,18 @@ Both tools are driven by **YAML configuration**:
 
 **When Buildarr and/or Recyclarr are enabled and configured:** You can skip or reduce the corresponding manual UI steps in this chapter. Recyclarr covers Quality Settings (file size), Custom Formats, Quality Profiles, and Naming in Sonarr/Radarr—so you do not need to configure those in the UI if your Recyclarr YAML is set up. Buildarr covers whatever you define in `buildarr.yml` (e.g. root folders, download clients, quality, naming); for those items, follow Buildarr’s config schema instead of the Sonarr/Radarr/Prowlarr UI steps below. See the "Skip when using Buildarr/Recyclarr" notes in each app section above. qBittorrent/SABnzbd paths and categories are still set in their UIs unless you model them in Buildarr.
 
-**Example configs:** In `docker_compose/media/` you will find `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml`. When `ENABLE_BUILDARR_RECYCLARR=1`, **bootstrap copies these into `config/buildarr/` and `config/recyclarr/` only if the target file does not already exist** (same idea as `.env` from `.env.example`). Edit the copied files to set API keys; do not commit `secrets.yml`.
+**Example configs:** In `docker_compose/media/` you will find `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml`. When `ENABLE_BUILDARR_RECYCLARR=1`, **bootstrap copies these into `config/buildarr/` and `config/recyclarr/` only if the target file does not already exist** (same idea as `.env` from `.env.example`). **API keys are auto-populated** from the pre-seeded *arr `config.xml` files — no manual key editing is needed.
 
-1. Ensure config files exist (bootstrap creates them from examples when enabled and missing):
+**What gets configured automatically** (on first `deploy.py media`):
+
+- **Buildarr** — Sonarr/Radarr root folders + qBittorrent download clients + TRaSH naming, Prowlarr FlareSolverr proxy + app sync to Sonarr/Radarr
+- **Recyclarr** — TRaSH quality profiles for TV and movies, **plus anime quality profiles** (`sonarr-v4-quality-profile-anime` + custom formats), quality settings/file size, and custom formats
+
+1. After deploy, verify config files exist (bootstrap creates and populates them automatically):
    - `${CONFIG_ROOT}/buildarr/buildarr.yml`
    - `${CONFIG_ROOT}/recyclarr/recyclarr.yml`
-   - `${CONFIG_ROOT}/recyclarr/secrets.yml` (API keys for Recyclarr)
-2. Edit API keys and any settings; then run:
+   - `${CONFIG_ROOT}/recyclarr/secrets.yml` (API keys — auto-populated from `config.xml`)
+2. To re-sync or refresh after manual changes:
 
    ```bash
    media boot

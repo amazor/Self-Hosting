@@ -222,16 +222,15 @@ Torrent traffic must not exit directly to the internet.
 
 In this setup:
 
-- I use ExpressVPN  
-- Any VPN provider can work  
-- Torrent traffic is routed through a VPN container  
+- The VPN provider is configurable via `VPN_SERVICE_PROVIDER` in `.env` (default: `expressvpn`). Common alternatives: `nordvpn`, `surfshark`, `mullvad`, `protonvpn`, `private-internet-access`, `custom`. `VPN_TYPE` selects `openvpn` (default) or `wireguard` depending on what the provider supports.
+- Torrent traffic is routed through a VPN container (Gluetun)  
 - The torrent container attaches via:
 
 ```yaml
 network_mode: service:vpn
 ```
 
-Bootstrap validates that torrent traffic is routed through the VPN and warns if it is not.
+Bootstrap validates that torrent traffic is routed through the VPN and warns if it is not. See the [Gluetun provider wiki](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) for provider-specific setup (credentials, server selection, WireGuard keys, etc.).
 
 The enforcement is architectural — not vendor-specific.
 
@@ -476,10 +475,10 @@ At this stage:
 - Recyclarr  
 - Cleanuparr  
 
-Buildarr and Recyclarr reduce configuration drift.  
+Buildarr and Recyclarr reduce configuration drift and are **enabled by default** (`ENABLE_BUILDARR_RECYCLARR=1` in `.env.example`). Bootstrap auto-populates their API keys from the pre-seeded *arr `config.xml` files, so no manual key filling is needed. Recyclarr now includes anime quality profiles alongside the standard TV and movie profiles.  
 Cleanuparr improves operational hygiene.
 
-These tools are discipline layers — not requirements.
+These tools are discipline layers — not requirements, but the default-on posture means a fresh deploy gets TRaSH-aligned quality profiles, naming, and download clients out of the box.
 
 ---
 
@@ -509,7 +508,13 @@ The goal is simplicity without hiding structure.
 
 `.env` is the single place to declare intent: set `ENABLE_BUILDARR_RECYCLARR=1`, `ENABLE_CLEANUPARR=1`, `ENABLE_SABNZBD=1`, `ENABLE_BAZARR=1`, `ENABLE_NTFY=1` as needed. After deploy, a shell helper (`media`) picks the right compose files from these so you don’t type multiple `-f` by hand; the overlays stay visible in the repo.
 
-Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `python3 deploy.py media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS and config dirs. **Compose layout, environment variables, and step-by-step UI configuration** (paths, categories, naming, quality, download clients, Bazarr, Recyclarr) are in [Chapter 3c](Chapter3c-media-stack.md) (media stack deployment). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
+Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `python3 deploy.py media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS, config dirs, and *arr config pre-seeding. After `docker compose up`, `deploy.py` automatically:
+
+- Pre-seeds *arr `config.xml` with External auth and generated API keys
+- Runs `setup_media_apps.py` — adds Prowlarr indexers (13 public torrent sites) and a FlareSolverr proxy, and configures qBittorrent categories (`tv`, `movies`, `anime`) and settings via API
+- Runs Buildarr (root folders, download clients, Prowlarr app sync) and Recyclarr (TRaSH quality profiles including anime) when enabled
+
+This means a fresh deploy produces a working pipeline with minimal manual UI work. **Compose layout, environment variables, and step-by-step UI configuration** are in [Chapter 3c](Chapter3c-media-stack.md) (media stack deployment). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
 
 ---
 
