@@ -27,6 +27,8 @@ services:
       - "443:443/tcp"
       # UDP 443 enables HTTP/3 where clients support it.
       - "443:443/udp"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - TZ=${TZ:-Etc/UTC}
     command: ["caddy", "run", "--config", "/etc/caddy-config/Caddyfile", "--adapter", "caddyfile"]
