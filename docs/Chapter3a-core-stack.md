@@ -53,7 +53,7 @@ All paths in the stack are relative to the directory where you run `docker compo
 
 ## Environment: `.env.example`
 
-Copy `.env.example` to `.env` and fill real values. The template is grouped by concern below.
+Copy `.env.example` to `.env` and fill real values. **Tip:** run `python3 scripts/setup_env.py` first to pre-fill auto-detectable values (`AUTHENTIK_SECRET_KEY`, `DNS_BIND_IP`, `PUID`, `PGID`, `DOCKER_GID`) so you only need to fill secrets and domain names manually. The template is grouped by concern below.
 
 ### Base paths and locale
 
