@@ -129,19 +129,22 @@ def _build_blueprint_yaml(env: dict[str, str]) -> str:
         lines.append("        - !KeyOf provider_" + slug)
     lines.append("")
 
-    # Create a "Homelab Users" group and bind all SSO apps to it.
-    # Adding a user to this group grants access to every SSO-protected app.
-    group_name = env.get("AUTHENTIK_SSO_GROUP", "Homelab Users")
+    # --- Groups ---
+    # "Homelab Users": admin-level group with access to ALL SSO-protected apps.
+    # "Homelab Media": everyday group — only Sonarr + Radarr (request movies/TV).
+    admin_group = env.get("AUTHENTIK_SSO_GROUP", "Homelab Users")
+    media_group = env.get("AUTHENTIK_MEDIA_GROUP", "Homelab Media")
+    media_slugs = {"sonarr", "radarr"}
+
     lines.extend([
-        "  # --- SSO access group ---",
-        "  # Add users to this group to grant access to all SSO-protected apps.",
+        "  # --- Admin group (all SSO apps) ---",
         "  - model: authentik_core.group",
         "    id: group_homelab_users",
         "    state: present",
         "    identifiers:",
-        "      name: " + repr(group_name),
+        "      name: " + repr(admin_group),
         "    attrs:",
-        "      name: " + repr(group_name),
+        "      name: " + repr(admin_group),
         "      is_superuser: false",
         "",
     ])
@@ -162,6 +165,40 @@ def _build_blueprint_yaml(env: dict[str, str]) -> str:
             "      timeout: 30",
         ])
     lines.append("")
+
+    # Media group: only apps whose slug matches media_slugs
+    media_apps = [(s, n) for _f, s, n in sso_apps if s in media_slugs]
+    if media_apps:
+        lines.extend([
+            "  # --- Media group (Sonarr + Radarr only) ---",
+            "  # Add users here to let them request movies and TV shows.",
+            "  - model: authentik_core.group",
+            "    id: group_homelab_media",
+            "    state: present",
+            "    identifiers:",
+            "      name: " + repr(media_group),
+            "    attrs:",
+            "      name: " + repr(media_group),
+            "      is_superuser: false",
+            "",
+        ])
+        for i, (slug, _name) in enumerate(media_apps):
+            lines.extend([
+                "  - model: authentik_policies.policybinding",
+                "    state: present",
+                "    identifiers:",
+                "      order: " + str(i),
+                "      target: !KeyOf app_" + slug,
+                "      group: !KeyOf group_homelab_media",
+                "    attrs:",
+                "      target: !KeyOf app_" + slug,
+                "      group: !KeyOf group_homelab_media",
+                "      order: " + str(i),
+                "      enabled: true",
+                "      negate: false",
+                "      timeout: 30",
+            ])
+        lines.append("")
 
     return "\n".join(lines)
 
