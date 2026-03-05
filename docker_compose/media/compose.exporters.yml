@@ -33,6 +33,13 @@ services:
   scraparr:
     image: ghcr.io/thecfu/scraparr:${SCRAPARR_TAG:-latest}
     container_name: scraparr
+    depends_on:
+      sonarr:
+        condition: service_started
+      radarr:
+        condition: service_started
+      prowlarr:
+        condition: service_started
     volumes:
       - ${CONFIG_ROOT:-./config}/scraparr:/scraparr/config
     ports:
@@ -55,6 +62,9 @@ services:
   qbittorrent-exporter:
     image: caseyscarborough/qbittorrent-exporter:${QBITTORRENT_EXPORTER_TAG:-latest}
     container_name: qbittorrent-exporter
+    depends_on:
+      vpn:
+        condition: service_started
     environment:
       - QBITTORRENT_BASE_URL=http://vpn:8080
       - QBITTORRENT_USERNAME=${QBITTORRENT_USERNAME:-admin}

@@ -547,6 +547,84 @@ def populate_api_keys(
         )
 
 
+def populate_env_api_keys(
+    config_base: Path,
+    env_file: Path,
+    env: dict[str, str],
+) -> None:
+    """Write *arr API keys from config.xml into .env for Prometheus exporters.
+
+    Only runs when ENABLE_EXPORTERS=1.  Handles three cases per key:
+      - commented out  (``# SONARR_API_KEY=``)  → uncomment + fill
+      - present, empty (``SONARR_API_KEY=``)     → fill
+      - missing entirely                         → append
+    Already-populated keys are left untouched.
+    """
+    if env.get("ENABLE_EXPORTERS", "0") != "1":
+        return
+
+    keys = {
+        app: _read_api_key(config_base, app)
+        for app in ("sonarr", "radarr", "prowlarr")
+    }
+    if not any(keys.values()):
+        return
+
+    env_vars: dict[str, str] = {}
+    for app, key in keys.items():
+        if key:
+            env_vars[f"{app.upper()}_API_KEY"] = key
+
+    lines = env_file.read_text().splitlines()
+    new_lines: list[str] = []
+    seen: set[str] = set()
+
+    for line in lines:
+        stripped = line.strip()
+        matched = False
+        for var, val in env_vars.items():
+            commented = re.match(rf"^#\s*{re.escape(var)}\s*=(.*)", stripped)
+            uncommented = re.match(rf"^{re.escape(var)}\s*=(.*)", stripped)
+
+            if commented:
+                seen.add(var)
+                rhs = commented.group(1).strip()
+                if not rhs:
+                    new_lines.append(f"{var}={val}")
+                else:
+                    new_lines.append(line)
+                matched = True
+                break
+            if uncommented:
+                seen.add(var)
+                rhs = uncommented.group(1).strip()
+                if not rhs:
+                    new_lines.append(f"{var}={val}")
+                else:
+                    new_lines.append(line)
+                matched = True
+                break
+
+        if not matched:
+            new_lines.append(line)
+
+    appended: list[str] = []
+    for var, val in env_vars.items():
+        if var not in seen:
+            new_lines.append(f"{var}={val}")
+            appended.append(var)
+
+    env_file.write_text("\n".join(new_lines) + "\n")
+
+    populated = [v for v in env_vars if v in seen and not env.get(v)]
+    all_set = populated + appended
+    if all_set:
+        log.info(
+            "Populated exporter API keys in .env: %s",
+            ", ".join(all_set),
+        )
+
+
 def print_summary(env: dict[str, str]) -> None:
     """Print a clean stack-status block at the end."""
     overlays = {
@@ -647,6 +725,7 @@ def main(argv: list[str] | None = None) -> None:
     seed_arr_configs(config_base, env, real_user)
     copy_example_configs(config_base, env, real_user)
     populate_api_keys(config_base, real_user)
+    populate_env_api_keys(config_base, env_file, env)
 
     if env.get("ENABLE_OBSERVABILITY", "1") == "1":
         setup_observability_config(config_base, env, SCRIPT_DIR)
