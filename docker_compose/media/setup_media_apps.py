@@ -17,6 +17,7 @@ import json
 import sys
 import time
 import urllib.error
+import urllib.parse
 import urllib.request
 from pathlib import Path
 from xml.etree import ElementTree
@@ -236,8 +237,10 @@ def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> None:
 # ---------------------------------------------------------------------------
 
 
-def setup_qbittorrent(qbit_url: str) -> None:
+def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
     """Configure qBittorrent categories and settings per TRaSH guide."""
+    username = env.get("QBITTORRENT_USERNAME", "admin")
+    password = env.get("QBITTORRENT_PASSWORD", "adminadmin")
     login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
 
     # Wait for qBittorrent to be reachable
@@ -245,9 +248,12 @@ def setup_qbittorrent(qbit_url: str) -> None:
     sid = None
     while time.monotonic() < deadline:
         try:
+            login_data = urllib.parse.urlencode(
+                {"username": username, "password": password}
+            ).encode()
             req = urllib.request.Request(
                 f"{qbit_url}/api/v2/auth/login",
-                data=b"username=admin&password=adminadmin",
+                data=login_data,
                 headers=login_headers,
                 method="POST",
             )
@@ -268,15 +274,36 @@ def setup_qbittorrent(qbit_url: str) -> None:
 
     headers = {"Cookie": f"SID={sid}"}
 
-    # Set preferences per TRaSH guide
+    # Set preferences per TRaSH guide:
+    # https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/
     prefs = {
+        # --- Downloads / Saving Management ---
         "save_path": "/data/downloads/qbittorrent/",
         "temp_path_enabled": True,
         "temp_path": "/data/downloads/qbittorrent/incomplete/",
         "auto_tmm_enabled": True,
+        "preallocate_all": False,
+        # --- Connection ---
+        "bittorrent_protocol": 1,   # TCP only (TRaSH: best performance)
+        "listen_port": 6881,
+        "upnp": False,              # behind VPN; no UPnP needed
+        "random_port": False,       # use the VPN-forwarded port
+        # --- Speed / Rate Limits ---
+        "limit_utp_rate": True,     # prevent uTP flood
+        "limit_tcp_overhead": False, # don't count overhead against limits
+        "limit_lan_peers": True,
         "max_active_downloads": 5,
         "max_active_uploads": 5,
         "max_active_torrents": 10,
+        # --- BitTorrent / Privacy ---
+        "encryption": 0,            # 0 = allow (prefer), not force
+        "anonymous_mode": False,    # worse speeds; issues with private trackers
+        # --- Seeding (let *arr indexer settings handle this instead) ---
+        "max_ratio_enabled": False,
+        "max_seeding_time_enabled": False,
+        "add_trackers_enabled": False,
+        # --- Web UI ---
+        "web_ui_csrf_protection_enabled": False,  # can cause issues behind reverse proxy
     }
     try:
         req = urllib.request.Request(
@@ -340,7 +367,7 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
     else:
         log.warning("Prowlarr API key not found; skipping indexer setup.")
 
-    setup_qbittorrent("http://localhost:8080")
+    setup_qbittorrent("http://localhost:8080", env)
 
     return True
 

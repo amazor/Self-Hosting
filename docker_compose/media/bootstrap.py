@@ -17,6 +17,8 @@ Use --non-interactive when invoked by deploy.
 from __future__ import annotations
 
 import argparse
+import base64
+import hashlib
 import os
 import re
 import secrets
@@ -447,6 +449,65 @@ def seed_arr_configs(
         )
 
 
+def _generate_qbt_password_hash(password: str) -> str:
+    """Generate PBKDF2-HMAC-SHA512 hash in qBittorrent's @ByteArray format."""
+    salt = os.urandom(16)
+    dk = hashlib.pbkdf2_hmac(
+        "sha512", password.encode("utf-8"), salt, 100000, dklen=64
+    )
+    return f"@ByteArray({base64.b64encode(salt).decode()}:{base64.b64encode(dk).decode()})"
+
+
+_QBT_CONF_TEMPLATE = """\
+[LegalNotice]
+Accepted=true
+
+[Preferences]
+WebUI\\Username={username}
+WebUI\\Password_PBKDF2="{password_hash}"
+"""
+
+
+def seed_qbittorrent_config(
+    config_base: Path,
+    env: dict[str, str],
+    real_user: str,
+) -> None:
+    """Pre-seed qBittorrent.conf with a known WebUI password.
+
+    qBittorrent 4.6.1+ generates a random temp password on first start,
+    breaking automated setup.  This writes a minimal config with a known
+    password so setup_media_apps.py and the exporter can authenticate.
+
+    Password comes from QBITTORRENT_PASSWORD (default: adminadmin).
+    Only writes if the config file does not already exist.
+    """
+    conf_dir = config_base / "qbittorrent" / "qBittorrent"
+    conf_file = conf_dir / "qBittorrent.conf"
+    if conf_file.is_file():
+        return
+
+    username = env.get("QBITTORRENT_USERNAME", "admin")
+    password = env.get("QBITTORRENT_PASSWORD", "adminadmin")
+
+    conf_dir.mkdir(parents=True, exist_ok=True)
+    conf_file.write_text(
+        _QBT_CONF_TEMPLATE.format(
+            username=username,
+            password_hash=_generate_qbt_password_hash(password),
+        )
+    )
+    try:
+        shutil.chown(conf_file, user=real_user)
+    except (PermissionError, LookupError):
+        pass
+
+    log.info(
+        "Pre-seeded qBittorrent.conf (WebUI user=%s, password from env/default).",
+        username,
+    )
+
+
 def copy_example_configs(
     config_base: Path,
     env: dict[str, str],
@@ -723,6 +784,7 @@ def main(argv: list[str] | None = None) -> None:
     )
     ensure_config_directories(config_base, env, real_user)
     seed_arr_configs(config_base, env, real_user)
+    seed_qbittorrent_config(config_base, env, real_user)
     copy_example_configs(config_base, env, real_user)
     populate_api_keys(config_base, real_user)
     populate_env_api_keys(config_base, env_file, env)

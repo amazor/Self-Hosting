@@ -183,9 +183,10 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 8. Enforce VPN guardrail: qBittorrent must route through `vpn`.
 9. Create config directories for base and enabled overlays.
 10. Pre-seed `config.xml` for Sonarr, Radarr, and Prowlarr (only if config.xml does not already exist). Sets `AuthenticationMethod=External` (delegates auth to Authentik/Caddy forward auth) and `AuthenticationRequired=DisabledForLocalAddresses` (so inter-container API calls work without credentials). Also generates a random API key for each app. Set `ARR_AUTH_METHOD=Forms` in `.env` to use app-level username/password login instead. Ref: [Authentik Sonarr integration](https://integrations.goauthentik.io/media/sonarr/).
-11. When `ENABLE_BUILDARR_RECYCLARR=1`, copy `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml` into the config dirs **only if the target files do not exist** (same as `.env` from `.env.example`).
-12. Auto-populate API keys: reads the generated API keys from the pre-seeded *arr `config.xml` files (step 10) and injects them into the Buildarr and Recyclarr config files (step 11). No manual API key filling is needed.
-13. Print stack summary.
+11. Pre-seed `qBittorrent.conf` with a known WebUI password (from `QBITTORRENT_PASSWORD`, default: `adminadmin`). This prevents qBittorrent 4.6.1+ from generating a random temp password, so post-deploy automation and the Prometheus exporter can authenticate immediately.
+12. When `ENABLE_BUILDARR_RECYCLARR=1`, copy `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml` into the config dirs **only if the target files do not exist** (same as `.env` from `.env.example`).
+13. Auto-populate API keys: reads the generated keys from the pre-seeded *arr `config.xml` files and injects them into Buildarr configs, Recyclarr secrets, and `.env` (for Prometheus exporters). No manual API key filling is needed.
+14. Print stack summary.
 
 ### Flags
 
@@ -243,7 +244,7 @@ From repo root:
 - run `docker_compose/media/bootstrap.py` in deploy mode
 - include overlay compose files based on `ENABLE_*` flags
 - run `docker compose up -d`
-- **post-deploy automation:** run `setup_media_apps.py` (adds Prowlarr indexers + FlareSolverr proxy, configures qBittorrent categories and settings via API), then Buildarr (root folders, download clients, Prowlarr app sync to Sonarr/Radarr, TRaSH naming), then Recyclarr (quality profiles including anime, custom formats) — all automatically when enabled
+- **post-deploy automation:** run `setup_media_apps.py` (adds Prowlarr indexers + FlareSolverr proxy, configures qBittorrent categories and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) via API), then Buildarr (root folders, download clients, Prowlarr app sync to Sonarr/Radarr, TRaSH naming), then Recyclarr (quality profiles including anime, custom formats) — all automatically when enabled
 - create/update `~/media` symlink to this stack
 - install shell helpers so you can run media commands from any directory
 
@@ -273,7 +274,7 @@ Optional deploy flags:
 
 **What's already automated:** After a successful `deploy.py media` run, the following are configured automatically — no manual UI work needed:
 
-- **qBittorrent** — save path (`/data/downloads/qbittorrent/`), auto torrent management mode, and categories (`tv`, `movies`, `anime`) via `setup_media_apps.py`
+- **qBittorrent** — WebUI password pre-seeded by bootstrap; save path, auto TMM, categories (`tv`, `movies`, `anime`), and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP-only protocol, encryption, seeding limits disabled, UPnP off, CSRF off) via `setup_media_apps.py`
 - **Prowlarr** — 13 public torrent indexers (1337x, TPB, EZTV, KAT, LimeTorrents, YTS, Torrent Downloads, Knaben, Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`
 - **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming via Buildarr; quality profiles (including anime), custom formats, and quality settings via Recyclarr
 - **Prowlarr → Sonarr/Radarr app sync** via Buildarr
@@ -293,20 +294,19 @@ Recommended post-deploy checks:
 
 ### qBittorrent
 
-Reference: [TRaSH qBittorrent](https://trash-guides.info/Downloaders/qBittorrent/)
+Reference: [TRaSH qBittorrent Basic Setup](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/)
 
-**Skip when using Buildarr/Recyclarr:** Buildarr can define qBittorrent as a download client in `buildarr.yml`; you still need to configure **paths and categories in the qBittorrent UI** (or ensure Buildarr applies the same paths). Recyclarr does not manage download clients.
+**Mostly automated.** Bootstrap pre-seeds the WebUI password and `setup_media_apps.py` applies TRaSH-recommended settings and categories via API. Verify rather than configure:
 
-1. Open UI on `http://<media-vm-ip>:8080`.
-2. **Options -> Downloads**:
-   - Default save path: `/data/downloads/qbittorrent`
-   - Keep incomplete torrents in: `/data/downloads/qbittorrent/incomplete`
-3. **Options -> Saving Management**:
-   - Set **Default Torrent Management Mode** to **Automatic** (required).
-4. Add categories (left sidebar):
-   - `tv` with save path `completed/tv`
-   - `movies` with save path `completed/movies`
-5. Verify by starting a test download and confirming files land under category folders.
+1. Open UI on `http://<media-vm-ip>:8080` (default login: `admin` / `adminadmin`, or whatever `QBITTORRENT_PASSWORD` is set to in `.env`).
+2. **Options → Downloads**: save path should be `/data/downloads/qbittorrent/`, incomplete path enabled.
+3. **Options → Downloads → Saving Management**: Default Torrent Management Mode should be **Automatic**.
+4. **Options → Connection**: protocol should be **TCP**, UPnP and random port should be **off**, listening port `6881`.
+5. **Options → BitTorrent**: encryption **Allow** (prefer), anonymous mode **off**, seeding limits **off**.
+6. **Categories** (left sidebar): `tv` → `completed/tv`, `movies` → `completed/movies`, `anime` → `completed/anime`.
+7. Verify by starting a test download and confirming files land under the category folder.
+
+**Not automated (personal preference):** global speed limits — TRaSH recommends 70–80% of your max upload/download if sharing the connection. Set in **Options → Speed**.
 
 ### SABnzbd (optional)
 
@@ -338,7 +338,7 @@ Reference: [TRaSH Sonarr](https://trash-guides.info/Sonarr/)
    - `/data/library/tv`
    - `/data/library/anime` (if used)
 4. **Settings -> Download Clients**:
-   - qBittorrent: host `qbittorrent`, port `8080`, category `tv`
+   - qBittorrent: host `vpn`, port `8080`, category `tv` (qBittorrent uses `network_mode: service:vpn`, so it's reachable at the `vpn` hostname)
    - SABnzbd (if enabled): host `sabnzbd`, port `8080`, category `tv`
 5. **Settings -> Profiles / Custom Formats**:
    - Apply TRaSH quality settings, profiles, and custom formats.

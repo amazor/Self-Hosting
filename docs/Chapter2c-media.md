@@ -511,8 +511,10 @@ The goal is simplicity without hiding structure.
 Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `python3 deploy.py media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS, config dirs, and *arr config pre-seeding. After `docker compose up`, `deploy.py` automatically:
 
 - Pre-seeds *arr `config.xml` with External auth and generated API keys
-- Runs `setup_media_apps.py` — adds Prowlarr indexers (13 public torrent sites) and a FlareSolverr proxy, and configures qBittorrent categories (`tv`, `movies`, `anime`) and settings via API
+- Pre-seeds `qBittorrent.conf` with a known WebUI password (so automation and exporters can authenticate)
+- Runs `setup_media_apps.py` — adds Prowlarr indexers (13 public torrent sites) and a FlareSolverr proxy, and configures qBittorrent categories (`tv`, `movies`, `anime`) and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP protocol, encryption, seeding limits, UPnP, CSRF) via API
 - Runs Buildarr (root folders, download clients, Prowlarr app sync) and Recyclarr (TRaSH quality profiles including anime) when enabled
+- Auto-populates exporter API keys in `.env` from config.xml (for Prometheus scraparr)
 
 This means a fresh deploy produces a working pipeline with minimal manual UI work. **Compose layout, environment variables, and step-by-step UI configuration** are in [Chapter 3c](Chapter3c-media-stack.md) (media stack deployment). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
 
