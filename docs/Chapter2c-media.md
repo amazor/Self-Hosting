@@ -475,10 +475,12 @@ At this stage:
 - Recyclarr  
 - Cleanuparr  
 
-Buildarr and Recyclarr reduce configuration drift and are **enabled by default** (`ENABLE_BUILDARR_RECYCLARR=1` in `.env.example`). Bootstrap auto-populates their API keys from the pre-seeded *arr `config.xml` files, so no manual key filling is needed. Recyclarr now includes anime quality profiles alongside the standard TV and movie profiles.  
+Buildarr is **required infrastructure** — it lives in the main `compose.yml` and runs once during deploy to configure root folders, download clients, and Prowlarr app sync. Without it, those settings would need manual UI configuration, defeating the goal of a one-command deploy. Bootstrap auto-populates its API keys from the pre-seeded *arr `config.xml` files, so no manual key filling is needed.
+
+Recyclarr is **optional but enabled by default** (`ENABLE_RECYCLARR=1` in `.env.example`). It runs as a daemon on a configurable `CRON_SCHEDULE` (default `@weekly`), syncing TRaSH quality profiles — including anime — to keep your *arr apps current as the guides update (new bad-encoder patterns, score adjustments, format changes).  
 Cleanuparr improves operational hygiene.
 
-These tools are discipline layers — not requirements, but the default-on posture means a fresh deploy gets TRaSH-aligned quality profiles, naming, and download clients out of the box.
+These tools are discipline layers. Buildarr is required for a working deploy; Recyclarr's default-on posture means a fresh deploy gets TRaSH-aligned quality profiles, naming, and download clients out of the box.
 
 ---
 
@@ -500,23 +502,27 @@ The goal is simplicity without hiding structure.
 
 - **Base:** `docker_compose/media/compose.yml` (core pipeline only).  
 - **Overlay files** in the same directory:
-  - `compose.buildarr-recyclarr.yml`
+  - `compose.recyclarr.yml`
   - `compose.cleanuparr.yml`
   - `compose.sabnzbd.yml`
   - `compose.bazarr.yml`
   - `compose.ntfy.yml`
 
-`.env` is the single place to declare intent: set `ENABLE_BUILDARR_RECYCLARR=1`, `ENABLE_CLEANUPARR=1`, `ENABLE_SABNZBD=1`, `ENABLE_BAZARR=1`, `ENABLE_NTFY=1` as needed. After deploy, a shell helper (`media`) picks the right compose files from these so you don’t type multiple `-f` by hand; the overlays stay visible in the repo.
+`.env` is the single place to declare intent: set `ENABLE_RECYCLARR=1`, `ENABLE_CLEANUPARR=1`, `ENABLE_SABNZBD=1`, `ENABLE_BAZARR=1`, `ENABLE_NTFY=1` as needed. After deploy, a shell helper (`media`) picks the right compose files from these so you don’t type multiple `-f` by hand; the overlays stay visible in the repo.
 
 Deploy the media stack by creating `.env` from `.env.example` in `docker_compose/media/`, then running `python3 deploy.py media` from the repo root. A **bootstrap script** in `docker_compose/media/` is invoked by deploy and handles optional NFS, config dirs, and *arr config pre-seeding. After `docker compose up`, `deploy.py` automatically:
 
 - Pre-seeds *arr `config.xml` with External auth and generated API keys
 - Pre-seeds `qBittorrent.conf` with a known WebUI password (so automation and exporters can authenticate)
 - Runs `setup_media_apps.py` — adds Prowlarr indexers (13 public torrent sites) and a FlareSolverr proxy, and configures qBittorrent categories (`tv`, `movies`, `anime`) and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP protocol, encryption, seeding limits, UPnP, CSRF) via API
-- Runs Buildarr (root folders, download clients, Prowlarr app sync) and Recyclarr (TRaSH quality profiles including anime) when enabled
+- Runs Buildarr (root folders, download clients, Prowlarr app sync) — always, as required infrastructure
+- Triggers an initial Recyclarr sync (TRaSH quality profiles including anime) when enabled — Recyclarr then continues as a daemon on its configured cron schedule
 - Auto-populates exporter API keys in `.env` from config.xml (for Prometheus scraparr)
 
 This means a fresh deploy produces a working pipeline with minimal manual UI work. **Compose layout, environment variables, and step-by-step UI configuration** are in [Chapter 3c](Chapter3c-media-stack.md) (media stack deployment). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
+
+> ### 🧠 Philosophy: Buildarr Required, Recyclarr Optional
+> Buildarr is required because without it, root folders, download clients, and Prowlarr app sync would need manual UI configuration — defeating the goal of a one-command deploy. Recyclarr is optional but enabled by default: TRaSH Guides update quality profiles periodically (new bad-encoder patterns, score adjustments, format changes), and Recyclarr keeps your *arr apps current without manual intervention. If you prefer to manage quality profiles manually, set `ENABLE_RECYCLARR=0`.
 
 ---
 

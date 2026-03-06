@@ -1,5 +1,5 @@
 # Recyclarr configuration for the media stack.
-# Copy to config/recyclarr/recyclarr.yml (bootstrap does this when ENABLE_BUILDARR_RECYCLARR=1).
+# Copy to config/recyclarr/recyclarr.yml (bootstrap copies this when ENABLE_RECYCLARR=1).
 # Syncs TRaSH Guide quality definitions, custom formats, quality profiles, and naming to Sonarr/Radarr.
 # API keys are in config/recyclarr/secrets.yml (bootstrap auto-populates from pre-seeded config.xml keys).
 # Ref: https://recyclarr.dev/reference/config-examples/  https://trash-guides.info/Guide-Sync/

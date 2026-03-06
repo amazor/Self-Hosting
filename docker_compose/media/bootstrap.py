@@ -349,11 +349,11 @@ def ensure_config_directories(
     real_user: str,
 ) -> None:
     """Create config dirs for base stack and enabled overlays."""
-    for d in ("qbittorrent", "sonarr", "radarr", "prowlarr", "flaresolverr"):
+    for d in ("qbittorrent", "sonarr", "radarr", "prowlarr", "flaresolverr", "buildarr"):
         (config_base / d).mkdir(parents=True, exist_ok=True)
 
     overlay_dirs: dict[str, list[str]] = {
-        "ENABLE_BUILDARR_RECYCLARR": ["buildarr", "recyclarr"],
+        "ENABLE_RECYCLARR": ["recyclarr"],
         "ENABLE_CLEANUPARR": ["cleanuparr"],
         "ENABLE_SABNZBD": ["sabnzbd"],
         "ENABLE_BAZARR": ["bazarr"],
@@ -513,34 +513,44 @@ def copy_example_configs(
     env: dict[str, str],
     real_user: str,
 ) -> None:
-    """Copy example Buildarr/Recyclarr configs when enabled and missing."""
-    if env.get("ENABLE_BUILDARR_RECYCLARR", "0") != "1":
-        return
+    """Copy example Buildarr/Recyclarr configs when missing.
 
-    copies = [
+    Buildarr is always copied (required for bootstrap).
+    Recyclarr is only copied when ENABLE_RECYCLARR=1.
+    """
+    buildarr_copies = [
         (
             SCRIPT_DIR / "buildarr.example.yml",
             config_base / "buildarr" / "buildarr.yml",
         ),
-        (
-            SCRIPT_DIR / "recyclarr.example.yml",
-            config_base / "recyclarr" / "recyclarr.yml",
-        ),
-        (
-            SCRIPT_DIR / "recyclarr.secrets.example.yml",
-            config_base / "recyclarr" / "secrets.yml",
-        ),
     ]
-    for src, dst in copies:
+    for src, dst in buildarr_copies:
         if not dst.is_file() and src.is_file():
             shutil.copy2(src, dst)
-            log.info(f"Created {dst} from {src.name} (edit API keys/settings).")
+            log.info(f"Created {dst} from {src.name}.")
+
+    if env.get("ENABLE_RECYCLARR", "0") == "1":
+        recyclarr_copies = [
+            (
+                SCRIPT_DIR / "recyclarr.example.yml",
+                config_base / "recyclarr" / "recyclarr.yml",
+            ),
+            (
+                SCRIPT_DIR / "recyclarr.secrets.example.yml",
+                config_base / "recyclarr" / "secrets.yml",
+            ),
+        ]
+        for src, dst in recyclarr_copies:
+            if not dst.is_file() and src.is_file():
+                shutil.copy2(src, dst)
+                log.info(f"Created {dst} from {src.name}.")
 
     for d in ("buildarr", "recyclarr"):
-        try:
-            shutil.chown(config_base / d, user=real_user)
-        except (PermissionError, LookupError):
-            pass
+        if (config_base / d).is_dir():
+            try:
+                shutil.chown(config_base / d, user=real_user)
+            except (PermissionError, LookupError):
+                pass
 
 
 def _read_api_key(config_base: Path, app: str) -> str | None:
@@ -689,7 +699,8 @@ def populate_env_api_keys(
 def print_summary(env: dict[str, str]) -> None:
     """Print a clean stack-status block at the end."""
     overlays = {
-        "Buildarr + Recyclarr": env.get("ENABLE_BUILDARR_RECYCLARR", "0"),
+        "Buildarr": "1",
+        "Recyclarr": env.get("ENABLE_RECYCLARR", "0"),
         "Cleanuparr": env.get("ENABLE_CLEANUPARR", "0"),
         "SABnzbd": env.get("ENABLE_SABNZBD", "0"),
         "Bazarr": env.get("ENABLE_BAZARR", "0"),

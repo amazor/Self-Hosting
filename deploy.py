@@ -180,7 +180,7 @@ def _validate_stack_env(stack: str) -> list[str]:
 # ---------------------------------------------------------------------------
 
 _MEDIA_OVERLAYS: dict[str, str] = {
-    "ENABLE_BUILDARR_RECYCLARR": "compose.buildarr-recyclarr.yml",
+    "ENABLE_RECYCLARR": "compose.recyclarr.yml",
     "ENABLE_CLEANUPARR": "compose.cleanuparr.yml",
     "ENABLE_SABNZBD": "compose.sabnzbd.yml",
     "ENABLE_BAZARR": "compose.bazarr.yml",
@@ -294,16 +294,16 @@ media() {
   if [[ "$arg1" = "boot" ]] || [[ "$arg1" = "bootstrap" ]]; then
     local files="-f $dir/compose.yml"
     [[ -f "$dir/.env" ]] && source "$dir/.env" 2>/dev/null
-    [[ "${ENABLE_BUILDARR_RECYCLARR:-0}" = "1" ]] && files="$files -f $dir/compose.buildarr-recyclarr.yml"
+    [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && files="$files -f $dir/compose.recyclarr.yml"
     (cd "$dir" && docker compose $files --profile bootstrap run --rm buildarr run) 2>/dev/null || true
-    (cd "$dir" && docker compose $files --profile bootstrap run --rm recyclarr sync) 2>/dev/null || true
+    [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && (cd "$dir" && docker compose $files exec recyclarr recyclarr sync) 2>/dev/null || true
     return
   fi
 
   local compose_files="-f $dir/compose.yml"
   if [[ -f "$dir/.env" ]]; then
     source "$dir/.env" 2>/dev/null
-    [[ "${ENABLE_BUILDARR_RECYCLARR:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.buildarr-recyclarr.yml"
+    [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.recyclarr.yml"
     [[ "${ENABLE_CLEANUPARR:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.cleanuparr.yml"
     [[ "${ENABLE_SABNZBD:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.sabnzbd.yml"
     [[ "${ENABLE_BAZARR:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.bazarr.yml"
@@ -436,13 +436,13 @@ def _post_deploy_core(sdir: Path) -> None:
 
 
 def _post_deploy_media(sdir: Path) -> None:
-    """Configure Prowlarr indexers, qBittorrent, and run Buildarr/Recyclarr."""
+    """Configure Prowlarr indexers, qBittorrent, run Buildarr, and trigger Recyclarr."""
     env_file = sdir / ".env"
     if not env_file.is_file():
         return
     env = load_env(env_file)
 
-    # Phase 1: API-based setup (indexers + qBittorrent categories)
+    # Phase 1: API-based setup (indexers + qBittorrent TRaSH settings)
     sys.path.insert(0, str(sdir))
     try:
         import setup_media_apps
@@ -452,36 +452,44 @@ def _post_deploy_media(sdir: Path) -> None:
     finally:
         sys.path.pop(0)
 
-    # Phase 2: Buildarr + Recyclarr (quality profiles, download clients, app sync)
-    if env.get("ENABLE_BUILDARR_RECYCLARR", "0") == "1":
-        compose_files = _build_compose_files("media", sdir)
-        log.info("Running Buildarr (root folders, download clients, app sync)...")
-        result = subprocess.run(
-            ["docker", "compose"] + compose_files
-            + ["--profile", "bootstrap", "run", "--rm", "buildarr", "run"],
-            cwd=sdir,
-            capture_output=True,
-            text=True,
+    # Phase 2: Buildarr — always runs (required for bootstrap)
+    compose_files = _build_compose_files("media", sdir)
+    log.info("Running Buildarr (root folders, download clients, app sync)...")
+    result = subprocess.run(
+        ["docker", "compose"] + compose_files
+        + ["--profile", "bootstrap", "run", "--rm", "buildarr", "run"],
+        cwd=sdir,
+        capture_output=True,
+        text=True,
+    )
+    if result.returncode == 0:
+        log.info("Buildarr completed successfully.")
+    else:
+        log.warning(
+            "Buildarr failed (may need manual config). stderr: %s",
+            result.stderr[-500:] if result.stderr else "(empty)",
         )
-        if result.returncode == 0:
-            log.info("Buildarr completed successfully.")
-        else:
-            log.warning("Buildarr failed (may need manual config). stderr: %s",
-                        result.stderr[-500:] if result.stderr else "(empty)")
 
-        log.info("Running Recyclarr (quality profiles, custom formats)...")
+    # Phase 3: Recyclarr initial sync — cron mode doesn't sync on start,
+    # so trigger the first sync via exec into the already-running daemon.
+    if env.get("ENABLE_RECYCLARR", "0") == "1":
+        log.info(
+            "Triggering initial Recyclarr sync (TRaSH quality profiles)..."
+        )
         result = subprocess.run(
             ["docker", "compose"] + compose_files
-            + ["--profile", "bootstrap", "run", "--rm", "recyclarr", "sync"],
+            + ["exec", "recyclarr", "recyclarr", "sync"],
             cwd=sdir,
             capture_output=True,
             text=True,
         )
         if result.returncode == 0:
-            log.info("Recyclarr completed successfully.")
+            log.info("Recyclarr sync completed successfully.")
         else:
-            log.warning("Recyclarr failed (may need manual config). stderr: %s",
-                        result.stderr[-500:] if result.stderr else "(empty)")
+            log.warning(
+                "Recyclarr sync failed (may need manual config). stderr: %s",
+                result.stderr[-500:] if result.stderr else "(empty)",
+            )
 
 
 # ---------------------------------------------------------------------------
@@ -566,7 +574,7 @@ def _deploy_one(
     log.info(f"Starting {stack} stack...")
     compose_files = _build_compose_files(stack, sdir)
     result = subprocess.run(
-        ["docker", "compose"] + compose_files + ["up", "-d"],
+        ["docker", "compose"] + compose_files + ["up", "-d", "--wait"],
         cwd=sdir,
     )
     if result.returncode != 0:
@@ -613,8 +621,9 @@ def _print_deploy_summary(stacks: list[str]) -> None:
             if env.get("ENABLE_OBSERVABILITY", "1") == "1":
                 enabled.append("Plex exporter")
         elif stack == "media":
+            enabled.append("Buildarr")
             overlay_labels = {
-                "ENABLE_BUILDARR_RECYCLARR": "Buildarr+Recyclarr",
+                "ENABLE_RECYCLARR": "Recyclarr",
                 "ENABLE_CLEANUPARR": "Cleanuparr",
                 "ENABLE_SABNZBD": "SABnzbd",
                 "ENABLE_BAZARR": "Bazarr",

@@ -136,3 +136,25 @@ services:
     ports:
       - "8191:8191"
     restart: unless-stopped
+
+  # --- Buildarr — Declarative *arr config (root folders, download clients, app sync) ---
+  # Required for bootstrap. Runs once via deploy.py after first "up -d".
+  # profiles: ["bootstrap"] means it does NOT start with "up -d".
+  # Docs: https://buildarr.github.io/
+  buildarr:
+    profiles: ["bootstrap"]
+    image: callum027/buildarr:${BUILDARR_TAG:-latest}
+    container_name: buildarr
+    depends_on:
+      sonarr:
+        condition: service_started
+      radarr:
+        condition: service_started
+      prowlarr:
+        condition: service_started
+    environment:
+      - PUID=${PUID:-1000}
+      - PGID=${PGID:-1000}
+      - TZ=${TZ:-Etc/UTC}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/buildarr:/config:ro

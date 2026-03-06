@@ -34,7 +34,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
   - [Radarr](#radarr)
   - [Prowlarr and FlareSolverr](#prowlarr-and-flaresolverr)
   - [Bazarr (optional)](#bazarr-optional)
-  - [Buildarr and Recyclarr (optional)](#buildarr-and-recyclarr-optional)
+  - [Buildarr and Recyclarr](#buildarr-and-recyclarr)
   - [Cleanuparr and ntfy (optional)](#cleanuparr-and-ntfy-optional)
 - [Verification and troubleshooting](#verification-and-troubleshooting)
 - [See also](#see-also)
@@ -45,11 +45,11 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 
 | File or script | Purpose |
 |----------------|---------|
-| **compose.yml** | Base services: Gluetun VPN, qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr |
+| **compose.yml** | Base services: Gluetun VPN, qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr, Buildarr (`profiles: ["bootstrap"]` — runs once during deploy, not started by `up -d`) |
 | **compose.sabnzbd.yml** | Optional Usenet downloader overlay |
 | **compose.bazarr.yml** | Optional subtitle automation overlay |
-| **buildarr.example.yml** / **recyclarr.example.yml** / **recyclarr.secrets.example.yml** | Example YAML configs for Buildarr and Recyclarr; bootstrap copies into `config/buildarr/` and `config/recyclarr/` when enabled and target missing (same idea as `.env` from `.env.example`) |
-| **compose.buildarr-recyclarr.yml** | Optional profile-driven config sync overlay (bootstrap profile) |
+| **buildarr.example.yml** / **recyclarr.example.yml** / **recyclarr.secrets.example.yml** | Example YAML configs for Buildarr and Recyclarr; bootstrap always copies Buildarr config, copies Recyclarr config when `ENABLE_RECYCLARR=1`, only if target missing (same idea as `.env` from `.env.example`) |
+| **compose.recyclarr.yml** | Optional Recyclarr overlay — TRaSH quality/format sync daemon |
 | **compose.cleanuparr.yml** | Optional queue/download hygiene overlay |
 | **compose.ntfy.yml** | Optional lightweight push notifications overlay |
 | **.env.example** | Template for required values and optional feature toggles |
@@ -118,7 +118,8 @@ OpenVPN credentials are required and validated by `bootstrap.py` and `deploy.py`
 
 Set the following to `1` to enable extra compose files:
 
-- `ENABLE_BUILDARR_RECYCLARR` — **enabled by default** (`1` in `.env.example`). API keys are auto-populated from pre-seeded `config.xml` by bootstrap.
+- `ENABLE_RECYCLARR` — **enabled by default** (`1` in `.env.example`). Adds Recyclarr overlay for TRaSH quality/format sync. API keys are auto-populated from pre-seeded `config.xml` by bootstrap.
+- `RECYCLARR_CRON` — Recyclarr daemon schedule (default `@weekly`). Only relevant when `ENABLE_RECYCLARR=1`.
 - `ENABLE_CLEANUPARR`
 - `ENABLE_SABNZBD`
 - `ENABLE_BAZARR`
@@ -141,9 +142,10 @@ The template includes optional tag variables. Keep defaults while testing, then 
 | **sonarr / radarr** | TV and movie automation |
 | **prowlarr** | Indexer management and sync to *arr apps |
 | **flaresolverr** | Optional challenge bypass for protected indexers |
+| **buildarr** | Required config bootstrap (`profiles: ["bootstrap"]` — runs once during deploy, not started by `up -d`). Configures root folders, download clients, Prowlarr app sync. |
 | **sabnzbd** *(overlay)* | Usenet downloader |
 | **bazarr** *(overlay)* | Subtitle automation for Sonarr/Radarr libraries |
-| **buildarr / recyclarr** *(overlay)* | Optional config discipline and TRaSH sync bootstrap jobs |
+| **recyclarr** *(overlay)* | TRaSH quality/format sync daemon (weekly cron by default) |
 | **cleanuparr / ntfy** *(overlay)* | Optional cleanup and notifications |
 
 ### Single-root path pattern
@@ -184,7 +186,7 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 9. Create config directories for base and enabled overlays.
 10. Pre-seed `config.xml` for Sonarr, Radarr, and Prowlarr (only if config.xml does not already exist). Sets `AuthenticationMethod=External` (delegates auth to Authentik/Caddy forward auth) and `AuthenticationRequired=DisabledForLocalAddresses` (so inter-container API calls work without credentials). Also generates a random API key for each app. Set `ARR_AUTH_METHOD=Forms` in `.env` to use app-level username/password login instead. Ref: [Authentik Sonarr integration](https://integrations.goauthentik.io/media/sonarr/).
 11. Pre-seed `qBittorrent.conf` with a known WebUI password (from `QBITTORRENT_PASSWORD`, default: `adminadmin`). This prevents qBittorrent 4.6.1+ from generating a random temp password, so post-deploy automation and the Prometheus exporter can authenticate immediately.
-12. When `ENABLE_BUILDARR_RECYCLARR=1`, copy `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml` into the config dirs **only if the target files do not exist** (same as `.env` from `.env.example`).
+12. Copy `buildarr.example.yml` into `config/buildarr/` **always** (Buildarr is required infrastructure). Copy `recyclarr.example.yml` and `recyclarr.secrets.example.yml` into `config/recyclarr/` **only when `ENABLE_RECYCLARR=1`**. In both cases, target files are only written if they do not already exist (same as `.env` from `.env.example`).
 13. Auto-populate API keys: reads the generated keys from the pre-seeded *arr `config.xml` files and injects them into Buildarr configs, Recyclarr secrets, and `.env` (for Prometheus exporters). No manual API key filling is needed.
 14. Print stack summary.
 
@@ -244,22 +246,18 @@ From repo root:
 - run `docker_compose/media/bootstrap.py` in deploy mode
 - include overlay compose files based on `ENABLE_*` flags
 - run `docker compose up -d`
-- **post-deploy automation:** run `setup_media_apps.py` (adds Prowlarr indexers + FlareSolverr proxy, configures qBittorrent categories and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) via API), then Buildarr (root folders, download clients, Prowlarr app sync to Sonarr/Radarr, TRaSH naming), then Recyclarr (quality profiles including anime, custom formats) — all automatically when enabled
+- **post-deploy automation:** run `setup_media_apps.py` (adds Prowlarr indexers + FlareSolverr proxy, configures qBittorrent categories and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) via API), then Buildarr (root folders, download clients, Prowlarr app sync to Sonarr/Radarr, TRaSH naming — always runs, uses the `bootstrap` profile), then Recyclarr initial sync via `docker compose exec` (quality profiles including anime, custom formats — only when `ENABLE_RECYCLARR=1`)
 - create/update `~/media` symlink to this stack
 - install shell helpers so you can run media commands from any directory
 
-Common helper usage after deploy:
+The `media` helper is a pure compose pass-through (like `core` and `accelerated`). Common usage after deploy:
 
 ```bash
 media ps
 media logs -f
 media up -d
 media down
-media boot
 ```
-
-- `media up -d` starts base + enabled overlays.
-- `media boot` runs bootstrap-profile jobs (Buildarr/Recyclarr) when enabled.
 
 Optional deploy flags:
 
@@ -276,8 +274,9 @@ Optional deploy flags:
 
 - **qBittorrent** — WebUI password pre-seeded by bootstrap; save path, auto TMM, categories (`tv`, `movies`, `anime`), and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP-only protocol, encryption, seeding limits disabled, UPnP off, CSRF off) via `setup_media_apps.py`
 - **Prowlarr** — 13 public torrent indexers (1337x, TPB, EZTV, KAT, LimeTorrents, YTS, Torrent Downloads, Knaben, Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`
-- **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming via Buildarr; quality profiles (including anime), custom formats, and quality settings via Recyclarr
+- **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming via Buildarr (always runs); quality profiles (including anime), custom formats, and quality settings via Recyclarr (when enabled)
 - **Prowlarr → Sonarr/Radarr app sync** via Buildarr
+- **Recyclarr** — initial sync triggered on first deploy (via `docker compose exec`), then runs on its cron schedule (`RECYCLARR_CRON`, default `@weekly`)
 
 Recommended post-deploy checks:
 
@@ -286,7 +285,6 @@ Recommended post-deploy checks:
 3. Verify Sonarr/Radarr root folders and download clients are present (should be set by Buildarr).
 4. Verify Prowlarr indexers and app sync (should be configured by `setup_media_apps.py` and Buildarr).
 5. If enabled, configure SABnzbd and Bazarr (these are not yet covered by automation).
-6. Run `media boot` to re-apply Recyclarr/Buildarr sync if you make manual changes or want to force a refresh.
 
 ---
 
@@ -327,7 +325,7 @@ Reference: [TRaSH SABnzbd](https://trash-guides.info/Downloaders/SABnzbd/)
 
 Reference: [TRaSH Sonarr](https://trash-guides.info/Sonarr/)
 
-**Skip when using Buildarr/Recyclarr:** If Buildarr is configured with root folders and download clients in `buildarr.yml`, skip steps 3–4 for those. If Recyclarr is configured with TRaSH templates (quality definitions, custom formats, quality profiles, naming), skip step 5 and run `media boot` to sync instead. You still need Media Management options (Rename Episodes, Analyze video files) unless Buildarr manages them.
+**Skip when using Buildarr/Recyclarr:** Buildarr always runs during deploy and configures root folders and download clients from `buildarr.yml` — skip steps 3–4 for those. If Recyclarr is enabled, it syncs TRaSH templates (quality definitions, custom formats, quality profiles, naming) on deploy and weekly thereafter — skip step 5. You still need Media Management options (Rename Episodes, Analyze video files) unless Buildarr manages them.
 
 1. Open `http://<media-vm-ip>:8989`.
 2. **Settings -> Media Management**:
@@ -348,7 +346,7 @@ Reference: [TRaSH Sonarr](https://trash-guides.info/Sonarr/)
 
 Reference: [TRaSH Radarr](https://trash-guides.info/Radarr/)
 
-**Skip when using Buildarr/Recyclarr:** If Buildarr manages root folders and download clients, skip steps 3–4 for those. If Recyclarr syncs TRaSH (quality definitions, custom formats, quality profiles, naming), skip step 5 and use `media boot` instead. Media Management toggles (Rename Movies, Analyze video files) are still needed unless defined in Buildarr.
+**Skip when using Buildarr/Recyclarr:** Buildarr always runs during deploy and configures root folders and download clients — skip steps 3–4 for those. If Recyclarr is enabled, it syncs TRaSH (quality definitions, custom formats, quality profiles, naming) on deploy and weekly thereafter — skip step 5. Media Management toggles (Rename Movies, Analyze video files) are still needed unless defined in Buildarr.
 
 1. Open `http://<media-vm-ip>:7878`.
 2. **Settings -> Media Management**:
@@ -366,7 +364,7 @@ Reference: [TRaSH Radarr](https://trash-guides.info/Radarr/)
 
 Reference: [TRaSH Prowlarr](https://trash-guides.info/Prowlarr/)
 
-**Skip when using Buildarr/Recyclarr:** Buildarr can manage Prowlarr (apps, indexers) via `buildarr.yml`; if so, configure those in YAML and run `media boot`. Recyclarr does not manage Prowlarr.
+**Skip when using Buildarr/Recyclarr:** Buildarr manages Prowlarr app sync (apps, indexers) via `buildarr.yml` and runs automatically during deploy. Recyclarr does not manage Prowlarr.
 
 1. Open Prowlarr on `http://<media-vm-ip>:9696`.
 2. Add Sonarr and Radarr under **Settings -> Apps**.
@@ -389,32 +387,32 @@ Reference: [TRaSH Bazarr](https://trash-guides.info/Bazarr/)
 4. Configure preferred subtitle languages and scoring.
 5. Verify by running subtitle search for one existing item.
 
-### Buildarr and Recyclarr (optional)
+### Buildarr and Recyclarr
 
 Reference: [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/)
 
 Both tools are driven by **YAML configuration**:
 
-- **Buildarr** — `buildarr.yml` (and optional per-instance config) under `${CONFIG_ROOT}/buildarr/`. Declarative *arr configuration: you define Sonarr, Radarr, and Prowlarr settings (root folders, download clients, quality, naming, etc.) in YAML; Buildarr applies them via API. Docs: [Buildarr](https://buildarr.github.io/).
-- **Recyclarr** — `recyclarr.yml` (and optional per-instance overrides) under `${CONFIG_ROOT}/recyclarr/`. Syncs TRaSH Guide content (Custom Formats, Quality Profiles, Quality Settings / file size, Naming Scheme) into Sonarr and Radarr. Docs: [Recyclarr](https://recyclarr.dev/).
+- **Buildarr** — `buildarr.yml` (and optional per-instance config) under `${CONFIG_ROOT}/buildarr/`. Declarative *arr configuration: you define Sonarr, Radarr, and Prowlarr settings (root folders, download clients, quality, naming, etc.) in YAML; Buildarr applies them via API. Docs: [Buildarr](https://buildarr.github.io/). Buildarr is **required infrastructure** — it lives in the main `compose.yml` with `profiles: ["bootstrap"]` and runs once during every deploy. It is not toggleable.
+- **Recyclarr** — `recyclarr.yml` (and optional per-instance overrides) under `${CONFIG_ROOT}/recyclarr/`. Syncs TRaSH Guide content (Custom Formats, Quality Profiles, Quality Settings / file size, Naming Scheme) into Sonarr and Radarr. Docs: [Recyclarr](https://recyclarr.dev/). Recyclarr is **optional** — it lives in `compose.recyclarr.yml`, enabled by `ENABLE_RECYCLARR=1` (default). It runs as a daemon with `RECYCLARR_CRON` (default `@weekly`). On first deploy, `deploy.py` triggers an initial sync via `docker compose exec`; after that, the cron schedule handles recurring syncs.
 
-**When Buildarr and/or Recyclarr are enabled and configured:** You can skip or reduce the corresponding manual UI steps in this chapter. Recyclarr covers Quality Settings (file size), Custom Formats, Quality Profiles, and Naming in Sonarr/Radarr—so you do not need to configure those in the UI if your Recyclarr YAML is set up. Buildarr covers whatever you define in `buildarr.yml` (e.g. root folders, download clients, quality, naming); for those items, follow Buildarr’s config schema instead of the Sonarr/Radarr/Prowlarr UI steps below. See the "Skip when using Buildarr/Recyclarr" notes in each app section above. qBittorrent/SABnzbd paths and categories are still set in their UIs unless you model them in Buildarr.
+**When Buildarr and Recyclarr are configured:** You can skip or reduce the corresponding manual UI steps in this chapter. Recyclarr covers Quality Settings (file size), Custom Formats, Quality Profiles, and Naming in Sonarr/Radarr—so you do not need to configure those in the UI if your Recyclarr YAML is set up. Buildarr covers whatever you define in `buildarr.yml` (e.g. root folders, download clients, quality, naming); for those items, follow Buildarr’s config schema instead of the Sonarr/Radarr/Prowlarr UI steps below. See the "Skip when using Buildarr/Recyclarr" notes in each app section above. qBittorrent/SABnzbd paths and categories are still set in their UIs unless you model them in Buildarr.
 
-**Example configs:** In `docker_compose/media/` you will find `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml`. When `ENABLE_BUILDARR_RECYCLARR=1`, **bootstrap copies these into `config/buildarr/` and `config/recyclarr/` only if the target file does not already exist** (same idea as `.env` from `.env.example`). **API keys are auto-populated** from the pre-seeded *arr `config.xml` files — no manual key editing is needed.
+**Example configs:** In `docker_compose/media/` you will find `buildarr.example.yml`, `recyclarr.example.yml`, and `recyclarr.secrets.example.yml`. **Bootstrap always copies the Buildarr config** into `config/buildarr/`. Recyclarr configs are copied into `config/recyclarr/` **only when `ENABLE_RECYCLARR=1`**. In both cases, target files are only written if they do not already exist (same idea as `.env` from `.env.example`). **API keys are auto-populated** from the pre-seeded *arr `config.xml` files — no manual key editing is needed.
 
 **What gets configured automatically** (on first `deploy.py media`):
 
-- **Buildarr** — Sonarr/Radarr root folders + qBittorrent download clients + TRaSH naming, Prowlarr FlareSolverr proxy + app sync to Sonarr/Radarr
-- **Recyclarr** — TRaSH quality profiles for TV and movies, **plus anime quality profiles** (`sonarr-v4-quality-profile-anime` + custom formats), quality settings/file size, and custom formats
+- **Buildarr** (always) — Sonarr/Radarr root folders + qBittorrent download clients + TRaSH naming, Prowlarr FlareSolverr proxy + app sync to Sonarr/Radarr
+- **Recyclarr** (when enabled) — TRaSH quality profiles for TV and movies, **plus anime quality profiles** (`sonarr-v4-quality-profile-anime` + custom formats), quality settings/file size, and custom formats. Initial sync runs on first deploy; subsequent syncs follow the cron schedule (default `@weekly`).
 
 1. After deploy, verify config files exist (bootstrap creates and populates them automatically):
    - `${CONFIG_ROOT}/buildarr/buildarr.yml`
-   - `${CONFIG_ROOT}/recyclarr/recyclarr.yml`
+   - `${CONFIG_ROOT}/recyclarr/recyclarr.yml` (when `ENABLE_RECYCLARR=1`)
    - `${CONFIG_ROOT}/recyclarr/secrets.yml` (API keys — auto-populated from `config.xml`)
-2. To re-sync or refresh after manual changes:
+2. No manual sync commands are needed — `deploy.py` handles Buildarr and the initial Recyclarr sync automatically. To force a Recyclarr re-sync manually:
 
    ```bash
-   media boot
+   media exec recyclarr sync
    ```
 
 3. Confirm sync logs show successful API updates to Sonarr/Radarr/Prowlarr.

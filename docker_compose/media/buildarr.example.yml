@@ -1,5 +1,5 @@
 # Buildarr configuration for the media stack.
-# Copy to config/buildarr/buildarr.yml (bootstrap does this when ENABLE_BUILDARR_RECYCLARR=1).
+# Copy to config/buildarr/buildarr.yml (bootstrap always copies this — Buildarr is required).
 # Configures Sonarr, Radarr, Prowlarr declaratively: root folders, download clients, app sync, FlareSolverr.
 # API keys are auto-populated by bootstrap from the pre-seeded config.xml keys.
 # Schema: https://buildarr.github.io/configuration/  TRaSH: https://trash-guides.info/

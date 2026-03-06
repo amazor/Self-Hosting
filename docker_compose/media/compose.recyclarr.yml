@@ -1,0 +1,25 @@
+# Media VM — Optional: Recyclarr (TRaSH quality profile sync)
+# Enable via ENABLE_RECYCLARR=1 in .env (default: enabled).
+#
+# Daemon: syncs TRaSH Guide quality profiles, custom formats, and naming to Sonarr/Radarr
+# on a cron schedule (RECYCLARR_CRON, default: @weekly). Starts with "up -d".
+# Note: Recyclarr does NOT sync on container start — only on cron triggers.
+# deploy.py triggers the initial sync via "exec" after first deploy.
+# Docs: https://recyclarr.dev/  TRaSH: https://trash-guides.info/Guide-Sync/
+
+services:
+  recyclarr:
+    image: ghcr.io/recyclarr/recyclarr:${RECYCLARR_TAG:-latest}
+    container_name: recyclarr
+    user: "${PUID:-1000}:${PGID:-1000}"
+    depends_on:
+      sonarr:
+        condition: service_started
+      radarr:
+        condition: service_started
+    environment:
+      - TZ=${TZ:-Etc/UTC}
+      - CRON_SCHEDULE=${RECYCLARR_CRON:-@weekly}
+    volumes:
+      - ${CONFIG_ROOT:-./config}/recyclarr:/config
+    restart: unless-stopped
