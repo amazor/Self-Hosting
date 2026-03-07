@@ -17,9 +17,9 @@ The deeper “why did I choose *this* specific app” reasoning lives in the fol
 - [Chapter 2A (core)](Chapter2a-core.md)
 - [Chapter 2B (monitoring)](Chapter2b-monitoring.md)
 - [Chapter 2C (media)](Chapter2c-media.md)
-- **Chapter 2D** (`accelerated`) *(planned)*
+- [Chapter 2D (accelerated)](Chapter2d-accelerated.md)
 
-Stack configuration and deployment (env, compose, bootstrap, deploy): [Chapter 3A (core stack)](Chapter3a-core-stack.md), [Chapter 3B (monitoring stack)](Chapter3b-monitoring-stack.md), [Chapter 3C (media stack)](Chapter3c-media-stack.md).
+Stack configuration and deployment (env, compose, bootstrap, deploy): [Chapter 3A (core stack)](Chapter3a-core-stack.md), [Chapter 3B (monitoring stack)](Chapter3b-monitoring-stack.md), [Chapter 3C (media stack)](Chapter3c-media-stack.md), [Chapter 3D (accelerated stack)](Chapter3d-accelerated-stack.md).
 
 > ### 🧠 Philosophy: Boring Infrastructure, Flexible Workloads
 > Foundational services should feel appliance-like: stable, predictable, and rarely changed.
@@ -302,27 +302,15 @@ This chapter is where we actually turn that template into real VMs.
 
 Use this table when cloning. Each row gives the exact VMID, name, and resources; subchapters add VM-specific setup *after* the VM is provisioned.
 
-| VM | VMID | Clone as (name) | vCPU | RAM | Disk (default) | After cloning |
-|----|------|-----------------|------|-----|----------------|----------------|
-| `core` | 110 | `110 core` | 2 | 4GB | 32GB | [Chapter 2A (core)](Chapter2a-core.md#provisioning-the-core-vm-from-the-template) |
-| `monitoring` | 120 | `120 monitoring` | 2 | 6GB | 32GB | [Chapter 2B (monitoring)](Chapter2b-monitoring.md#provisioning-the-monitoring-vm-from-the-template) |
-| `apps` | 210 | `210 apps` | 2 | 4GB | 32GB | — |
-| `media` | 220 | `220 media` | 4 | 8GB | 32GB | [Chapter 2C (media)](Chapter2c-media.md) |
-| `accelerated` | 230 | `230 accelerated` | 4 | 8GB | 32GB | *(Chapter 2D planned)* |
+| VM | VMID | Clone as (name) | vCPU | RAM | Disk | Why these resources | After cloning |
+|----|------|-----------------|------|-----|------|---------------------|----------------|
+| `core` | 110 | `110 core` | 2 | 4GB | 32GB | Access + identity should feel responsive and stable | [Chapter 2A (core)](Chapter2a-core.md#provisioning-the-core-vm-from-the-template) |
+| `monitoring` | 120 | `120 monitoring` | 2 | 6GB | 32GB | Observability stacks grow and benefit from memory | [Chapter 2B (monitoring)](Chapter2b-monitoring.md#provisioning-the-monitoring-vm-from-the-template) |
+| `apps` | 210 | `210 apps` | 2 | 4GB | 32GB | General apps are moderate footprint | — |
+| `media` | 220 | `220 media` | 4 | 8GB | 32GB | Higher churn + heavier pipeline services | [Chapter 2C (media)](Chapter2c-media.md) |
+| `accelerated` | 230 | `230 accelerated` | 4 | 8GB | 32GB | GPU workloads and related services need RAM | [Chapter 2D (accelerated)](Chapter2d-accelerated.md) |
 
-### Starting resource allocation (reference)
-
-These are intentionally “good defaults”, not permanent decisions.
-
-| VM (VMID) | vCPU | RAM | Why this is my starting point |
-|-----------|------|-----|------------------------------|
-| `core` (110) | 2 | 4GB | Access + identity should feel responsive and stable |
-| `monitoring` (120) | 2 | 6GB | Observability stacks grow and benefit from memory |
-| `apps` (210) | 2 | 4GB | General apps are moderate footprint |
-| `media` (220) | 4 | 8GB | Higher churn + heavier pipeline services |
-| `accelerated` (230) | 4 | 8GB | GPU workloads and related services like RAM |
-
-> Disk stays “small OS disk” by default so snapshots/backups are fast. Data gets mounted/attached intentionally later.
+These are intentionally “good defaults”, not permanent decisions. Disk stays “small OS disk” by default so snapshots/backups are fast; data gets mounted/attached intentionally later.
 
 ### Disk and storage (default 32GB, when to increase)
 
@@ -342,8 +330,6 @@ Cloned VMs inherit the template's **32GB** system disk. That is intentional: a s
 | `apps` | 32GB | Usually enough. Add a disk or resize if you host large app data on the VM instead of mounts. |
 | `media` | 32GB | If you use **local** storage for downloads/library (not NFS), add a second disk and mount it; see [Chapter 2C — Storage Design](Chapter2c-media.md#storage-design). |
 | `accelerated` | 32GB | Transcoding temp and thumbnails can use space; 64GB or a second disk is reasonable if you see low-disk warnings. |
-
-> Disk stays "small OS disk" by default so snapshots/backups are fast. Data gets mounted/attached intentionally later.
 
 ### Clone steps (repeat per VM)
 

@@ -216,7 +216,7 @@ Applied where they do not affect functionality:
 8. **Scrape targets** (always regenerated) — Parse **SCRAPE_TARGETS** from `.env` and write `prometheus/targets/scrape-targets.json` with node-exporter and cAdvisor entries per remote VM. Prometheus picks this up via `file_sd_configs` (polls every 5 minutes).
 9. **Observability config** (if `ENABLE_OBSERVABILITY=1`) — Call shared `setup_observability_config()`: create `alloy/` and `alloy/data/` dirs, set ownership, generate `config.alloy` with identity labels from **VM_HOSTNAME** / **VM_ROLE** / **PROXMOX_NODE** and endpoint URLs from **LOKI_URL** / **PROMETHEUS_URL**.
 10. **Compose validation** — Run `docker compose config` and fail if invalid.
-9. **Optional bring-up** — If `--up` was passed, run `docker compose up -d`.
+11. **Optional bring-up** — If `--up` was passed, run `docker compose up -d`.
 
 ### Flags
 
@@ -407,3 +407,4 @@ Set `ENABLE_OBSERVABILITY=0` in `.env` and redeploy. The overlay is not included
 - [Chapter 2 — VM overview](Chapter2-vms.md): VM inventory, VMID scheme, and spinning up VMs from the template.
 - [Chapter 3A — Core stack](Chapter3a-core-stack.md): Same deployment pattern for the core VM.
 - [Chapter 3C — Media stack](Chapter3c-media-stack.md): Same deployment pattern for the media VM.
+- [Local testing guide](Local-testing-guide.md): End-to-end test of all stacks on a four-VM LAN setup.

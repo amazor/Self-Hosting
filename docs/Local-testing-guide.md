@@ -5,6 +5,14 @@ Step-by-step setup to test every stack from your PC on the local network, using 
 **IPs:** core=192.168.1.175, monitoring=192.168.1.197, media=192.168.1.171, accelerated=192.168.1.126  
 **Domain:** `test.arpa` (Caddy internal TLS; you use the hosts file on your PC).
 
+## Table of contents
+- [Part 1: Set up your PC](#part-1-set-up-your-pc)
+- [Part 2: VM storage (no NAS)](#part-2-vm-storage-no-nas)
+- [Part 3: Deploy stacks (order matters)](#part-3-deploy-stacks-order-matters)
+- [Part 4: Test each service](#part-4-test-each-service)
+- [Part 5: Download media (end-to-end)](#part-5-download-media-end-to-end)
+- [Part 6: Quick reference](#part-6-quick-reference)
+
 ---
 
 ## Part 1: Set up your PC

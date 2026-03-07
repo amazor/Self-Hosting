@@ -534,13 +534,13 @@ Each application receives its own hostname.
 
 ### UI Hostnames (SSO Protected)
 
-- `sonarr.domain`
-- `radarr.domain`
-- `prowlarr.domain`
-- `bazarr.domain` (if enabled)
-- `sabnzbd.domain` (if enabled)
+- `sonarr.<PUBLIC_BASE_DOMAIN>`
+- `radarr.<PUBLIC_BASE_DOMAIN>`
+- `prowlarr.<PUBLIC_BASE_DOMAIN>`
+- `bazarr.<PUBLIC_BASE_DOMAIN>` (if enabled)
+- `sabnzbd.<PUBLIC_BASE_DOMAIN>` (if enabled)
 
-These are protected by SSO.
+These are protected by SSO. `<PUBLIC_BASE_DOMAIN>` is set in the core stack `.env` (e.g. `example.com`).
 
 ---
 
@@ -548,9 +548,9 @@ These are protected by SSO.
 
 To support nzb360 and similar mobile apps:
 
-- `sonarr-api.domain`
-- `radarr-api.domain`
-- `prowlarr-api.domain`
+- `sonarr-api.<PUBLIC_BASE_DOMAIN>`
+- `radarr-api.<PUBLIC_BASE_DOMAIN>`
+- `prowlarr-api.<PUBLIC_BASE_DOMAIN>`
 
 These endpoints:
 
@@ -562,7 +562,7 @@ These endpoints:
 
 ### qBittorrent Exception
 
-`qbittorrent.domain`
+`qbittorrent.<PUBLIC_BASE_DOMAIN>`
 
 This endpoint is not behind SSO to support nzb360.
 

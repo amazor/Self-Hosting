@@ -330,11 +330,13 @@ Reference: [TRaSH SABnzbd](https://trash-guides.info/Downloaders/SABnzbd/)
 
 1. Open `http://<media-vm-ip>:8081`.
 2. **Config -> Folders**:
-   - Completed: `/data/downloads/sabnzbd/completed`
+   - Completed Download Folder: `/data/downloads/sabnzbd/completed`
    - Temporary/intermediate: `/data/downloads/sabnzbd/tmp` and `/data/downloads/sabnzbd/intermediate`
 3. **Config -> Categories**:
    - `tv` -> `tv` (relative folder)
    - `movies` -> `movies` (relative folder)
+
+   **Important (TRaSH):** Category folders are specified **relative** to the Completed Download Folder — enter just `tv` or `movies`, not the full path. This is different from qBittorrent, which uses a default save path plus category subdirectories. See [TRaSH SABnzbd — Paths and Categories](https://trash-guides.info/Downloaders/SABnzbd/Paths-and-Categories/).
 4. Verify with one test NZB and confirm destination category path.
 
 ### Sonarr
@@ -514,3 +516,4 @@ Cleanuparr monitors Sonarr/Radarr download queues and automatically handles stal
 - [Chapter 2 — VM overview](Chapter2-vms.md): VM inventory and lifecycle.
 - [Chapter 3A — Core stack](Chapter3a-core-stack.md): same deployment pattern for another VM role.
 - [Chapter 3D — Accelerated stack](Chapter3d-accelerated-stack.md): Plex (playback VM), `setup_accelerated_apps.py`, and the two-token model (`PLEX_CLAIM` vs `PLEX_TOKEN`).
+- [Local testing guide](Local-testing-guide.md): End-to-end test of all stacks on a four-VM LAN setup.

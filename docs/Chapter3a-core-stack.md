@@ -459,4 +459,5 @@ whoami is an echo service with no configuration. It is reachable only via Caddy 
 
 - [Chapter 2A — Core VM (purpose and app selection)](Chapter2a-core.md): Why the Core VM exists, what runs there, and design constraints.
 - [Chapter 2 — VM overview](Chapter2-vms.md): VM inventory, VMID scheme, and spinning up VMs from the template.
-- **Chapter 3** *(planned)*: Overall Compose strategy and cross-stack patterns.
+- [Local testing guide](Local-testing-guide.md): End-to-end test of all stacks on a four-VM LAN setup.
+- **Chapter 3** *(compose strategy overview — planned)*: Overall Compose strategy and cross-stack patterns.

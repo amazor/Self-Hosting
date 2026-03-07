@@ -559,6 +559,7 @@ Once the stack is up, most Plex configuration is handled automatically by `setup
 - [Chapter 2D — Accelerated VM](Chapter2d-accelerated.md): purpose, storage design, GPU boundaries, VM-side GPU prerequisites, and app selection.  
 - [Chapter 2C — Media VM](Chapter2c-media.md): how the media pipeline produces the library Plex reads.  
 - [Chapter 3A — Core stack](Chapter3a-core-stack.md): reverse proxy and Caddy routing (how Plex and Immich become accessible).  
+- [Local testing guide](Local-testing-guide.md): End-to-end test of all stacks on a four-VM LAN setup.  
 - [Immich documentation](https://immich.app/docs/) — official install, environment variables, hardware transcoding, and ML acceleration.  
 - [TRaSH Guides — Plex](https://trash-guides.info/Plex/) — gold standard for Plex server and client tuning.
 

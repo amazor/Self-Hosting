@@ -33,7 +33,7 @@ Proxmox Virtual Environment (PVE) is a complete, open-source platform for enterp
 - [Step 3 – The Cloud-Init Bootstrap Snippet](#step-3--the-cloud-init-bootstrap-snippet)
 - [Step 4 – Automation Script (The "Template Maker")](#step-4--automation-script-the-template-maker)
   - [Choose the right storage (important)](#choose-the-right-storage-important)
-- [Step 5. Finalize in the GUI](#step-5-finalize-in-the-gui)
+- [Step 5 – Finalize in the GUI](#step-5--finalize-in-the-gui)
 - [Step 6 – Verification](#step-6--verification-is-it-actually-working)
 - [Philosophy & FAQ: The "Why" Behind the Defaults](#-philosophy--faq-the-why-behind-the-defaults)
 
@@ -412,7 +412,7 @@ One of the best features of Proxmox is that nothing we’ve done in this script 
 > Think of this template as your "Base Model" car. You can always add a roof rack or better tires later. We set the template to 2GB of RAM because it’s the "Sweet Spot"—enough to run most Docker stacks comfortably, but small enough to fit 3 or 4 VMs on modest hardware.
 
 ---
-### Step 5. Finalize in the GUI
+### Step 5 – Finalize in the GUI
 
 Once the script finishes and says `VM XXX Created`, head back to the Proxmox Web UI:
 

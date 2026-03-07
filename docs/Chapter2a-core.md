@@ -211,7 +211,8 @@ The reverse proxy is the lab’s front door: it owns HTTPS termination and routi
 **Tradeoffs accepted**
 - Adding a new externally reachable service usually means touching proxy config in `core`. That friction is acceptable here because it reinforces deliberate change.
 
-> **TODO (cert strategy):** current setup uses HTTP challenge. DNS challenge (e.g., wildcard certs) may become the preferred path later because it makes adding new subdomains/services easier and less brittle.
+> ### 🧠 Open Question: HTTP vs DNS Challenge
+> The current setup uses the HTTP challenge for Let's Encrypt. DNS challenge (e.g., wildcard certs) may become the preferred path later because it makes adding new subdomains/services easier and less brittle. This is worth revisiting once the number of services behind Caddy grows.
 
 ---
 
