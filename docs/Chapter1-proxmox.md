@@ -496,3 +496,7 @@ In any homelab journey, the "Hardcoded Defaults" are rarely accidental. They rep
 * **A:** Proxmox is looking for an LVM volume that isn’t there. Common cases:
   * **You use ZFS:** There is no `local-lvm`. Delete template 9000 and recreate with `./create_template.sh -s local-zfs`, then add SSH key and convert to template again.
   * **You have LVM:** Check `qm config 9000` and `lvs`. If `scsi0` points to `base-9000-disk-0` but `efidisk0` points to `vm-9000-disk-0`, the **EFI disk** volume is missing (it can be dropped when the template was converted with an older script order). Fix: delete the template VM (9000), run the script again (it now creates the main disk before the EFI disk so both survive “Convert to Template”), then add your SSH key and convert to template. Clones will work after that.
+
+---
+
+**Next:** Need to pass a GPU or other PCI device to a VM? See [Chapter 1A — Intel iGPU Passthrough](Chapter1a-gpu-passthrough.md).

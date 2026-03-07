@@ -188,6 +188,8 @@ def _gpu_guardrail(env: dict[str, str], *, force: bool, non_interactive: bool) -
     if not dev_dri.exists():
         msg = (
             "/dev/dri is missing on the host. GPU passthrough may not be configured.\n"
+            "See docs/Chapter1a-gpu-passthrough.md (Proxmox host setup) and\n"
+            "docs/Chapter2d-accelerated.md#vm-side-gpu-prerequisites (VM driver install).\n"
             "Plex and Immich can run in CPU-only mode, but hardware acceleration "
             "will not work until /dev/dri is present."
         )

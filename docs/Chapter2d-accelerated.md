@@ -41,6 +41,7 @@ This chapter assumes:
   - [How `media` and `accelerated` Share Data](#how-media-and-accelerated-share-data)
 - [GPU Design](#gpu-design)
   - [Intel Quick Sync / VAAPI (Default Path)](#intel-quick-sync--vaapi-default-path)
+  - [VM-Side GPU Prerequisites](#vm-side-gpu-prerequisites)
   - [Boundary Rules for the GPU](#boundary-rules-for-the-gpu)
 - [Access Model](#access-model)
 - [Backup and Rebuild](#backup-and-rebuild)
@@ -243,7 +244,7 @@ This repo standardizes on:
 - **Intel Quick Sync / VAAPI** on the Accelerated VM  
 - GPU passthrough from Proxmox to a single guest (this VM)  
 
-The exact Proxmox passthrough steps (IOMMU, GPU binding, display considerations) live in the Proxmox/host notes; this chapter focuses on the **VM contract**.
+The Proxmox host-side passthrough steps (IOMMU, VFIO, driver blacklisting, PCI device assignment) are documented in **[Chapter 1A — Intel iGPU Passthrough](Chapter1a-gpu-passthrough.md)**. This chapter focuses on the **VM contract**: what the guest expects, what to install, and how containers use the GPU.
 
 ### Intel Quick Sync / VAAPI (Default Path)
 
@@ -266,6 +267,53 @@ Inside the Accelerated VM:
 > There are many ways to wire GPUs (NVENC, ROCm, multiple backends, etc.).
 > This repo starts with a single, well-understood path (Intel Quick Sync / VAAPI)
 > and leaves room for future overlays if a second GPU or backend ever appears.
+
+### VM-Side GPU Prerequisites
+
+> ### ⚠️ Do This Before Deploying the Stack
+> After Proxmox passthrough is configured ([Chapter 1A](Chapter1a-gpu-passthrough.md)) and the
+> Accelerated VM is booted, complete these steps **inside the VM** before running `bootstrap.py`
+> or `deploy.py`. The Docker containers depend on `/dev/dri` being present and functional.
+
+**1. Verify the GPU device files exist:**
+
+```bash
+ls -la /dev/dri/
+```
+
+You should see `card0` and `renderD128`. If `/dev/dri/` is missing, passthrough is not working — check [Chapter 1A troubleshooting](Chapter1a-gpu-passthrough.md#troubleshooting) and `dmesg` in both the host and guest.
+
+**2. Install the VA-API userspace driver:**
+
+```bash
+sudo apt update
+sudo apt install -y intel-media-va-driver vainfo
+```
+
+For 12th–14th gen Intel CPUs, `intel-media-va-driver` (the **iHD** backend) is the correct package. Do **not** use the older `i965-va-driver` — it does not support these generations.
+
+**3. Verify VA-API is working:**
+
+```bash
+vainfo
+```
+
+A successful output lists supported codec profiles (H.264, HEVC, VP9, AV1 encode/decode, etc.). If it reports "failed to initialize display," the driver or passthrough has an issue.
+
+**4. (Optional) Monitor GPU utilization:**
+
+```bash
+sudo apt install -y intel-gpu-tools
+sudo intel_gpu_top
+```
+
+Run this while Plex is transcoding to confirm hardware acceleration is active.
+
+> ### 🧠 Why Not Automate This in the Template?
+> The Proxmox VM template is intentionally "boring" ([Chapter 1](Chapter1-proxmox.md)) — it contains
+> only the base OS, Docker, and guest agent. Role-specific packages like `intel-media-va-driver`
+> belong on the Accelerated VM only, not in the shared golden image. Installing them is a
+> one-time manual step documented here rather than complexity added to every VM clone.
 
 ### Boundary Rules for the GPU
 

@@ -189,8 +189,8 @@ services:
 
 This is the Docker-side contract for Intel Quick Sync / VAAPI:
 
-- Proxmox passes the iGPU through to the Accelerated VM.  
-- The VM exposes it as `/dev/dri/*`.  
+- Proxmox passes the iGPU through to the Accelerated VM — see [Chapter 1A](Chapter1a-gpu-passthrough.md) for host-side setup.  
+- The VM exposes it as `/dev/dri/*` after installing the VA-API driver — see [Chapter 2D — VM-Side GPU Prerequisites](Chapter2d-accelerated.md#vm-side-gpu-prerequisites).  
 - Containers that need acceleration are granted access to `/dev/dri`.  
 
 Immich’s ML container (`immich-machine-learning`) starts on CPU by default; GPU
@@ -466,6 +466,8 @@ Once the stack is up, do the following:
    - Verify Proxmox and fstab entries match the expected paths (`/mnt/media`, `/mnt/photos`).  
 
 4. **GPU issues**  
+   - Verify passthrough is configured: [Chapter 1A](Chapter1a-gpu-passthrough.md).  
+   - Verify VM-side drivers are installed: [Chapter 2D — VM-Side GPU Prerequisites](Chapter2d-accelerated.md#vm-side-gpu-prerequisites).  
    - Check `dmesg` and Proxmox logs for passthrough errors.  
    - Confirm no other VM or the host itself is using the GPU.  
    - Temporarily run with `--force` and CPU-only to isolate driver vs app issues.
@@ -478,7 +480,8 @@ Once the stack is up, do the following:
 
 ## See also
 
-- [Chapter 2D — Accelerated VM](Chapter2d-accelerated.md): purpose, storage design, GPU boundaries, and app selection.  
+- [Chapter 1A — Intel iGPU Passthrough](Chapter1a-gpu-passthrough.md): Proxmox host-side IOMMU, VFIO, and PCI device assignment.  
+- [Chapter 2D — Accelerated VM](Chapter2d-accelerated.md): purpose, storage design, GPU boundaries, VM-side GPU prerequisites, and app selection.  
 - [Chapter 2C — Media VM](Chapter2c-media.md): how the media pipeline produces the library Plex reads.  
 - [Chapter 3A — Core stack](Chapter3a-core-stack.md): reverse proxy and Caddy routing (how Plex and Immich become accessible).  
 - [Immich documentation](https://immich.app/docs/) — official install, environment variables, hardware transcoding, and ML acceleration.  
