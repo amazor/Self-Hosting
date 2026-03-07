@@ -169,8 +169,9 @@ services:
 
   # --- dnsmasq: internal DNS for homelab naming ---
   # Keep DNS role intentionally small: local host records + upstream forwarding.
+  # Image: 4km3/dnsmasq — minimal Alpine-based dnsmasq (replaces unmaintained jpillora/dnsmasq).
   dnsmasq:
-    image: jpillora/dnsmasq:${DNSMASQ_TAG:-latest}
+    image: 4km3/dnsmasq:${DNSMASQ_TAG:-latest}
     container_name: dnsmasq
     # no-new-privileges reduces blast radius if a service is compromised.
     security_opt:
@@ -178,7 +179,7 @@ services:
     cap_add:
       # NET_ADMIN is commonly required for dnsmasq network operations.
       - NET_ADMIN
-    entrypoint: ["webproc", "--config", "/etc/dnsmasq/dnsmasq.conf", "--", "dnsmasq", "--no-daemon", "-C", "/etc/dnsmasq/dnsmasq.conf"]
+    entrypoint: ["dnsmasq", "--no-daemon", "--log-facility=-", "-C", "/etc/dnsmasq/dnsmasq.conf"]
     ports:
       # Bind DNS on host. If the VM has multiple NICs, set DNS_BIND_IP in .env.
       - "${DNS_BIND_IP:-0.0.0.0}:53:53/tcp"

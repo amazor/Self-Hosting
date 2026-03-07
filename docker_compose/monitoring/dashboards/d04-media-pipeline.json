@@ -1526,7 +1526,7 @@
       "id": 17,
       "type": "timeseries",
       "title": "Download Speed",
-      "description": "qBittorrent download/upload speed. Zero speed + non-empty queue = stalled. Check VPN container health and network.\n\nPowered by caseyscarborough/qbittorrent-exporter (port 17871).",
+      "description": "qBittorrent download/upload speed. Zero speed + non-empty queue = stalled. Check VPN container health and network.\n\nPowered by martabal/qbittorrent-exporter (port 17871).",
       "gridPos": {
         "x": 12,
         "y": 37,
@@ -1665,7 +1665,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "### Exporter Status\n\nThe pipeline panels above are powered by these exporters. Enable via `ENABLE_EXPORTERS=1` in `.env` (default: on).\n\n| Exporter | What it unlocks | Image | Compose overlay |\n|----------|----------------|-------|-----------------|\n| **scraparr** | Queue depth, library size, missing content, indexer health, quality breakdown | `ghcr.io/thecfu/scraparr:latest` | `compose.exporters.yml` |\n| **qbittorrent-exporter** | Download/upload speed, torrent counts/states, ratios, stalled detection | `caseyscarborough/qbittorrent-exporter:latest` | `compose.exporters.yml` |\n| **prometheus-plex-exporter** (future) | Active sessions, transcoding vs direct play, library stats | `ghcr.io/jsclayton/prometheus-plex-exporter:latest` | Accelerated VM stack |\n\n**API keys:** After first deployment, retrieve from each app: Settings → General → API Key. Set `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY` in `.env` or write `config/scraparr/config.yaml`.\n\n**Tracing tip:** To trace a specific media request (\"I added a movie, why isn’t it downloading?\"), use Grafana Explore with Loki: `{service=~\"sonarr|radarr|prowlarr|qbittorrent\"} |= \"Movie Title\"`. This shows the full lifecycle across all services in one query — poor man’s distributed tracing with zero app changes."
+        "content": "### Exporter Status\n\nThe pipeline panels above are powered by these exporters. Enable via `ENABLE_EXPORTERS=1` in `.env` (default: on).\n\n| Exporter | What it unlocks | Image | Compose overlay |\n|----------|----------------|-------|-----------------|\n| **scraparr** | Queue depth, library size, missing content, indexer health, quality breakdown | `ghcr.io/thecfu/scraparr:latest` | `compose.exporters.yml` |\n| **qbittorrent-exporter** | Download/upload speed, torrent counts/states, ratios, stalled detection | `martabal/qbittorrent-exporter:latest` | `compose.exporters.yml` |\n| **prometheus-plex-exporter** (future) | Active sessions, transcoding vs direct play, library stats | `ghcr.io/jsclayton/prometheus-plex-exporter:latest` | Accelerated VM stack |\n\n**API keys:** After first deployment, retrieve from each app: Settings → General → API Key. Set `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY` in `.env` or write `config/scraparr/config.yaml`.\n\n**Tracing tip:** To trace a specific media request (\"I added a movie, why isn’t it downloading?\"), use Grafana Explore with Loki: `{service=~\"sonarr|radarr|prowlarr|qbittorrent\"} |= \"Movie Title\"`. This shows the full lifecycle across all services in one query — poor man’s distributed tracing with zero app changes."
       }
     }
   ]

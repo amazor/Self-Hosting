@@ -12,7 +12,7 @@
 #   - qbittorrent-exporter: Prometheus exporter for qBittorrent
 #     Metrics: download/upload speed, torrent states, ratios, stalled detection
 #     Port: 17871 → Prometheus scrapes this
-#     Docs: https://github.com/caseyscarborough/qbittorrent-exporter
+#     Docs: https://github.com/martabal/qbittorrent-exporter
 #
 # Note: Plex/Jellyfin metrics are handled separately on the accelerated VM.
 #   See: https://github.com/jsclayton/prometheus-plex-exporter
@@ -59,8 +59,9 @@ services:
   # --- qbittorrent-exporter: download client metrics ---
   # Connects to qBittorrent's Web API to export torrent stats.
   # qBittorrent uses network_mode: service:vpn, so reach it at vpn:8080.
+  # Docs: https://github.com/martabal/qbittorrent-exporter
   qbittorrent-exporter:
-    image: caseyscarborough/qbittorrent-exporter:${QBITTORRENT_EXPORTER_TAG:-latest}
+    image: martabal/qbittorrent-exporter:${QBITTORRENT_EXPORTER_TAG:-latest}
     container_name: qbittorrent-exporter
     depends_on:
       vpn:
@@ -69,6 +70,7 @@ services:
       - QBITTORRENT_BASE_URL=http://vpn:8080
       - QBITTORRENT_USERNAME=${QBITTORRENT_USERNAME:-admin}
       - QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD:-adminadmin}
+      - EXPORTER_PORT=17871
     ports:
       - "17871:17871"
     restart: unless-stopped
