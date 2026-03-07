@@ -60,7 +60,7 @@ radarr:
         qBittorrent:
           type: "qbittorrent"
           enable: true
-          host: "vpn"
+          hostname: "vpn"
           port: 8080
           category: "movies"
           recent_priority: "last"

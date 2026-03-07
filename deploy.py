@@ -467,7 +467,7 @@ def _post_deploy_media(sdir: Path) -> None:
     else:
         output = result.stderr or result.stdout or ""
         log.warning(
-            "[WARNING] Buildarr failed (may need manual config). output: %s",
+            "Buildarr failed (may need manual config). output: %s",
             output[-500:] if output else "(empty)",
         )
 
@@ -489,7 +489,7 @@ def _post_deploy_media(sdir: Path) -> None:
         else:
             output = result.stderr or result.stdout or ""
             log.warning(
-                "[WARNING] Recyclarr sync failed (may need manual config). output: %s",
+                "Recyclarr sync failed (may need manual config). output: %s",
                 output[-500:] if output else "(empty)",
             )
 

@@ -1,44 +1,55 @@
-# Recyclarr configuration for the media stack.
+# Recyclarr configuration for the media stack (v8 format).
 # Copy to config/recyclarr/recyclarr.yml (bootstrap copies this when ENABLE_RECYCLARR=1).
 # Syncs TRaSH Guide quality definitions, custom formats, quality profiles, and naming to Sonarr/Radarr.
 # API keys are in config/recyclarr/secrets.yml (bootstrap auto-populates from pre-seeded config.xml keys).
 # Ref: https://recyclarr.dev/reference/config-examples/  https://trash-guides.info/Guide-Sync/
 
-# yaml-language-server: $schema=https://raw.githubusercontent.com/recyclarr/recyclarr/master/schemas/config-schema.json
+# yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json
 
 sonarr:
   # --- TV (WEB-1080p) — TRaSH Golden Rule: 720/1080p → x264 ---
+  # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-1080p
   tv:
     base_url: "!secret sonarr_url"
     api_key: "!secret sonarr_apikey"
-    delete_old_custom_formats: true
-    replace_existing_custom_formats: true
-    include:
-      - template: sonarr-quality-definition-series
-      - template: sonarr-v4-quality-profile-web-1080p
-      - template: sonarr-v4-custom-formats-web-1080p
+    quality_definition:
+      type: series
+    quality_profiles:
+      - trash_id: 72dae194fc92bf828f32cde7744e51a1  # WEB-1080p
+        reset_unmatched_scores:
+          enabled: true
+    custom_format_groups:
+      add:
+        - trash_id: 158188097a58d7687dee647e04af0da3  # [Required] Golden Rule HD
+          select:
+            - 47435ece6b99a0b477caf360e79ba0bb  # x265 (HD)
 
   # --- Anime — TRaSH Anime quality profile ---
-  # Ref: https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles-anime/
+  # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles-anime/#quality-profile
   anime:
     base_url: "!secret sonarr_url"
     api_key: "!secret sonarr_apikey"
-    delete_old_custom_formats: true
-    replace_existing_custom_formats: true
-    include:
-      - template: sonarr-quality-definition-anime
-      - template: sonarr-v4-quality-profile-anime
-      - template: sonarr-v4-custom-formats-anime
+    quality_definition:
+      type: anime
+    quality_profiles:
+      - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
+        reset_unmatched_scores:
+          enabled: true
 
 radarr:
   # --- Movies (HD Bluray + WEB 1080p) — TRaSH Golden Rule ---
-  # Ref: https://trash-guides.info/Radarr/
+  # https://trash-guides.info/Radarr/radarr-setup-quality-profiles/#hd-bluray-web
   movies:
     base_url: "!secret radarr_url"
     api_key: "!secret radarr_apikey"
-    delete_old_custom_formats: true
-    replace_existing_custom_formats: true
-    include:
-      - template: radarr-quality-definition-movie
-      - template: radarr-quality-profile-hd-bluray-web
-      - template: radarr-custom-formats-hd-bluray-web
+    quality_definition:
+      type: movie
+    quality_profiles:
+      - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
+        reset_unmatched_scores:
+          enabled: true
+    custom_format_groups:
+      add:
+        - trash_id: f8bf8eab4617f12dfdbd16303d8da245  # [Required] Golden Rule HD
+          select:
+            - dc98083864ea246d05a42df0d05f81cc  # x265 (HD)
