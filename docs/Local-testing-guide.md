@@ -158,7 +158,7 @@ On the **media** VM:
 python3 deploy.py media --force -y
 ```
 
-Containers: ExpressVPN (VPN) → qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr (and overlays if enabled). After compose up, deploy automatically runs **setup_media_apps.py** (adds Prowlarr indexers, configures qBittorrent categories/settings), then **Buildarr** (root folders, download clients, app sync) and **Recyclarr** (TRaSH quality profiles including anime).
+Containers: ExpressVPN (VPN) → qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr (and overlays if enabled). After compose up, deploy automatically runs **setup_media_apps.py** (adds Prowlarr indexers, configures qBittorrent, sets up Sonarr/Radarr root folders + download clients + TRaSH naming, and connects Prowlarr app sync), then triggers **Recyclarr** (TRaSH quality profiles including anime).
 
 ### 3.5 Accelerated (Plex + Immich)
 
@@ -217,7 +217,7 @@ This walks through one TV show and one movie so the full pipeline works.
 
 1. Open **https://prowlarr.test.arpa** and log in (SSO or direct).
 2. **Indexers:** Deploy now adds 13 public torrent indexers (with FlareSolverr proxy) automatically via `setup_media_apps.py`. Verify they appear under **Indexers** and are healthy. Add additional indexers (private trackers, Usenet) if desired.
-3. **Apps** → Verify **Sonarr** and **Radarr** are listed (Buildarr syncs these automatically). If not, add them manually (URLs like `http://sonarr:8989` and `http://radarr:7878` from Prowlarr’s perspective). Sync indexers to the apps.
+3. **Apps** → Verify **Sonarr** and **Radarr** are listed (`setup_media_apps.py` configures Prowlarr app sync automatically). If not, add them manually (URLs like `http://sonarr:8989` and `http://radarr:7878` from Prowlarr’s perspective). Sync indexers to the apps.
 
 ### 5.2 qBittorrent — categories
 
@@ -228,7 +228,7 @@ Deploy now pre-configures qBittorrent automatically via `setup_media_apps.py`: c
 
 ### 5.3 Sonarr — root folder and download client
 
-Buildarr automatically configures Sonarr on deploy: root folder (`/data/library/tv`), qBittorrent download client (category `tv`), and Prowlarr app sync. Verify in the UI:
+`setup_media_apps.py` automatically configures Sonarr on deploy: root folders (`/data/library/tv`, `/data/library/anime`), qBittorrent download client (category `tv`), TRaSH naming, and Prowlarr app sync. Verify in the UI:
 
 1. **https://sonarr.test.arpa** → **Settings → Media Management → Root Folders:** `/data/library/tv` should be present.
 2. **Settings → Download Clients:** qBittorrent should be listed (host `qbittorrent`, port 8080, category `tv`).
@@ -236,7 +236,7 @@ Buildarr automatically configures Sonarr on deploy: root folder (`/data/library/
 
 ### 5.4 Radarr — root folder and download client
 
-Buildarr automatically configures Radarr on deploy: root folder (`/data/library/movies`), qBittorrent download client (category `movies`), and Prowlarr app sync. Verify in the UI:
+`setup_media_apps.py` automatically configures Radarr on deploy: root folder (`/data/library/movies`), qBittorrent download client (category `movies`), TRaSH naming, and Prowlarr app sync. Verify in the UI:
 
 1. **https://radarr.test.arpa** → **Settings → Media Management → Root Folders:** `/data/library/movies` should be present.
 2. **Settings → Download Clients:** qBittorrent should be listed (category `movies`).

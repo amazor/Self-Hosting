@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
-"""Post-deploy setup for media stack: Prowlarr indexers + qBittorrent config.
+"""Post-deploy setup for media stack (*arr + qBittorrent + Prowlarr sync).
 
-Adds public torrent indexers to Prowlarr and configures qBittorrent categories
-and settings via their APIs. Runs after docker compose up, when the services
-are healthy.
+Configures all media-stack services via their APIs after docker compose up:
+  - Prowlarr indexers + FlareSolverr proxy
+  - qBittorrent preferences + categories (TRaSH guide)
+  - Sonarr/Radarr root folders, download clients, TRaSH naming
+  - Prowlarr app sync (connects Prowlarr → Sonarr/Radarr)
 
 Called by deploy.py after the media stack starts, or run standalone:
   cd docker_compose/media && python3 setup_media_apps.py
 
-Idempotent: skips indexers/categories that already exist.
+Idempotent: skips resources that already exist.
 """
 
 from __future__ import annotations
@@ -65,6 +67,66 @@ QBIT_CATEGORIES = {
     "tv": "completed/tv",
     "movies": "completed/movies",
     "anime": "completed/anime",
+}
+
+# ---------------------------------------------------------------------------
+# Sonarr / Radarr / Prowlarr configuration
+# Root folders, download clients (qBittorrent), TRaSH naming, app sync.
+# Replaces Buildarr (unmaintained, incompatible with Sonarr v4).
+# ---------------------------------------------------------------------------
+
+SONARR_ROOT_FOLDERS = ["/data/library/tv", "/data/library/anime"]
+RADARR_ROOT_FOLDERS = ["/data/library/movies"]
+
+# qBittorrent uses network_mode: service:vpn, so *arrs reach it at vpn:8080.
+QBIT_DL_HOST = "vpn"
+QBIT_DL_PORT = 8080
+
+# TRaSH-recommended naming formats.
+# Ref: https://trash-guides.info/Sonarr/Sonarr-recommended-naming-scheme/
+SONARR_NAMING: dict[str, object] = {
+    "renameEpisodes": True,
+    "replaceIllegalCharacters": True,
+    "multiEpisodeStyle": 5,  # prefixed-range
+    "standardEpisodeFormat": (
+        "{Series TitleYear} - S{season:00}E{episode:00} - "
+        "{Episode CleanTitle} [{Custom Formats}{Quality Full}]"
+        "{[MediaInfo VideoDynamicRangeType]}"
+        "{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}"
+        "{[MediaInfo VideoCodec]}{-Release Group}"
+    ),
+    "dailyEpisodeFormat": (
+        "{Series TitleYear} - {Air-Date} - "
+        "{Episode CleanTitle} [{Custom Formats}{Quality Full}]"
+        "{[MediaInfo VideoDynamicRangeType]}"
+        "{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}"
+        "{[MediaInfo VideoCodec]}{-Release Group}"
+    ),
+    "animeEpisodeFormat": (
+        "{Series TitleYear} - S{season:00}E{episode:00} - "
+        "{absolute:000} - {Episode CleanTitle} [{Custom Formats}"
+        "{Quality Full}]{[MediaInfo VideoDynamicRangeType]}"
+        "{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}"
+        "{[MediaInfo VideoCodec]}{-Release Group}"
+    ),
+    "seriesFolderFormat": "{Series TitleYear} [tvdbid-{TvdbId}]",
+    "seasonFolderFormat": "Season {season:00}",
+}
+
+# Ref: https://trash-guides.info/Radarr/Radarr-recommended-naming-scheme/
+RADARR_NAMING: dict[str, object] = {
+    "renameMovies": True,
+    "replaceIllegalCharacters": True,
+    "standardMovieFormat": (
+        "{Movie CleanTitle} {(Release Year)} {edition-{Edition Tags}} "
+        "[{Custom Formats}{Quality Full}]"
+        "{[MediaInfo VideoDynamicRangeType]}"
+        "{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}"
+        "{[MediaInfo VideoCodec]}{-Release Group}"
+    ),
+    "movieFolderFormat": (
+        "{Movie CleanTitle} ({Release Year}) [tmdbid-{TmdbId}]"
+    ),
 }
 
 
@@ -351,6 +413,189 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# Sonarr / Radarr setup (naming, root folders, download client)
+# ---------------------------------------------------------------------------
+
+
+def _setup_naming(app_name: str, base_url: str, headers: dict,
+                  naming: dict[str, object]) -> None:
+    """Update *arr naming config by merging into existing settings."""
+    url = f"{base_url}/api/v3/config/naming"
+    current = _api(url, headers)
+    if current is None:
+        log.warning("Could not read %s naming config.", app_name)
+        return
+    current.update(naming)
+    result = _api(url, headers, method="PUT", data=current)
+    if result is not None:
+        log.info("%s naming config updated (TRaSH scheme).", app_name)
+    else:
+        log.warning("Failed to update %s naming config.", app_name)
+
+
+def _setup_root_folders(app_name: str, base_url: str, headers: dict,
+                        folders: list[str]) -> None:
+    """Add root folders idempotently (skips existing paths)."""
+    url = f"{base_url}/api/v3/rootfolder"
+    existing = _api(url, headers)
+    existing_paths: set[str] = set()
+    if existing:
+        existing_paths = {rf.get("path", "") for rf in existing}
+
+    added = 0
+    for folder in folders:
+        if folder in existing_paths:
+            continue
+        result = _api(url, headers, method="POST", data={"path": folder})
+        if result and result.get("id"):
+            added += 1
+        else:
+            log.warning("Failed to add %s root folder %s.", app_name, folder)
+
+    if added:
+        log.info("%s root folders: %d added.", app_name, added)
+    else:
+        log.info("%s root folders already configured.", app_name)
+
+
+def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
+                                category: str) -> None:
+    """Add qBittorrent download client via schema (idempotent)."""
+    url = f"{base_url}/api/v3/downloadclient"
+    existing = _api(url, headers)
+    if existing:
+        for dc in existing:
+            if dc.get("implementation") == "QBittorrent":
+                log.info("%s qBittorrent download client already exists.", app_name)
+                return
+
+    schemas = _api(f"{url}/schema", headers)
+    if not schemas:
+        log.warning("Could not fetch %s download client schemas.", app_name)
+        return
+
+    schema = None
+    for s in schemas:
+        if s.get("implementation") == "QBittorrent":
+            schema = dict(s)
+            break
+    if schema is None:
+        log.warning("QBittorrent schema not found in %s.", app_name)
+        return
+
+    schema["name"] = "qBittorrent"
+    schema["enable"] = True
+    schema.pop("id", None)
+    schema.pop("presets", None)
+
+    field_overrides = {"host": QBIT_DL_HOST, "port": QBIT_DL_PORT}
+    for field in schema.get("fields", []):
+        name = field.get("name", "")
+        if name in field_overrides:
+            field["value"] = field_overrides[name]
+        elif "category" in name.lower() and "imported" not in name.lower():
+            field["value"] = category
+
+    result = _api(url, headers, method="POST", data=schema)
+    if result and result.get("id"):
+        log.info(
+            "%s qBittorrent download client added (category=%s).",
+            app_name, category,
+        )
+    else:
+        log.warning("Failed to add qBittorrent download client to %s.", app_name)
+
+
+def setup_sonarr(sonarr_url: str, api_key: str) -> None:
+    """Configure Sonarr: TRaSH naming, root folders, qBittorrent client."""
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+    if not _wait_for_service("Sonarr", f"{sonarr_url}/api/v3/health", headers):
+        return
+    _setup_naming("Sonarr", sonarr_url, headers, SONARR_NAMING)
+    _setup_root_folders("Sonarr", sonarr_url, headers, SONARR_ROOT_FOLDERS)
+    _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv")
+
+
+def setup_radarr(radarr_url: str, api_key: str) -> None:
+    """Configure Radarr: TRaSH naming, root folders, qBittorrent client."""
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+    if not _wait_for_service("Radarr", f"{radarr_url}/api/v3/health", headers):
+        return
+    _setup_naming("Radarr", radarr_url, headers, RADARR_NAMING)
+    _setup_root_folders("Radarr", radarr_url, headers, RADARR_ROOT_FOLDERS)
+    _setup_download_client_qbit("Radarr", radarr_url, headers, "movies")
+
+
+# ---------------------------------------------------------------------------
+# Prowlarr app sync (connect Prowlarr → Sonarr / Radarr)
+# ---------------------------------------------------------------------------
+
+
+def setup_prowlarr_apps(prowlarr_url: str, prowlarr_key: str,
+                        sonarr_key: str | None,
+                        radarr_key: str | None) -> None:
+    """Add Sonarr/Radarr as applications in Prowlarr for indexer sync."""
+    headers = {"X-Api-Key": prowlarr_key, "Content-Type": "application/json"}
+
+    existing = _api(f"{prowlarr_url}/api/v1/applications", headers)
+    if existing is None:
+        log.warning("Could not list Prowlarr applications.")
+        return
+    existing_impls = {
+        app.get("implementation", "").lower() for app in existing
+    }
+
+    schemas = _api(f"{prowlarr_url}/api/v1/applications/schema", headers)
+    if not schemas:
+        log.warning("Could not fetch Prowlarr application schemas.")
+        return
+
+    apps_to_add: list[tuple[str, str, str]] = []
+    if sonarr_key and "sonarr" not in existing_impls:
+        apps_to_add.append(("Sonarr", sonarr_key, "http://sonarr:8989"))
+    if radarr_key and "radarr" not in existing_impls:
+        apps_to_add.append(("Radarr", radarr_key, "http://radarr:7878"))
+
+    if not apps_to_add:
+        log.info("Prowlarr app sync already configured.")
+        return
+
+    for app_name, api_key, base_url in apps_to_add:
+        schema = None
+        for s in schemas:
+            if s.get("implementation") == app_name:
+                schema = dict(s)
+                break
+        if not schema:
+            log.warning("No Prowlarr schema found for %s.", app_name)
+            continue
+
+        schema["name"] = app_name
+        schema.pop("id", None)
+        schema.pop("presets", None)
+
+        field_values = {
+            "prowlarrUrl": "http://prowlarr:9696",
+            "baseUrl": base_url,
+            "apiKey": api_key,
+            "syncLevel": "fullSync",
+        }
+        for field in schema.get("fields", []):
+            name = field.get("name", "")
+            if name in field_values:
+                field["value"] = field_values[name]
+
+        result = _api(
+            f"{prowlarr_url}/api/v1/applications", headers,
+            method="POST", data=schema,
+        )
+        if result and result.get("id"):
+            log.info("Added %s to Prowlarr app sync.", app_name)
+        else:
+            log.warning("Failed to add %s to Prowlarr app sync.", app_name)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -362,12 +607,30 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
     )
 
     prowlarr_key = _read_api_key(config_base, "prowlarr")
+    sonarr_key = _read_api_key(config_base, "sonarr")
+    radarr_key = _read_api_key(config_base, "radarr")
+
     if prowlarr_key:
         setup_prowlarr_indexers("http://localhost:9696", prowlarr_key)
     else:
         log.warning("Prowlarr API key not found; skipping indexer setup.")
 
     setup_qbittorrent("http://localhost:8080", env)
+
+    if sonarr_key:
+        setup_sonarr("http://localhost:8989", sonarr_key)
+    else:
+        log.warning("Sonarr API key not found; skipping Sonarr setup.")
+
+    if radarr_key:
+        setup_radarr("http://localhost:7878", radarr_key)
+    else:
+        log.warning("Radarr API key not found; skipping Radarr setup.")
+
+    if prowlarr_key:
+        setup_prowlarr_apps(
+            "http://localhost:9696", prowlarr_key, sonarr_key, radarr_key,
+        )
 
     return True
 

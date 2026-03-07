@@ -52,7 +52,7 @@ Build a robust, scalable, and automated home server environment that can host:
 | `core` | Caddy, Authentik, dnsmasq, whoami | ddclient |
 | `monitoring` | Grafana, Prometheus, Loki, Uptime Kuma | node_exporter + Alloy (per-VM sidecars) |
 | `apps` | Homepage / Homarr / Dashy, Mealie | — |
-| `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Buildarr, Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
+| `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
 | `accelerated` | Plex, Immich | — |
 
 Full list, tiers, and reasoning: [Chapter 2 — What runs where](docs/Chapter2-vms.md#apps-at-a-glance).

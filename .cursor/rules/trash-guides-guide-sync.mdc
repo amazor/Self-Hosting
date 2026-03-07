@@ -10,7 +10,7 @@ alwaysApply: false
 
 **Source:** [TRaSH Guides – Guide Sync](https://trash-guides.info/Guide-Sync/)
 
-Third-party tools that sync TRaSH Guide settings (Custom Formats, Quality Profiles, naming, quality definitions) to Radarr and Sonarr. Use when configuring **configuration discipline** (e.g. Recyclarr, Buildarr) in the media VM.
+Third-party tools that sync TRaSH Guide settings (Custom Formats, Quality Profiles, naming, quality definitions) to Radarr and Sonarr. Use when configuring **configuration discipline** (e.g. Recyclarr) in the media VM.
 
 ## Options
 

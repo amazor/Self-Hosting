@@ -308,7 +308,7 @@ media() {
     [[ "${ENABLE_SABNZBD:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.sabnzbd.yml"
     [[ "${ENABLE_BAZARR:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.bazarr.yml"
     [[ "${ENABLE_NTFY:-0}" = "1" ]] && compose_files="$compose_files -f $dir/compose.ntfy.yml"
-    [[ "${ENABLE_EXPORTERS:-1}" = "1" ]] && [[ -f "$dir/compose.exporters.yml" ]] && compose_files="$compose_files -f $dir/compose.exporters.yml"
+    [[ "${ENABLE_EXPORTERS:-0}" = "1" ]] && [[ -f "$dir/compose.exporters.yml" ]] && compose_files="$compose_files -f $dir/compose.exporters.yml"
     [[ "${ENABLE_OBSERVABILITY:-1}" = "1" ]] && [[ -f "$dir/compose.observability.yml" ]] && compose_files="$compose_files -f $dir/compose.observability.yml"
   fi
   (cd "$dir" && docker compose $compose_files "$@")

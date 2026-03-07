@@ -78,11 +78,10 @@ This is the minimum viable pipeline.
 
 | App | Role |
 |-----|------|
-| Buildarr | Declarative *arr configuration |
 | Recyclarr | Quality profile synchronization |
 | Cleanuparr | Automatic queue cleanup |
 
-These tools reduce configuration drift and operational mess. Buildarr and Recyclarr (and alternatives like Configarr) follow the [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/) approach: they sync Custom Formats, Quality Profiles, naming, and quality definitions from TRaSH into Sonarr and Radarr so the pipeline stays aligned with the guides. Both are driven by **YAML config** (`buildarr.yml`, `recyclarr.yml`); when enabled and configured, **some of the manual Sonarr/Radarr UI configuration in [Chapter 3c](Chapter3c-media-stack.md) can be skipped** (e.g. quality settings, custom formats, quality profiles, naming—see the Buildarr/Recyclarr section there). Example YAML configs live in `docker_compose/media/` (`buildarr.example.yml`, `recyclarr.example.yml`, `recyclarr.secrets.example.yml`); **bootstrap copies them into the config dirs when enabled and the target is missing** (like `.env` from `.env.example`). Cleanuparr handles queue and download hygiene (stalled items, orphans). How to enable and configure them is in [Chapter 3c](Chapter3c-media-stack.md).
+These tools reduce configuration drift and operational mess. Recyclarr (and alternatives like Configarr) follow the [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/) approach: they sync Custom Formats, Quality Profiles, and quality definitions from TRaSH into Sonarr and Radarr so the pipeline stays aligned with the guides. Recyclarr is driven by **YAML config** (`recyclarr.yml`); when enabled, **most of the manual Sonarr/Radarr UI configuration in [Chapter 3c](Chapter3c-media-stack.md) can be skipped** (quality settings, custom formats, quality profiles). Root folders, download clients, TRaSH naming, and Prowlarr app sync are handled by `setup_media_apps.py` via API on every deploy. Example YAML configs live in `docker_compose/media/` (`recyclarr.example.yml`, `recyclarr.secrets.example.yml`); **bootstrap copies them into the config dirs when enabled and the target is missing** (like `.env` from `.env.example`). Cleanuparr handles queue and download hygiene (stalled items, orphans). How to enable and configure them is in [Chapter 3c](Chapter3c-media-stack.md).
 
 ---
 
@@ -470,16 +469,15 @@ Once the system stabilizes, configuration drift appears.
 
 At this stage:
 
-- Buildarr  
 - Recyclarr  
 - Cleanuparr  
 
-Buildarr is **required infrastructure** — it lives in the main `compose.yml` and runs once during deploy to configure root folders, download clients, and Prowlarr app sync. Without it, those settings would need manual UI configuration, defeating the goal of a one-command deploy. Bootstrap auto-populates its API keys from the pre-seeded *arr `config.xml` files, so no manual key filling is needed.
+`setup_media_apps.py` runs on every deploy and configures root folders, download clients, TRaSH naming, and Prowlarr app sync via API. Without it, those settings would need manual UI configuration, defeating the goal of a one-command deploy.
 
 Recyclarr is **optional but enabled by default** (`ENABLE_RECYCLARR=1` in `.env.example`). It runs as a daemon on a configurable `CRON_SCHEDULE` (default `@weekly`), syncing TRaSH quality profiles — including anime — to keep your *arr apps current as the guides update (new bad-encoder patterns, score adjustments, format changes).  
 Cleanuparr improves operational hygiene.
 
-These tools are discipline layers. Buildarr is required for a working deploy; Recyclarr's default-on posture means a fresh deploy gets TRaSH-aligned quality profiles, naming, and download clients out of the box.
+These tools are discipline layers. `setup_media_apps.py` is required for a working deploy; Recyclarr's default-on posture means a fresh deploy gets TRaSH-aligned quality profiles and custom formats out of the box.
 
 ---
 
@@ -513,15 +511,14 @@ Deploy the media stack by creating `.env` from `.env.example` in `docker_compose
 
 - Pre-seeds *arr `config.xml` with External auth and generated API keys
 - Pre-seeds `qBittorrent.conf` with a known WebUI password (so automation and exporters can authenticate)
-- Runs `setup_media_apps.py` — adds Prowlarr indexers (13 public torrent sites) and a FlareSolverr proxy, and configures qBittorrent categories (`tv`, `movies`, `anime`) and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP protocol, encryption, seeding limits, UPnP, CSRF) via API
-- Runs Buildarr (root folders, download clients, Prowlarr app sync) — always, as required infrastructure
+- Runs `setup_media_apps.py` — adds Prowlarr indexers (13 public torrent sites) and a FlareSolverr proxy, configures qBittorrent categories (`tv`, `movies`, `anime`) and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP protocol, encryption, seeding limits, UPnP, CSRF), sets up Sonarr/Radarr root folders + download clients + TRaSH naming, and connects Prowlarr app sync to Sonarr/Radarr — all via API
 - Triggers an initial Recyclarr sync (TRaSH quality profiles including anime) when enabled — Recyclarr then continues as a daemon on its configured cron schedule
 - Auto-populates exporter API keys in `.env` from config.xml (for Prometheus scraparr)
 
 This means a fresh deploy produces a working pipeline with minimal manual UI work. **Compose layout, environment variables, and step-by-step UI configuration** are in [Chapter 3c](Chapter3c-media-stack.md) (media stack deployment). For the core stack, see [Chapter 3A — Core stack](Chapter3a-core-stack.md).
 
-> ### 🧠 Philosophy: Buildarr Required, Recyclarr Optional
-> Buildarr is required because without it, root folders, download clients, and Prowlarr app sync would need manual UI configuration — defeating the goal of a one-command deploy. Recyclarr is optional but enabled by default: TRaSH Guides update quality profiles periodically (new bad-encoder patterns, score adjustments, format changes), and Recyclarr keeps your *arr apps current without manual intervention. If you prefer to manage quality profiles manually, set `ENABLE_RECYCLARR=0`.
+> ### 🧠 Philosophy: Automated Setup, Recyclarr Optional
+> `setup_media_apps.py` is required because without it, root folders, download clients, TRaSH naming, and Prowlarr app sync would need manual UI configuration — defeating the goal of a one-command deploy. Recyclarr is optional but enabled by default: TRaSH Guides update quality profiles periodically (new bad-encoder patterns, score adjustments, format changes), and Recyclarr keeps your *arr apps current without manual intervention. If you prefer to manage quality profiles manually, set `ENABLE_RECYCLARR=0`.
 
 ---
 

@@ -106,7 +106,7 @@ One table to see every app in the lab. *Optional* apps can be skipped or added l
 | `core` | Caddy, Authentik, dnsmasq, whoami | ddclient |
 | `monitoring` | Grafana, Prometheus, Loki, Uptime Kuma | node_exporter + Alloy (per-VM sidecars) |
 | `apps` | Homepage / Homarr / Dashy, Mealie | — |
-| `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Buildarr, Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
+| `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
 | `accelerated` | Plex, Immich | — |
 
 ---
@@ -156,7 +156,6 @@ Current choices (from [Chapter 2C](Chapter2c-media.md#media-stack-overview-quick
 | qBittorrent | Core | Torrent download engine |
 | VPN container | Core | Network isolation for torrent traffic |
 | FlareSolverr | Core | Anti-bot helper for protected indexers |
-| Buildarr | *Optional* | Declarative *arr configuration (TRaSH sync) |
 | Recyclarr | *Optional* | Quality profile synchronization (TRaSH sync) |
 | Cleanuparr | *Optional* | Automatic queue cleanup |
 | SABnzbd | *Optional* | Usenet download client |
