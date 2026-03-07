@@ -27,8 +27,6 @@ services:
       - "6881:6881/tcp"   # BitTorrent
       - "6881:6881/udp"   # BitTorrent
       - "9797:9797/tcp"   # ExpressVPN Prometheus metrics
-    volumes:
-      - ${CONFIG_ROOT:-./config}/expressvpn:/expressvpn
     environment:
       - TZ=${TZ:-Etc/UTC}
       - CODE=${EXPRESSVPN_CODE}

@@ -465,9 +465,10 @@ def _post_deploy_media(sdir: Path) -> None:
     if result.returncode == 0:
         log.info("Buildarr completed successfully.")
     else:
+        output = result.stderr or result.stdout or ""
         log.warning(
-            "Buildarr failed (may need manual config). stderr: %s",
-            result.stderr[-500:] if result.stderr else "(empty)",
+            "[WARNING] Buildarr failed (may need manual config). output: %s",
+            output[-500:] if output else "(empty)",
         )
 
     # Phase 3: Recyclarr initial sync — cron mode doesn't sync on start,
@@ -486,9 +487,10 @@ def _post_deploy_media(sdir: Path) -> None:
         if result.returncode == 0:
             log.info("Recyclarr sync completed successfully.")
         else:
+            output = result.stderr or result.stdout or ""
             log.warning(
-                "Recyclarr sync failed (may need manual config). stderr: %s",
-                result.stderr[-500:] if result.stderr else "(empty)",
+                "[WARNING] Recyclarr sync failed (may need manual config). output: %s",
+                output[-500:] if output else "(empty)",
             )
 
 
