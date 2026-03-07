@@ -35,7 +35,8 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
   - [Prowlarr and FlareSolverr](#prowlarr-and-flaresolverr)
   - [Bazarr (optional)](#bazarr-optional)
   - [Recyclarr](#recyclarr)
-  - [Cleanuparr and ntfy (optional)](#cleanuparr-and-ntfy-optional)
+  - [Cleanuparr (optional)](#cleanuparr-optional)
+  - [ntfy (optional)](#ntfy-optional)
 - [Verification and troubleshooting](#verification-and-troubleshooting)
 - [See also](#see-also)
 
@@ -120,7 +121,7 @@ Set the following to `1` to enable extra compose files:
 
 - `ENABLE_RECYCLARR` — **enabled by default** (`1` in `.env.example`). Adds Recyclarr overlay for TRaSH quality/format sync. API keys are auto-populated from pre-seeded `config.xml` by bootstrap.
 - `RECYCLARR_CRON` — Recyclarr daemon schedule (default `@weekly`). Only relevant when `ENABLE_RECYCLARR=1`.
-- `ENABLE_CLEANUPARR`
+- `ENABLE_CLEANUPARR` — queue/download hygiene. Monitors for stalled, slow, and failed downloads and auto-removes + re-searches using a strike system. Requires one-time UI setup (connection details are printed by deploy). Ref: [Cleanuparr](https://cleanuparr.github.io/Cleanuparr/).
 - `ENABLE_SABNZBD`
 - `ENABLE_BAZARR`
 - `ENABLE_NTFY`
@@ -283,7 +284,8 @@ Recommended post-deploy checks:
 2. Verify qBittorrent categories and save paths look correct (should be pre-configured).
 3. Verify Sonarr/Radarr root folders and download clients are present (should be set by `setup_media_apps.py`).
 4. Verify Prowlarr indexers and app sync (should be configured by `setup_media_apps.py`).
-5. If enabled, configure SABnzbd and Bazarr (these are not yet covered by automation).
+5. If enabled, configure Cleanuparr connections in its UI (`http://<media-vm-ip>:11011`) — deploy prints the exact values to paste. See [Cleanuparr setup](#cleanuparr-optional).
+6. If enabled, configure SABnzbd and Bazarr (these are not yet covered by automation).
 
 ---
 
@@ -404,7 +406,7 @@ Reference: [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/)
 - **`setup_media_apps.py`** (always) — Prowlarr indexers + FlareSolverr proxy, qBittorrent preferences + categories, Sonarr/Radarr root folders + qBittorrent download clients + TRaSH naming, Prowlarr app sync to Sonarr/Radarr
 - **Recyclarr** (when enabled) — TRaSH quality profiles for TV (WEB-1080p) and movies (HD Bluray + WEB), **plus anime** (Remux-1080p), quality definitions, custom formats, and Golden Rule HD scoring. Initial sync runs on first deploy; subsequent syncs follow the cron schedule.
 
-Because deploy automates root folders, download clients, naming, quality profiles, and custom formats, you can skip the corresponding manual UI steps in Sonarr, Radarr, and Prowlarr. qBittorrent preferences and categories are also automated. Only SABnzbd and Bazarr still require manual UI configuration.
+Because deploy automates root folders, download clients, naming, quality profiles, and custom formats, you can skip the corresponding manual UI steps in Sonarr, Radarr, and Prowlarr. qBittorrent preferences and categories are also automated. SABnzbd, Bazarr, and Cleanuparr still require manual UI configuration (Cleanuparr has no public API; deploy prints the connection details to paste into its UI).
 
 **Example configs:** In `docker_compose/media/` you will find `recyclarr.example.yml` and `recyclarr.secrets.example.yml`. Bootstrap copies these into `config/recyclarr/` **only when `ENABLE_RECYCLARR=1`** and only if the target does not already exist. **API keys are auto-populated** from the pre-seeded *arr `config.xml` files — no manual key editing is needed.
 
@@ -419,14 +421,36 @@ Because deploy automates root folders, download clients, naming, quality profile
 
 3. Confirm sync logs show successful API updates to Sonarr/Radarr.
 
-### Cleanuparr and ntfy (optional)
+### Cleanuparr (optional)
 
-1. Cleanuparr UI: `http://<media-vm-ip>:11011`
-   - Add Sonarr/Radarr/download client API connections.
-   - Start with conservative cleanup rules.
-2. ntfy UI/API: `http://<media-vm-ip>:8099`
+Reference: [Cleanuparr docs](https://cleanuparr.github.io/Cleanuparr/)
+
+Cleanuparr monitors Sonarr/Radarr download queues and automatically handles stalled, slow, or failed downloads using a **strike system**. When a download accumulates enough strikes (configurable), Cleanuparr removes it from the download client, blocklists the release in the *arr app, and triggers a replacement search. It also handles seeding rules, orphan removal, and malware blocking.
+
+> ### 🧠 Why Cleanuparr?
+> Without Cleanuparr, stalled torrents with zero seeders sit in the queue indefinitely. You'd need to manually remove and blocklist each one, then trigger a new search. Cleanuparr automates this loop: detect → strike → remove → blocklist → re-search. Combined with `TORRENT_MIN_SEEDERS` (which prevents grabbing low-seed torrents in the first place), it keeps the download pipeline flowing without babysitting.
+
+**Not automatable:** Cleanuparr stores its configuration in SQLite and has no public API for adding connections. After deploy, `setup_media_apps.py` prints the exact connection details (API keys, hostnames, ports) so you can paste them into the UI in under a minute.
+
+1. Open Cleanuparr UI: `http://<media-vm-ip>:11011`
+2. Add **Sonarr** connection:
+   - Host: `http://sonarr:8989`
+   - API Key: from `config/sonarr/config.xml` (printed by deploy)
+3. Add **Radarr** connection:
+   - Host: `http://radarr:7878`
+   - API Key: from `config/radarr/config.xml` (printed by deploy)
+4. Add **qBittorrent** download client:
+   - Host: `http://vpn:8080` (qBittorrent uses `network_mode: service:vpn`)
+   - Username / Password: from `.env` (`QBITTORRENT_USERNAME` / `QBITTORRENT_PASSWORD`, default: `admin` / `adminadmin`)
+5. Enable **Queue Cleaner** and configure strike thresholds. Recommended: start with defaults, tune later based on your indexer health and seeder counts.
+6. Optionally enable **Download Cleaner** (seeding time/ratio rules) and **Malware Blocker**.
+7. Verify by checking the Cleanuparr dashboard — it should show connected services and begin monitoring the queue.
+
+### ntfy (optional)
+
+1. ntfy UI/API: `http://<media-vm-ip>:8099`
    - Add Sonarr/Radarr Connect notifications to chosen topics.
-3. Verify with one test notification and one completed import event.
+2. Verify with one test notification and one completed import event.
 
 ---
 

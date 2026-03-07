@@ -16,6 +16,7 @@ Idempotent: skips resources that already exist.
 from __future__ import annotations
 
 import json
+import socket
 import sys
 import time
 import urllib.error
@@ -766,6 +767,62 @@ def _configure_arr_indexers(app_name: str, base_url: str, headers: dict,
 
 
 # ---------------------------------------------------------------------------
+# Cleanuparr post-deploy instructions
+# ---------------------------------------------------------------------------
+
+
+def _detect_lan_ip() -> str:
+    """Return the primary LAN IP (same method as setup_env.py)."""
+    try:
+        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        s.connect(("8.8.8.8", 80))
+        ip = s.getsockname()[0]
+        s.close()
+        return ip
+    except OSError:
+        return "<vm-ip>"
+
+
+def _print_cleanuparr_instructions(config_base: Path,
+                                   env: dict[str, str]) -> None:
+    """Print connection details for Cleanuparr's web UI setup.
+
+    Cleanuparr stores config in SQLite and has no public API for adding
+    connections programmatically.  Instead, print the exact values so the
+    user can paste them into the UI in under a minute.
+    """
+    sonarr_key = _read_api_key(config_base, "sonarr") or "<check config/sonarr/config.xml>"
+    radarr_key = _read_api_key(config_base, "radarr") or "<check config/radarr/config.xml>"
+    qbit_user = env.get("QBITTORRENT_USERNAME", "admin")
+    qbit_pass = env.get("QBITTORRENT_PASSWORD", "adminadmin")
+    vm_ip = _detect_lan_ip()
+
+    log.info("")
+    log.info("=" * 64)
+    log.info("  Cleanuparr — one-time UI setup required")
+    log.info("=" * 64)
+    log.info("  Open: http://%s:11011", vm_ip)
+    log.info("")
+    log.info("  1. Add Sonarr connection:")
+    log.info("       Host: http://sonarr:8989")
+    log.info("       API Key: %s", sonarr_key)
+    log.info("")
+    log.info("  2. Add Radarr connection:")
+    log.info("       Host: http://radarr:7878")
+    log.info("       API Key: %s", radarr_key)
+    log.info("")
+    log.info("  3. Add qBittorrent download client:")
+    log.info("       Host: http://vpn:8080")
+    log.info("       Username: %s", qbit_user)
+    log.info("       Password: %s", qbit_pass)
+    log.info("")
+    log.info("  4. Enable Queue Cleaner (strikes for stalled downloads).")
+    log.info("     Recommended: start with defaults, tune thresholds later.")
+    log.info("=" * 64)
+    log.info("")
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -814,6 +871,9 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
             {"X-Api-Key": radarr_key, "Content-Type": "application/json"},
             env,
         )
+
+    if env.get("ENABLE_CLEANUPARR", "0") == "1":
+        _print_cleanuparr_instructions(config_base, env)
 
     return True
 
