@@ -459,7 +459,7 @@ def _setup_root_folders(app_name: str, base_url: str, headers: dict,
 
 
 def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
-                                category: str) -> None:
+                                category: str, env: dict[str, str]) -> None:
     """Add qBittorrent download client via schema (idempotent)."""
     url = f"{base_url}/api/v3/downloadclient"
     existing = _api(url, headers)
@@ -488,7 +488,12 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
     schema.pop("id", None)
     schema.pop("presets", None)
 
-    field_overrides = {"host": QBIT_DL_HOST, "port": QBIT_DL_PORT}
+    field_overrides = {
+        "host": QBIT_DL_HOST,
+        "port": QBIT_DL_PORT,
+        "username": env.get("QBITTORRENT_USERNAME", "admin"),
+        "password": env.get("QBITTORRENT_PASSWORD", "adminadmin"),
+    }
     for field in schema.get("fields", []):
         name = field.get("name", "")
         if name in field_overrides:
@@ -506,24 +511,24 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
         log.warning("Failed to add qBittorrent download client to %s.", app_name)
 
 
-def setup_sonarr(sonarr_url: str, api_key: str) -> None:
+def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str]) -> None:
     """Configure Sonarr: TRaSH naming, root folders, qBittorrent client."""
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Sonarr", f"{sonarr_url}/api/v3/health", headers):
         return
     _setup_naming("Sonarr", sonarr_url, headers, SONARR_NAMING)
     _setup_root_folders("Sonarr", sonarr_url, headers, SONARR_ROOT_FOLDERS)
-    _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv")
+    _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env)
 
 
-def setup_radarr(radarr_url: str, api_key: str) -> None:
+def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str]) -> None:
     """Configure Radarr: TRaSH naming, root folders, qBittorrent client."""
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Radarr", f"{radarr_url}/api/v3/health", headers):
         return
     _setup_naming("Radarr", radarr_url, headers, RADARR_NAMING)
     _setup_root_folders("Radarr", radarr_url, headers, RADARR_ROOT_FOLDERS)
-    _setup_download_client_qbit("Radarr", radarr_url, headers, "movies")
+    _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env)
 
 
 # ---------------------------------------------------------------------------
@@ -618,12 +623,12 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
     setup_qbittorrent("http://localhost:8080", env)
 
     if sonarr_key:
-        setup_sonarr("http://localhost:8989", sonarr_key)
+        setup_sonarr("http://localhost:8989", sonarr_key, env)
     else:
         log.warning("Sonarr API key not found; skipping Sonarr setup.")
 
     if radarr_key:
-        setup_radarr("http://localhost:7878", radarr_key)
+        setup_radarr("http://localhost:7878", radarr_key, env)
     else:
         log.warning("Radarr API key not found; skipping Radarr setup.")
 

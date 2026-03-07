@@ -295,7 +295,7 @@ media() {
     local files="-f $dir/compose.yml"
     [[ -f "$dir/.env" ]] && source "$dir/.env" 2>/dev/null
     [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && files="$files -f $dir/compose.recyclarr.yml"
-    (cd "$dir" && docker compose $files --profile bootstrap run --rm buildarr run) 2>/dev/null || true
+    (cd "$dir" && python3 setup_media_apps.py) 2>/dev/null || true
     [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && (cd "$dir" && docker compose $files exec recyclarr recyclarr sync) 2>/dev/null || true
     return
   fi
@@ -436,44 +436,27 @@ def _post_deploy_core(sdir: Path) -> None:
 
 
 def _post_deploy_media(sdir: Path) -> None:
-    """Configure Prowlarr indexers, qBittorrent, run Buildarr, and trigger Recyclarr."""
+    """Configure Prowlarr indexers, qBittorrent, Sonarr/Radarr, and trigger Recyclarr."""
     env_file = sdir / ".env"
     if not env_file.is_file():
         return
     env = load_env(env_file)
 
-    # Phase 1: API-based setup (indexers + qBittorrent TRaSH settings)
+    # Phase 1: API-based setup (indexers, qBittorrent, root folders,
+    # download clients, naming, Prowlarr app sync).
     sys.path.insert(0, str(sdir))
     try:
         import setup_media_apps
         setup_media_apps.setup(env, sdir)
     except Exception as exc:
-        log.warning("Media app setup (indexers/qBit) failed: %s", exc)
+        log.warning("Media app setup failed: %s", exc)
     finally:
         sys.path.pop(0)
 
-    # Phase 2: Buildarr — always runs (required for bootstrap)
-    compose_files = _build_compose_files("media", sdir)
-    log.info("Running Buildarr (root folders, download clients, app sync)...")
-    result = subprocess.run(
-        ["docker", "compose"] + compose_files
-        + ["--profile", "bootstrap", "run", "--rm", "buildarr", "run"],
-        cwd=sdir,
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode == 0:
-        log.info("Buildarr completed successfully.")
-    else:
-        output = result.stderr or result.stdout or ""
-        log.warning(
-            "Buildarr failed (may need manual config). output: %s",
-            output[-500:] if output else "(empty)",
-        )
-
-    # Phase 3: Recyclarr initial sync — cron mode doesn't sync on start,
+    # Phase 2: Recyclarr initial sync — cron mode doesn't sync on start,
     # so trigger the first sync via exec into the already-running daemon.
     if env.get("ENABLE_RECYCLARR", "0") == "1":
+        compose_files = _build_compose_files("media", sdir)
         log.info(
             "Triggering initial Recyclarr sync (TRaSH quality profiles)..."
         )
@@ -623,7 +606,6 @@ def _print_deploy_summary(stacks: list[str]) -> None:
             if env.get("ENABLE_OBSERVABILITY", "1") == "1":
                 enabled.append("Plex exporter")
         elif stack == "media":
-            enabled.append("Buildarr")
             overlay_labels = {
                 "ENABLE_RECYCLARR": "Recyclarr",
                 "ENABLE_CLEANUPARR": "Cleanuparr",

@@ -280,7 +280,13 @@ def validate_env(env: dict[str, str], real_user: str, env_file: Path) -> None:
     if not media_root.is_dir():
         # Local testing: create MEDIA_ROOT and required subdirs so bootstrap
         # works without NFS. In prod, mount NFS at this path (mount replaces dir).
-        required_subdirs = ("downloads", "library")
+        required_subdirs = (
+            "downloads",
+            "library",
+            "library/tv",
+            "library/movies",
+            "library/anime",
+        )
         try:
             media_root.mkdir(parents=True, exist_ok=True)
             for sub in required_subdirs:
@@ -332,6 +338,17 @@ def validate_env(env: dict[str, str], real_user: str, env_file: Path) -> None:
             )
             log.error(f"Update: {env_loc}")
             raise SystemExit(1)
+
+    # *arr apps validate root folder paths exist inside the container.
+    # MEDIA_ROOT is mounted at /data, so these must exist on the host.
+    for subdir in ("library/tv", "library/movies", "library/anime"):
+        target = media_root / subdir
+        if not target.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.chown(target, user=real_user)
+            except (PermissionError, LookupError):
+                pass
 
 
 def ensure_config_directories(
