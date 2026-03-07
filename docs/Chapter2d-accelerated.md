@@ -207,8 +207,8 @@ At the storage level, the relationship between the two VMs looks like this:
 ```mermaid
 flowchart LR
     subgraph NAS["NAS / shared storage"]
-        MediaRoot["/mnt/media (export)"]
-        PhotosRoot["/mnt/photos (export)"]
+        MediaRoot["/mnt/media (NFS export)"]
+        PhotosRoot["/mnt/photos (NFS export)"]
     end
 
     subgraph MediaVM["media VM"]
@@ -221,12 +221,10 @@ flowchart LR
         ImmichView["/mnt/photos/library"]
     end
 
-    MediaRoot --> MediaVM
-    PhotosRoot --> AccelVM
-    MediaRoot --> AccelVM
-
-    MediaLibrary --> PlexView
-    PhotosRoot --> ImmichView
+    MediaRoot -->|NFS rw| MediaDownloads
+    MediaRoot -->|NFS rw| MediaLibrary
+    MediaRoot -->|NFS ro| PlexView
+    PhotosRoot -->|NFS rw| ImmichView
 ```
 
 - The **same `/mnt/media/library` export** is mounted into both VMs so hardlinks and directory structure stay consistent.  

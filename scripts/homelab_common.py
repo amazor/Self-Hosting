@@ -62,6 +62,32 @@ def is_placeholder(val: str | None) -> bool:
     return any(s in val for s in _PLACEHOLDER_SUBSTRINGS)
 
 
+def clear_env_var(env_file: Path, key: str) -> bool:
+    """Set *key* to empty in *env_file*, preserving file structure.
+
+    Finds the first non-comment line whose key matches and replaces the value
+    with an empty string (``KEY=``).  Returns True if the key was found and
+    cleared, False if it was not present or already empty.
+    """
+    if not env_file.is_file():
+        return False
+    lines = env_file.read_text().splitlines(keepends=True)
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#") or "=" not in stripped:
+            continue
+        k, _, v = stripped.partition("=")
+        if k.strip() != key:
+            continue
+        v = v.strip().strip("\"'")
+        if not v:
+            return False
+        lines[i] = f"{key}=\n"
+        env_file.write_text("".join(lines))
+        return True
+    return False
+
+
 def load_env(path: Path) -> dict[str, str]:
     """Parse a .env file into a dict (comments and blanks are skipped).
 

@@ -35,6 +35,7 @@ REPO_ROOT = (
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.homelab_common import (
+    clear_env_var,
     get_real_user,
     get_user_shell,
     is_placeholder,
@@ -450,6 +451,12 @@ def _post_deploy_accelerated(sdir: Path) -> None:
         log.warning("Accelerated app setup failed: %s", exc)
     finally:
         sys.path.pop(0)
+
+    if clear_env_var(env_file, "PLEX_CLAIM"):
+        log.info(
+            "Cleared PLEX_CLAIM from .env — token is consumed on first Plex start "
+            "and should not be reused."
+        )
 
 
 def _post_deploy_media(sdir: Path) -> None:

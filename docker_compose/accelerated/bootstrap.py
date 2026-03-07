@@ -41,6 +41,7 @@ REPO_ROOT = SCRIPT_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.homelab_common import (  # type: ignore[import]
+    clear_env_var,
     get_real_user,
     is_placeholder,
     load_env,
@@ -169,7 +170,9 @@ def phase_nfs(env: dict[str, str]) -> None:
         log.info("Mounts applied.")
 
 
-def _warn_plex_claim(env: dict[str, str], config_base: Path, *, force: bool) -> None:
+def _warn_plex_claim(
+    env: dict[str, str], config_base: Path, env_file: Path, *, force: bool
+) -> None:
     """Warn if PLEX_CLAIM is unset on what looks like a first-run.
 
     Plex must be claimed on first start or it starts as an unclaimed server.
@@ -178,6 +181,10 @@ def _warn_plex_claim(env: dict[str, str], config_base: Path, *, force: bool) -> 
 
     'First run' heuristic: PLEX_CLAIM is empty AND the Plex preferences file
     does not yet exist (server has never started successfully).
+
+    If PLEX_CLAIM is still set but Preferences.xml already exists (e.g. the
+    user re-runs bootstrap after a successful first deploy), the stale token is
+    cleared automatically.
     """
     claim = env.get("PLEX_CLAIM", "").strip()
     plex_prefs = (
@@ -189,6 +196,14 @@ def _warn_plex_claim(env: dict[str, str], config_base: Path, *, force: bool) -> 
         / "Preferences.xml"
     )
 
+    if claim and plex_prefs.is_file():
+        if clear_env_var(env_file, "PLEX_CLAIM"):
+            log.info(
+                "Plex is already claimed (Preferences.xml exists); "
+                "cleared stale PLEX_CLAIM from .env."
+            )
+        return
+
     if claim or plex_prefs.is_file():
         return
 
@@ -199,7 +214,7 @@ def _warn_plex_claim(env: dict[str, str], config_base: Path, *, force: bool) -> 
         "  2. Copy the token (e.g. claim-xxxxxxxxxxxxxxxxxxxx)\n"
         "  3. Set PLEX_CLAIM=<token> in .env\n"
         "  4. Re-run bootstrap / deploy\n"
-        "After Plex starts successfully you can clear PLEX_CLAIM from .env."
+        "After Plex starts successfully the token is cleared automatically."
     )
     if force:
         log.warning(msg + "\nContinuing due to --force (Plex will start unclaimed).")
@@ -468,7 +483,7 @@ def main(argv: list[str] | None = None) -> None:
     config_base = resolve_config_base(env.get("CONFIG_ROOT", "./config"), SCRIPT_DIR)
     _ensure_config_dirs(config_base, real_user)
 
-    _warn_plex_claim(env, config_base, force=args.force)
+    _warn_plex_claim(env, config_base, env_file, force=args.force)
 
     # Phase 3: GPU
     _gpu_guardrail(env, force=args.force, non_interactive=args.non_interactive)
