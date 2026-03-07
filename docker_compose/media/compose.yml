@@ -1,6 +1,6 @@
 # Media VM — Core automation pipeline (Chapter 2C)
 #
-# Services: VPN (Gluetun) → qBittorrent (via VPN) → Sonarr, Radarr, Prowlarr, FlareSolverr
+# Services: VPN (ExpressVPN) → qBittorrent (via VPN) → Sonarr, Radarr, Prowlarr, FlareSolverr
 # Storage: Single media root (e.g. /mnt/media) so downloads and library share one filesystem
 #         for hardlinks and seeding. See docs/Chapter2c-media.md.
 #
@@ -8,41 +8,37 @@
 #        Defaults assume MEDIA_ROOT=/mnt/media and config next to this file.
 
 services:
-  # --- VPN (Gluetun) — Torrent traffic must exit through VPN only ---
+  # --- VPN (ExpressVPN) — Torrent traffic must exit through VPN only ---
   # qBittorrent attaches via network_mode: service:vpn and shares this container's network.
-  # Docs: https://github.com/qdm12/gluetun-wiki
-  # Provider setup: https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers
+  # Image: https://github.com/Misioslav/expressvpn
+  # Docker Hub: https://hub.docker.com/r/misioslav/expressvpn
   vpn:
-    image: qmcgaw/gluetun:${GLUETUN_TAG:-latest}
+    image: misioslav/expressvpn:${EXPRESSVPN_TAG:-latest}
     container_name: vpn
     cap_add:
       - NET_ADMIN
+      - SYS_PTRACE
     devices:
       - /dev/net/tun:/dev/net/tun
     # Ports exposed on the VPN container are used by qBittorrent (network_mode: service:vpn).
-    # 8080 = qBittorrent Web UI, 6881 = BitTorrent TCP/UDP (change in qBittorrent env too).
+    # 8080 = qBittorrent Web UI, 6881 = BitTorrent TCP/UDP, 9797 = Prometheus metrics.
     ports:
       - "8080:8080/tcp"   # qBittorrent Web UI
       - "6881:6881/tcp"   # BitTorrent
       - "6881:6881/udp"   # BitTorrent
-    # Optional: persist Gluetun state (e.g. server list cache).
-    # volumes:
-    #   - ${CONFIG_ROOT:-./config}/gluetun:/gluetun
+      - "9797:9797/tcp"   # ExpressVPN Prometheus metrics
+    volumes:
+      - ${CONFIG_ROOT:-./config}/expressvpn:/expressvpn
     environment:
       - TZ=${TZ:-Etc/UTC}
-      # --- VPN provider and protocol (configurable via .env) ---
-      - VPN_SERVICE_PROVIDER=${VPN_SERVICE_PROVIDER:-expressvpn}
-      - VPN_TYPE=${VPN_TYPE:-openvpn}
-      # --- OpenVPN credentials (ExpressVPN, NordVPN, Surfshark, PIA, etc.) ---
-      - OPENVPN_USER=${OPENVPN_USER:-}
-      - OPENVPN_PASSWORD=${OPENVPN_PASSWORD:-}
-      # --- WireGuard credentials (Mullvad, custom, etc. — set VPN_TYPE=wireguard) ---
-      - WIREGUARD_PRIVATE_KEY=${WIREGUARD_PRIVATE_KEY:-}
-      - WIREGUARD_ADDRESSES=${WIREGUARD_ADDRESSES:-}
-      # --- Server selection (optional, comma-separated) ---
-      - SERVER_COUNTRIES=${SERVER_COUNTRIES:-}
-      - SERVER_CITIES=${SERVER_CITIES:-}
-      # - SERVER_HOSTNAMES=  # narrowest filter; avoid if you want auto server updates
+      - CODE=${EXPRESSVPN_CODE}
+      - SERVER=${EXPRESSVPN_SERVER:-smart}
+      - PROTOCOL=${EXPRESSVPN_PROTOCOL:-lightwayudp}
+      - ALLOW_LAN=${EXPRESSVPN_ALLOW_LAN:-true}
+      - LAN_CIDR=${EXPRESSVPN_LAN_CIDR:-}
+      - METRICS_PROMETHEUS=on
+      - METRICS_PORT=9797
+      - METRICS_PATH=/metrics.cgi
     restart: unless-stopped
 
   # --- qBittorrent — Torrent client (all traffic via VPN) ---
@@ -53,7 +49,8 @@ services:
     container_name: qbittorrent
     network_mode: service:vpn
     depends_on:
-      - vpn
+      vpn:
+        condition: service_healthy
     environment:
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}

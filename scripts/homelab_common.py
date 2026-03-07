@@ -534,8 +534,8 @@ loki.process "normalize" {{
     }}
   }}
 
-  // Gluetun (vpn): plain-text "2006-01-02T15:04:05Z INFO [module] message"
-  // ISO timestamp anchor prevents false positives; no-op for JSON-format Gluetun logs
+  // ExpressVPN (vpn): plain-text "2006-01-02T15:04:05Z INFO [module] message"
+  // ISO timestamp anchor prevents false positives; no-op for JSON-format ExpressVPN logs
   // since stage.json already extracted level from those in step (1).
   stage.match {{
     selector = `{{service="vpn"}}`

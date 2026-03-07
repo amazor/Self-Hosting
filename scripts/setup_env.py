@@ -89,19 +89,26 @@ def _update_env_example(
         if stripped.startswith(_PREFILL_MARKER):
             continue
 
-        if stripped and not stripped.startswith("#") and "=" in stripped:
-            key = stripped.split("=", 1)[0].strip()
-            present.add(key)
-            if key in updates:
-                new_val, note = updates[key]
-                output.append(f"{_PREFILL_MARKER}: {note})")
-                output.append(f"{key}={new_val}")
-                updated.append(key)
-                continue
+        if stripped and "=" in stripped:
+            if stripped.startswith("#"):
+                # Track commented-out variables so we don't append duplicates.
+                # Handles lines like: # VM_HOSTNAME=core
+                bare = stripped.lstrip("#").strip()
+                if bare and "=" in bare:
+                    present.add(bare.split("=", 1)[0].strip())
+            else:
+                key = stripped.split("=", 1)[0].strip()
+                present.add(key)
+                if key in updates:
+                    new_val, note = updates[key]
+                    output.append(f"{_PREFILL_MARKER}: {note})")
+                    output.append(f"{key}={new_val}")
+                    updated.append(key)
+                    continue
 
         output.append(line)
 
-    # Append any new variables that did not already exist in the file.
+    # Append variables that don't exist in the file (not even as comments).
     for key, (new_val, note) in updates.items():
         if key not in present and key not in updated:
             output.append(f"{_PREFILL_MARKER}: {note})")

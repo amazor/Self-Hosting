@@ -220,19 +220,18 @@ This guide standardizes on qBittorrent.
 
 Torrent traffic must not exit directly to the internet.
 
-In this setup:
-
-- The VPN provider is configurable via `VPN_SERVICE_PROVIDER` in `.env` (default: `expressvpn`). Common alternatives: `nordvpn`, `surfshark`, `mullvad`, `protonvpn`, `private-internet-access`, `custom`. `VPN_TYPE` selects `openvpn` (default) or `wireguard` depending on what the provider supports.
-- Torrent traffic is routed through a VPN container (Gluetun)  
-- The torrent container attaches via:
+In this setup, torrent traffic is routed through the VPN container `misioslav/expressvpn`, activated via `EXPRESSVPN_CODE` in `.env`. The torrent container attaches via:
 
 ```yaml
 network_mode: service:vpn
 ```
 
-Bootstrap validates that torrent traffic is routed through the VPN and warns if it is not. See the [Gluetun provider wiki](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) for provider-specific setup (credentials, server selection, WireGuard keys, etc.).
+Bootstrap validates VPN credentials and warns if `EXPRESSVPN_CODE` is not set. See the [expressvpn GitHub repo](https://github.com/Misioslav/expressvpn) for setup.
 
-The enforcement is architectural — not vendor-specific.
+> ### 🧠 Tradeoff: ExpressVPN-specific container vs provider-agnostic Gluetun
+> [Gluetun](https://github.com/qdm12/gluetun) is the standard generic VPN container (supports 60+ providers). However, ExpressVPN dropped straightforward OpenVPN credential-based setup — configuring it now requires manually downloading `.ovpn` files, which cannot be automated. Switching to [`misioslav/expressvpn`](https://github.com/Misioslav/expressvpn) trades provider flexibility for a simpler activation flow: provide an activation `CODE` and the container handles the rest. This makes the stack ExpressVPN-specific, but the architectural pattern (`network_mode: service:vpn`) is unchanged — switching back to Gluetun or another VPN container only requires replacing the `vpn` service definition in `compose.yml`.
+
+**Key features** of the ExpressVPN container: no `--privileged` required (just `NET_ADMIN` + `SYS_PTRACE` capabilities); built-in healthcheck with supervision loop (qBittorrent uses `condition: service_healthy`); Prometheus metrics exporter on port 9797 (scraped by monitoring VM); default protocol `lightwayudp` (ExpressVPN's fastest); Network Lock enabled by default (kill switch prevents leaks).
 
 Torrenting without a VPN is strongly discouraged.
 

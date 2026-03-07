@@ -150,17 +150,15 @@ Then regenerate the Caddyfile and reload Caddy (re-run bootstrap or `./update-ca
 
 On the **media** VM:
 
-1. Fill **VPN credentials** in `docker_compose/media/.env`. The VPN provider is configurable via `VPN_SERVICE_PROVIDER` (default: `expressvpn`):
-   - **OpenVPN** (default): set `OPENVPN_USER` and `OPENVPN_PASSWORD`.
-   - **WireGuard**: set `VPN_TYPE=wireguard` and `WIREGUARD_PRIVATE_KEY` instead.
-   Without valid VPN credentials, the VPN and qBittorrent containers will not start.
+1. Fill **VPN credentials** in `docker_compose/media/.env`: set `EXPRESSVPN_CODE` to your ExpressVPN activation code (from https://www.expressvpn.com/setup).
+   Without a valid activation code, the VPN and qBittorrent containers will not start.
 2. Deploy:
 
 ```bash
 python3 deploy.py media --force -y
 ```
 
-Containers: Gluetun (VPN) → qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr (and overlays if enabled). After compose up, deploy automatically runs **setup_media_apps.py** (adds Prowlarr indexers, configures qBittorrent categories/settings), then **Buildarr** (root folders, download clients, app sync) and **Recyclarr** (TRaSH quality profiles including anime).
+Containers: ExpressVPN (VPN) → qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr (and overlays if enabled). After compose up, deploy automatically runs **setup_media_apps.py** (adds Prowlarr indexers, configures qBittorrent categories/settings), then **Buildarr** (root folders, download clients, app sync) and **Recyclarr** (TRaSH quality profiles including anime).
 
 ### 3.5 Accelerated (Plex + Immich)
 
@@ -272,4 +270,4 @@ Containers see the media root as `/data` (host `MEDIA_ROOT` = `/mnt/media` → `
 | Sonarr root folder | `/data/library/tv` |
 | Radarr root folder | `/data/library/movies` |
 
-If a stack fails: check `docker compose logs` in that stack’s directory; for media, ensure VPN credentials are set and Gluetun is up so qBittorrent can start.
+If a stack fails: check `docker compose logs` in that stack’s directory; for media, ensure `EXPRESSVPN_CODE` is set and the VPN container is healthy so qBittorrent can start.

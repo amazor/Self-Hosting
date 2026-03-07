@@ -1,7 +1,7 @@
 {
   "uid": "homelab-media-pipeline",
   "title": "Media Pipeline",
-  "description": "Media automation troubleshooting. Is the pipeline flowing? Why can\u2019t I reach Sonarr? Why is Plex buffering? Where is the bottleneck?",
+  "description": "Media automation troubleshooting. Is the pipeline flowing? Why can’t I reach Sonarr? Why is Plex buffering? Where is the bottleneck?",
   "tags": [
     "homelab",
     "media",
@@ -22,7 +22,7 @@
   "weekStart": "",
   "links": [
     {
-      "title": "\u2190 Overview",
+      "title": "← Overview",
       "type": "link",
       "url": "/d/homelab-overview",
       "tooltip": "Back to fleet triage",
@@ -350,7 +350,7 @@
       "id": 3,
       "type": "stat",
       "title": "VPN Traffic",
-      "description": "Current throughput on the VPN container (Gluetun). This IS the media stack\u2019s internet egress \u2014 all torrent traffic routes through VPN. Zero when nothing is downloading.",
+      "description": "Current throughput on the VPN container (ExpressVPN). This IS the media stack’s internet egress — all torrent traffic routes through VPN. Zero when nothing is downloading.",
       "gridPos": {
         "x": 12,
         "y": 1,
@@ -484,7 +484,7 @@
       "id": 10,
       "type": "table",
       "title": "Media Service Status",
-      "description": "All media containers with resources and uptime. Click a service to investigate on the Container Workbench or view its logs. If a service is missing from this table, it\u2019s not running.",
+      "description": "All media containers with resources and uptime. Click a service to investigate on the Container Workbench or view its logs. If a service is missing from this table, it’s not running.",
       "gridPos": {
         "x": 0,
         "y": 4,
@@ -665,12 +665,12 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Container detail \u2192",
+                    "title": "Container detail →",
                     "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}",
                     "targetBlank": false
                   },
                   {
-                    "title": "View Logs \u2192",
+                    "title": "View Logs →",
                     "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}",
                     "targetBlank": true
                   }
@@ -801,12 +801,12 @@
           },
           "links": [
             {
-              "title": "See errors in Sonarr logs \u2192",
+              "title": "See errors in Sonarr logs →",
               "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=sonarr&var-level=error&var-level=warn",
               "targetBlank": true
             },
             {
-              "title": "See errors in Radarr logs \u2192",
+              "title": "See errors in Radarr logs →",
               "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=radarr&var-level=error&var-level=warn",
               "targetBlank": true
             }
@@ -928,7 +928,7 @@
           },
           "links": [
             {
-              "title": "Check Prowlarr logs \u2192",
+              "title": "Check Prowlarr logs →",
               "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=prowlarr&var-level=error&var-level=warn",
               "targetBlank": true
             }
@@ -964,7 +964,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "**Movie not downloading?**\n\nSearch across all media services:\n\n[Search logs for a title \u2192](/d/homelab-log-workbench?${__url_time_range}&var-service=sonarr&var-service=radarr&var-service=prowlarr&var-service=qbittorrent)\n\nIn the Log Workbench, type the movie/show name in the **Search** box to trace its lifecycle.\n\n**Common causes:**\n- Queue errors \u2192 quality restrictions too tight\n- Indexer down \u2192 check Indexer Health panel\n- Download speed 0 \u2192 VPN issue\n- Stale queue \u2192 check qBittorrent"
+        "content": "**Movie not downloading?**\n\nSearch across all media services:\n\n[Search logs for a title →](/d/homelab-log-workbench?${__url_time_range}&var-service=sonarr&var-service=radarr&var-service=prowlarr&var-service=qbittorrent)\n\nIn the Log Workbench, type the movie/show name in the **Search** box to trace its lifecycle.\n\n**Common causes:**\n- Queue errors → quality restrictions too tight\n- Indexer down → check Indexer Health panel\n- Download speed 0 → VPN issue\n- Stale queue → check qBittorrent"
       }
     },
     {
@@ -984,7 +984,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "CPU per Service",
-      "description": "If Plex/Jellyfin CPU is pinned \u2192 transcoding bottleneck. If Sonarr/Radarr CPU spikes \u2192 likely processing a large import or search.",
+      "description": "If Plex/Jellyfin CPU is pinned → transcoding bottleneck. If Sonarr/Radarr CPU spikes → likely processing a large import or search.",
       "gridPos": {
         "x": 0,
         "y": 20,
@@ -1038,7 +1038,7 @@
           },
           "links": [
             {
-              "title": "View Logs \u2192",
+              "title": "View Logs →",
               "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.service}",
               "targetBlank": true
             }
@@ -1120,7 +1120,7 @@
           },
           "links": [
             {
-              "title": "View Logs \u2192",
+              "title": "View Logs →",
               "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.service}",
               "targetBlank": true
             }
@@ -1202,7 +1202,7 @@
           },
           "links": [
             {
-              "title": "Container detail \u2192",
+              "title": "Container detail →",
               "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__field.labels.service}&${host:queryparam}",
               "targetBlank": false
             }
@@ -1665,7 +1665,7 @@
       },
       "options": {
         "mode": "markdown",
-        "content": "### Exporter Status\n\nThe pipeline panels above are powered by these exporters. Enable via `ENABLE_EXPORTERS=1` in `.env` (default: on).\n\n| Exporter | What it unlocks | Image | Compose overlay |\n|----------|----------------|-------|-----------------|\n| **scraparr** | Queue depth, library size, missing content, indexer health, quality breakdown | `ghcr.io/thecfu/scraparr:latest` | `compose.exporters.yml` |\n| **qbittorrent-exporter** | Download/upload speed, torrent counts/states, ratios, stalled detection | `caseyscarborough/qbittorrent-exporter:latest` | `compose.exporters.yml` |\n| **prometheus-plex-exporter** (future) | Active sessions, transcoding vs direct play, library stats | `ghcr.io/jsclayton/prometheus-plex-exporter:latest` | Accelerated VM stack |\n\n**API keys:** After first deployment, retrieve from each app: Settings \u2192 General \u2192 API Key. Set `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY` in `.env` or write `config/scraparr/config.yaml`.\n\n**Tracing tip:** To trace a specific media request (\"I added a movie, why isn\u2019t it downloading?\"), use Grafana Explore with Loki: `{service=~\"sonarr|radarr|prowlarr|qbittorrent\"} |= \"Movie Title\"`. This shows the full lifecycle across all services in one query \u2014 poor man\u2019s distributed tracing with zero app changes."
+        "content": "### Exporter Status\n\nThe pipeline panels above are powered by these exporters. Enable via `ENABLE_EXPORTERS=1` in `.env` (default: on).\n\n| Exporter | What it unlocks | Image | Compose overlay |\n|----------|----------------|-------|-----------------|\n| **scraparr** | Queue depth, library size, missing content, indexer health, quality breakdown | `ghcr.io/thecfu/scraparr:latest` | `compose.exporters.yml` |\n| **qbittorrent-exporter** | Download/upload speed, torrent counts/states, ratios, stalled detection | `caseyscarborough/qbittorrent-exporter:latest` | `compose.exporters.yml` |\n| **prometheus-plex-exporter** (future) | Active sessions, transcoding vs direct play, library stats | `ghcr.io/jsclayton/prometheus-plex-exporter:latest` | Accelerated VM stack |\n\n**API keys:** After first deployment, retrieve from each app: Settings → General → API Key. Set `SONARR_API_KEY`, `RADARR_API_KEY`, `PROWLARR_API_KEY` in `.env` or write `config/scraparr/config.yaml`.\n\n**Tracing tip:** To trace a specific media request (\"I added a movie, why isn’t it downloading?\"), use Grafana Explore with Loki: `{service=~\"sonarr|radarr|prowlarr|qbittorrent\"} |= \"Movie Title\"`. This shows the full lifecycle across all services in one query — poor man’s distributed tracing with zero app changes."
       }
     }
   ]

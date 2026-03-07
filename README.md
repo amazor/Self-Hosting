@@ -169,3 +169,4 @@ This lab is a work in progress. Future expansions include:
 * **Security VM:** A dedicated security/host-insight layer (e.g., Wazuh) kept out of the `core` access plane.
 * **Fail2ban:** Host/access-plane protection (e.g. rate limiting whoami, SSH, Caddy logs) — to be added once the current implementation is done.
 * **PaperlessNGX:** Document management (scan, OCR, tag, search) — planned for the `apps` VM once the current implementation is done.
+* **Gluetun / provider-agnostic VPN:** Re-evaluate Gluetun support if switching VPN providers in the future. The current media stack is ExpressVPN-specific; Gluetun supports 60+ providers and would restore provider flexibility.

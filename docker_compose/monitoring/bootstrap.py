@@ -327,6 +327,14 @@ scrape_configs:
       - files: ["/etc/prometheus/targets/scrape-targets-plex-exporter.json"]
         refresh_interval: 5m
 
+  # --- ExpressVPN exporter (media VM; port 9797) ---
+  # Targets from EXPRESSVPN_EXPORTER_TARGETS in .env (hostname:ip). Re-run bootstrap to regenerate.
+  - job_name: "expressvpn"
+    metrics_path: /metrics.cgi
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/scrape-targets-expressvpn.json"]
+        refresh_interval: 5m
+
   # --- Blackbox exporter self-scrape (exporter health metrics) ---
   - job_name: "blackbox-exporter"
     static_configs:
@@ -497,6 +505,7 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
       - scrape-targets-node-exporter.json  (port 9100)
       - scrape-targets-cadvisor.json       (port 8081)
       - scrape-targets-plex-exporter.json  (port 9000, from PLEX_EXPORTER_TARGETS)
+      - scrape-targets-expressvpn.json     (port 9797, from EXPRESSVPN_EXPORTER_TARGETS)
 
     A single shared file caused the node-exporter job to also scrape cAdvisor
     endpoints (and vice-versa), doubling container metrics on remote VMs.
@@ -570,12 +579,43 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
                 "labels": base_labels,
             })
 
+    # ExpressVPN exporter (port 9797) — optional; only on media (or wherever VPN container runs).
+    evpn_raw = env.get("EXPRESSVPN_EXPORTER_TARGETS", "").strip()
+    evpn_entries: list[dict] = []
+    if evpn_raw:
+        for pair in evpn_raw.split(","):
+            pair = pair.strip()
+            if ":" not in pair:
+                continue
+            parts = pair.split(":")
+            if len(parts) < 2:
+                continue
+            name, ip = parts[0].strip(), parts[1].strip()
+            if not name or not ip:
+                continue
+            vm_role = name
+            node = default_node
+            base_labels = {
+                "instance": name,
+                "host": name,
+                "vm_role": vm_role,
+                "node": node,
+                "env": "prod",
+                "service": "expressvpn",
+            }
+            evpn_entries.append({
+                "targets": [f"{ip}:9797"],
+                "labels": base_labels,
+            })
+
     ne_file = targets_dir / "scrape-targets-node-exporter.json"
     ca_file = targets_dir / "scrape-targets-cadvisor.json"
     plex_file = targets_dir / "scrape-targets-plex-exporter.json"
+    evpn_file = targets_dir / "scrape-targets-expressvpn.json"
     ne_file.write_text(json.dumps(ne_entries, indent=2) + "\n")
     ca_file.write_text(json.dumps(ca_entries, indent=2) + "\n")
     plex_file.write_text(json.dumps(plex_entries, indent=2) + "\n")
+    evpn_file.write_text(json.dumps(evpn_entries, indent=2) + "\n")
 
     bb_file = targets_dir / "blackbox-targets.json"
     if not bb_file.is_file():

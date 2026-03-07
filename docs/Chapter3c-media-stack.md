@@ -45,7 +45,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 
 | File or script | Purpose |
 |----------------|---------|
-| **compose.yml** | Base services: Gluetun VPN, qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr, Buildarr (`profiles: ["bootstrap"]` — runs once during deploy, not started by `up -d`) |
+| **compose.yml** | Base services: ExpressVPN, qBittorrent, Sonarr, Radarr, Prowlarr, FlareSolverr, Buildarr (`profiles: ["bootstrap"]` — runs once during deploy, not started by `up -d`) |
 | **compose.sabnzbd.yml** | Optional Usenet downloader overlay |
 | **compose.bazarr.yml** | Optional subtitle automation overlay |
 | **buildarr.example.yml** / **recyclarr.example.yml** / **recyclarr.secrets.example.yml** | Example YAML configs for Buildarr and Recyclarr; bootstrap always copies Buildarr config, copies Recyclarr config when `ENABLE_RECYCLARR=1`, only if target missing (same idea as `.env` from `.env.example`) |
@@ -100,13 +100,13 @@ Use `id your_user` on the host to get `PUID` and `PGID`.
 
 | Variable | Purpose |
 |----------|---------|
-| **VPN_SERVICE_PROVIDER** | VPN provider for Gluetun. Default: `expressvpn`. Common alternatives: `nordvpn`, `surfshark`, `mullvad`, `protonvpn`, `private-internet-access`, `custom`. See the [Gluetun provider wiki](https://github.com/qdm12/gluetun-wiki/tree/main/setup/providers) for provider-specific setup. |
-| **VPN_TYPE** | Protocol: `openvpn` (default) or `wireguard`. |
-| **OPENVPN_USER / OPENVPN_PASSWORD** | OpenVPN credentials (required for OpenVPN providers). |
-| **WIREGUARD_PRIVATE_KEY / WIREGUARD_ADDRESSES** | WireGuard credentials (only when `VPN_TYPE=wireguard`). |
-| **SERVER_COUNTRIES / SERVER_CITIES** | Optional narrowing of endpoint selection. |
+| **EXPRESSVPN_CODE** | ExpressVPN activation code (required). Get from https://www.expressvpn.com/setup. |
+| **EXPRESSVPN_SERVER** | Server region or `smart` (auto-select nearest). Default: `smart`. |
+| **EXPRESSVPN_PROTOCOL** | VPN protocol: `lightwayudp` (default, fastest), `lightwaytcp`, `wireguard`, `openvpntcp`, `openvpnudp`, `auto`. |
+| **EXPRESSVPN_ALLOW_LAN** | Allow LAN access while Network Lock is on. Default: `true`. |
+| **EXPRESSVPN_LAN_CIDR** | Comma-separated LAN subnets for return routes (optional). |
 
-OpenVPN credentials are required and validated by `bootstrap.py` and `deploy.py` when using OpenVPN providers.
+The activation code is required and validated by `bootstrap.py` and `deploy.py`. See the [ExpressVPN container docs](https://github.com/Misioslav/expressvpn) for available servers and protocols.
 
 ### *arr app authentication
 
@@ -137,7 +137,7 @@ The template includes optional tag variables. Keep defaults while testing, then 
 
 | Service | Role |
 |---------|------|
-| **vpn (Gluetun)** | VPN egress boundary for qBittorrent traffic |
+| **vpn (ExpressVPN)** | VPN egress boundary for qBittorrent traffic ([misioslav/expressvpn](https://github.com/Misioslav/expressvpn)) |
 | **qbittorrent** | Torrent downloader running via `network_mode: service:vpn` |
 | **sonarr / radarr** | TV and movie automation |
 | **prowlarr** | Indexer management and sync to *arr apps |
@@ -233,7 +233,7 @@ You can deploy directly on the Media VM or use the repo deploy workflow.
 
 From repo root:
 
-1. Ensure `docker_compose/media/.env` exists and required values are set (`OPENVPN_USER`, `OPENVPN_PASSWORD`, `MEDIA_ROOT`, `CONFIG_ROOT`).
+1. Ensure `docker_compose/media/.env` exists and required values are set (`EXPRESSVPN_CODE`, `MEDIA_ROOT`, `CONFIG_ROOT`).
 2. Deploy:
 
    ```bash

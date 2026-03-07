@@ -262,22 +262,13 @@ def _ask_continue(non_interactive: bool) -> None:
 def validate_env(env: dict[str, str], real_user: str, env_file: Path) -> None:
     """Validate required .env variables for the media stack."""
     env_loc = _env_path_display(env_file)
-    vpn_type = env.get("VPN_TYPE", "openvpn").lower()
-    if vpn_type == "wireguard":
-        if not env.get("WIREGUARD_PRIVATE_KEY"):
-            log.error(
-                "VPN_TYPE=wireguard but WIREGUARD_PRIVATE_KEY is not set in .env."
-            )
-            log.error(f"Update: {env_loc}")
-            raise SystemExit(1)
-    else:
-        if not env.get("OPENVPN_USER") or not env.get("OPENVPN_PASSWORD"):
-            log.error(
-                "Set OPENVPN_USER and OPENVPN_PASSWORD in .env (required for OpenVPN).\n"
-                "For WireGuard providers, set VPN_TYPE=wireguard and WIREGUARD_PRIVATE_KEY instead."
-            )
-            log.error(f"Update: {env_loc}")
-            raise SystemExit(1)
+    if not env.get("EXPRESSVPN_CODE"):
+        log.error(
+            "Set EXPRESSVPN_CODE in .env (required for ExpressVPN activation).\n"
+            "Get your activation code from https://www.expressvpn.com/setup"
+        )
+        log.error(f"Update: {env_loc}")
+        raise SystemExit(1)
 
     media_root_str = env.get("MEDIA_ROOT", "")
     if not media_root_str:
@@ -631,7 +622,7 @@ def populate_env_api_keys(
       - missing entirely                         → append
     Already-populated keys are left untouched.
     """
-    if env.get("ENABLE_EXPORTERS", "0") != "1":
+    if env.get("ENABLE_EXPORTERS", "1") != "1":
         return
 
     keys = {
@@ -710,7 +701,7 @@ def print_summary(env: dict[str, str]) -> None:
     log.info("")
     log.info("--- Stack summary ---")
     log.info(
-        "Base: VPN (Gluetun), qBittorrent, Sonarr, Radarr, Prowlarr, "
+        "Base: VPN (ExpressVPN), qBittorrent, Sonarr, Radarr, Prowlarr, "
         "FlareSolverr"
     )
     for name, val in overlays.items():

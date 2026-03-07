@@ -2,8 +2,7 @@
 #
 # Services:
 #   - plex               — Media server reading /mnt/media/library (from Media VM)
-#   - immich-server      — Immich API + backend
-#   - immich-microservices
+#   - immich-server      — Immich API + backend (includes microservices since v1.106)
 #   - immich-machine-learning
 #   - immich-postgres    — Postgres DB for Immich (local disk, no network shares)
 #   - immich-redis       — Redis for Immich
@@ -105,32 +104,6 @@ services:
     networks:
       - accelerated_internal
 
-  # --- Immich microservices ---
-  immich-microservices:
-    image: ghcr.io/immich-app/immich-microservices:${IMMICH_VERSION:-v2}
-    container_name: immich-microservices
-    depends_on:
-      immich-postgres:
-        condition: service_healthy
-      immich-redis:
-        condition: service_started
-    environment:
-      - DB_HOST=immich-postgres
-      - DB_PORT=5432
-      - DB_USERNAME=postgres
-      - DB_PASSWORD=${DB_PASSWORD:-postgres}
-      - DB_DATABASE_NAME=immich
-      - UPLOAD_LOCATION=/photos/library
-      - REDIS_HOSTNAME=immich-redis
-      - REDIS_PORT=6379
-      - NODE_ENV=production
-      - IMMICH_LOG_LEVEL=info
-    volumes:
-      - ${IMMICH_UPLOAD_ROOT:-/mnt/photos/library}:/photos/library
-    restart: unless-stopped
-    networks:
-      - accelerated_internal
-
   # --- Immich machine learning (CPU by default) ---
   immich-machine-learning:
     image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v2}
@@ -150,4 +123,3 @@ services:
 networks:
   accelerated_internal:
     driver: bridge
-
