@@ -24,8 +24,13 @@ This chapter is the **operational guide**:
 
 - [What's in `docker_compose/accelerated/`](#whats-in-docker_composeaccelerated)
 - [Environment: `.env.example`](#environment-envexample)
+  - [Paths and identity](#paths-and-identity)
+  - [Plex-specific](#plex-specific)
+  - [Immich-specific](#immich-specific)
+  - [VM identity and observability](#vm-identity-and-observability)
 - [Compose file: Notable details](#compose-file-notable-details)
 - [Bootstrap script: What it does](#bootstrap-script-what-it-does)
+- [Post-deploy automation: `setup_accelerated_apps.py`](#post-deploy-automation-setup_accelerated_appspy)
 - [Deploying the accelerated stack](#deploying-the-accelerated-stack)
   - [Path 1: Manual (on the Accelerated VM)](#path-1-manual-on-the-accelerated-vm)
   - [Path 2: Repo deploy script (`deploy.py`)](#path-2-repo-deploy-script-deploypy)
@@ -42,9 +47,10 @@ The Accelerated stack follows the same “one stack, one directory” pattern as
 | File or script | Purpose |
 |----------------|---------|
 | **compose.yml** | Stack definition: Plex, Immich services (server, microservices, machine learning), Postgres, Redis. |
-| **.env.example** | Template for required and optional env vars (no secrets; copy to `.env` and fill). Defines paths, IDs, image tags, GPU and observability toggles. |
-| **bootstrap.py** | Idempotent first-run: validates `.env`, checks mounts, runs GPU guardrails, creates config directories, wires observability, validates compose, and optionally brings up the stack. |
-| **compose.observability.yml** | Symlink to `docker_compose/common/compose.observability.yml`. Adds node_exporter, cAdvisor, and Alloy sidecars when `ENABLE_OBSERVABILITY=1`. |
+| **.env.example** | Template for required and optional env vars (no secrets; copy to `.env` and fill). Defines paths, IDs, Plex tokens, image tags, GPU and observability toggles. |
+| **bootstrap.py** | Idempotent first-run: optional NFS mount setup, validates `.env`, PLEX_CLAIM guardrail, GPU guardrail, creates config directories, wires observability, validates compose. |
+| **setup_accelerated_apps.py** | Post-deploy automation: waits for Plex to be ready, applies TRaSH-recommended server settings, and creates library sections (Movies, TV Shows, Anime). Called automatically by `deploy.py`. |
+| **compose.observability.yml** | Symlink to `docker_compose/common/compose.observability.yml`. Adds node_exporter, cAdvisor, Alloy sidecars, and the Plex metrics exporter when `ENABLE_OBSERVABILITY=1`. |
 
 All paths in the stack are relative to the directory where you run `docker compose`
 (typically `docker_compose/accelerated` or a symlink like `~/accelerated`).
@@ -78,9 +84,19 @@ cp .env.example .env
 
 | Variable | Purpose |
 |----------|---------|
-| **PLEX_CLAIM** | Optional claim token for first registration of Plex with your Plex account. Get it from the Plex website before initial bring-up. Leave empty after first registration. |
+| **PLEX_CLAIM** | One-time server registration token. Get it from [plex.tv/claim](https://www.plex.tv/claim) (expires in 4 minutes) immediately before first deploy. Bootstrap blocks if this is empty on a fresh install. Leave empty on subsequent deploys after Plex has been claimed. |
+| **PLEX_TOKEN** | Permanent Plex API token (your plex.tv account token). Used by `setup_accelerated_apps.py` (library creation, server settings) and the Plex Prometheus exporter. Unlike `PLEX_CLAIM`, this never changes — retrieve it from your plex.tv account before deploying. See [How to find your Plex token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/). |
+| **PLEX_HOST** | LAN IP or hostname of this VM (e.g. `192.168.1.140`). Set in both `accelerated/.env` and `media/.env` so Sonarr and Radarr can reach Plex for library refresh notifications after an import. |
+| **PLEX_SERVER** | URL the Plex Prometheus exporter uses to reach Plex from within the container. Default: `http://plex:32400`. |
 
-Plex’s internal DB and metadata live under `${CONFIG_ROOT}/plex` and are not exposed to the network.
+> ### 🧠 Design Note: Two Plex Tokens
+> There are two distinct tokens and it is easy to confuse them:
+> - **`PLEX_CLAIM`** — a one-time registration token from [plex.tv/claim](https://www.plex.tv/claim). It binds the new server to your account on first start and expires in 4 minutes. After Plex starts successfully, the token is consumed and never needed again.
+> - **`PLEX_TOKEN`** (`X-Plex-Token`) — your permanent plex.tv account token. It exists independently of any server instance and can be retrieved from your account at any time. All automation — library creation, server settings, Prometheus exporter, and Sonarr/Radarr library refresh — uses this token.
+>
+> In practice: get `PLEX_TOKEN` first (any time, even before Plex is installed), then get `PLEX_CLAIM` last, right before running deploy, since it expires quickly.
+
+Plex's internal DB and metadata live under `${CONFIG_ROOT}/plex` and are not exposed to the network.
 
 ### Immich-specific
 
@@ -222,10 +238,11 @@ and enforces a few guardrails so mistakes show up early.
 
 ### Order of operations
 
-1. **Safety and arguments**  
-   - Sets up logging.  
-   - Parses `--force`, `--non-interactive`, and `--up`.  
-   - Optionally re‑execs as root if future NFS or mount tasks are added (same pattern as the Media VM bootstrap).
+1. **NFS mount setup** *(interactive mode only; skipped by `--non-interactive` / `deploy.py`)*  
+   - Offers to configure fstab entries for `MEDIA_LIBRARY_ROOT` and `IMMICH_UPLOAD_ROOT`.  
+   - Asks for NAS host, export paths, and local mount points (defaults from `.env`).  
+   - Writes `nofail,_netdev,x-systemd.automount` entries so boot does not hang if the NAS is unreachable.  
+   - Runs `mount -a` to apply immediately.
 
 2. **Env file**  
    - Requires `.env` to exist next to `compose.yml`.  
@@ -233,37 +250,38 @@ and enforces a few guardrails so mistakes show up early.
 
 3. **Env validation and guardrails**  
    - Verifies that `MEDIA_LIBRARY_ROOT` and `IMMICH_UPLOAD_ROOT` are set.  
-   - Ensures those paths exist on the host, creating them when reasonable for local testing
-     (with log messages clarifying that production should mount real exports).  
+   - Ensures those paths exist on the host, creating them locally when reasonable for testing
+     (with log messages clarifying that production should use real NFS mounts).  
    - Verifies that `IMMICH_DB_ROOT` exists and appears to be on a local filesystem
      (warns if it looks like an NFS mount).  
    - Ensures `DB_PASSWORD` is not empty or a placeholder unless `--force` is used.
 
-4. **GPU guardrail**  
+4. **PLEX_CLAIM guardrail**  
+   - Checks if `PLEX_CLAIM` is set. If it is empty **and** Plex has never been started before
+     (heuristic: `Preferences.xml` does not exist), bootstrap exits with a clear message
+     explaining where to get the claim token and how to set it.  
+   - Bypassed by `--force` (Plex will start unclaimed — avoid in production).
+
+5. **GPU guardrail**  
    - Checks for `/dev/dri` on the host.  
-   - If missing, logs a warning (or exits unless `--force` is set) with guidance to fix Proxmox passthrough.  
-   - Optionally inspects `compose.yml` to confirm that `plex` and `immich-server` have the expected `devices: - /dev/dri:/dev/dri` stanza.
+   - If missing, warns (or exits unless `--force`) with guidance to fix Proxmox passthrough or VM-side drivers.  
+   - Inspects `compose.yml` to confirm `plex` and `immich-server` declare the `/dev/dri:/dev/dri` devices stanza.
 
-5. **Config directories and ownership**  
-   - Resolves `CONFIG_ROOT` to an absolute path using `resolve_config_base()` from `scripts/homelab_common`.  
+6. **Config directories and ownership**  
    - Creates config subdirectories for `plex`, `immich`, `immich-postgres`, and `immich-redis`.  
-   - Attempts to set ownership to the real user (or PUID/PGID) so containers can write without permission errors.
+   - Attempts to set ownership to the real user so containers can write without permission errors.
 
-6. **Observability wiring**  
-   - When `ENABLE_OBSERVABILITY=1`, calls `setup_observability_config()` to generate Alloy config
-     for this VM, reusing the same labeling conventions as other stacks.
+7. **Observability wiring**  
+   - When `ENABLE_OBSERVABILITY=1`, generates an Alloy config for this VM using the same
+     labeling conventions as other stacks.
 
-7. **Compose validation**  
-   - Runs `docker compose -f compose.yml config` from the stack directory.  
-   - If validation fails, prints the error and exits, without starting any containers.
+8. **Compose validation**  
+   - Runs `docker compose config` for the active set of compose files.  
+   - Exits if validation fails before starting any containers.
 
-8. **Optional bring-up**  
-   - If `--up` is provided (and not running under `HOMELAB_DEPLOY`), runs `docker compose up -d`.  
-   - Otherwise, prints a summary and leaves starting the stack to the user or `deploy.py`.
-
-9. **Summary logging**  
-   - Prints a summary of key paths (library, photos, DB), whether observability is enabled,
-     and what GPU checks passed or failed.
+9. **Optional bring-up**  
+   - If `--up` is provided (manual mode), runs `docker compose up -d`.  
+   - Under `deploy.py`, bring-up is handled by deploy; bootstrap just validates and prepares.
 
 ### Flags
 
@@ -272,6 +290,57 @@ and enforces a few guardrails so mistakes show up early.
 | **--up** | After bootstrap checks, run `docker compose up -d`. |
 | **--force** | Skip overridable guardrails (e.g. placeholder DB password, missing `/dev/dri`) — use for local testing only. |
 | **--non-interactive** | Suppresses prompts; used automatically when invoked by `deploy.py`. |
+
+---
+
+## Post-deploy automation: `setup_accelerated_apps.py`
+
+`setup_accelerated_apps.py` runs automatically after `docker compose up` when you use `deploy.py`. It can also be run standalone:
+
+```bash
+cd docker_compose/accelerated && python3 setup_accelerated_apps.py
+```
+
+It requires `PLEX_TOKEN` to be set in `.env`. If it is not set, the script logs a warning and exits cleanly — no harm done, but you will need to configure Plex manually or re-run the script later.
+
+### What it does
+
+1. **Waits for Plex to be ready** — polls `/identity` up to 120 seconds so it is safe to run immediately after `docker compose up`.
+
+2. **Applies TRaSH-recommended server settings** via `PUT /:/prefs`:
+
+   | Setting | Value | Why |
+   |---------|-------|-----|
+   | Filesystem event scanning | on | Fast partial scan on file change instead of full library scan |
+   | Auto-empty trash | off | Let *arrs manage file lifecycle; do not auto-delete |
+   | Hardware transcoding | on | Use Intel Quick Sync / VAAPI (requires GPU passthrough) |
+   | Allow media deletion from clients | off | Prevent accidental deletes from Plex clients |
+   | DLNA | off | Off unless explicitly needed |
+   | Online media sources | off | Disable Plex's built-in noise in the library |
+
+   Full reference: [TRaSH — Suggested Plex Media Server Settings](https://trash-guides.info/Plex/Plex-media-server-settings/).
+
+3. **Creates library sections** — idempotent, skips existing libraries:
+
+   | Library name | Type | Container path |
+   |---|---|---|
+   | Movies | movie | `/data/library/movies` |
+   | TV Shows | show | `/data/library/tv` |
+   | Anime | show | `/data/library/anime` |
+
+   These paths align with the [TRaSH file and folder structure](https://trash-guides.info/File-and-Folder-Structure/) used by the Media VM.
+
+### Running it standalone
+
+If `PLEX_TOKEN` was not set at deploy time, add it to `.env` and re-run:
+
+```bash
+cd ~/accelerated   # or docker_compose/accelerated
+# Edit .env: set PLEX_TOKEN=<your-token>
+python3 setup_accelerated_apps.py
+```
+
+The script is fully idempotent — settings already at the target value are left alone, and existing library sections are skipped.
 
 ---
 
@@ -296,12 +365,14 @@ Assumes the repo is cloned on the VM (e.g. under `~/Self-Hosting`).
    cd docker_compose/accelerated
    cp .env.example .env
    # Edit .env:
-   #   - MEDIA_LIBRARY_ROOT  (e.g. /mnt/media/library)
+   #   - MEDIA_LIBRARY_ROOT  (e.g. /mnt/media/library — NFS mount from Media VM)
    #   - IMMICH_UPLOAD_ROOT  (e.g. /mnt/photos/library)
    #   - IMMICH_DB_ROOT      (default local path is fine)
    #   - PUID / PGID / TZ
    #   - DB_PASSWORD         (strong A–Z / a–z / 0–9)
-   #   - PLEX_CLAIM          (for first Plex registration, optional)
+   #   - PLEX_TOKEN          (permanent account token — get from plex.tv any time)
+   #   - PLEX_HOST           (LAN IP of this VM, e.g. 192.168.1.140)
+   #   - PLEX_CLAIM          (one-time token from plex.tv/claim — get last, expires in 4 min)
    #   - LOKI_URL / PROMETHEUS_URL / DOCKER_GID (if using observability)
    ```
 
@@ -333,9 +404,10 @@ From the **repo root**:
 
    - Validate required env vars for `accelerated`  
      (e.g. `MEDIA_LIBRARY_ROOT`, `IMMICH_UPLOAD_ROOT`, `IMMICH_DB_ROOT`, `DB_PASSWORD`).  
-   - Run `docker_compose/accelerated/bootstrap.py` with `--non-interactive`.  
-   - Create a symlink `~/accelerated` → repo’s `docker_compose/accelerated` (if not already installed).  
-   - Run `docker compose up -d` in the stack directory, including the observability overlay when `ENABLE_OBSERVABILITY=1`.  
+   - Run `bootstrap.py --non-interactive` (NFS prompts skipped; PLEX_CLAIM guardrail active).  
+   - Create a symlink `~/accelerated` → repo's `docker_compose/accelerated` (if not already installed).  
+   - Run `docker compose up -d`, including the observability and Plex exporter overlays when `ENABLE_OBSERVABILITY=1`.  
+   - Run `setup_accelerated_apps.py` — applies TRaSH Plex settings and creates library sections (requires `PLEX_TOKEN`).  
    - Regenerate shell helpers so you can use `accelerated` commands from any shell.
 
 3. **Optional flags**:
@@ -363,45 +435,48 @@ from any directory (after reloading your shell).
 
 ## After first run
 
-Once the stack is up, do the following:
+Once the stack is up, most Plex configuration is handled automatically by `setup_accelerated_apps.py`. What remains is verification and a few steps that require human decisions.
 
 1. **Confirm mounts and GPU visibility**
-   - From inside Plex and Immich containers, list library paths:
+
+   ```bash
+   accelerated exec plex ls /data/library
+   accelerated exec immich-server ls /photos/library
+   ls /dev/dri
+   ```
+
+   Use `intel_gpu_top` while transcoding to confirm GPU usage.
+
+2. **Verify automated Plex setup**
+   - Visit Plex at `http://<accelerated-vm-ip>:32400` (or through Caddy if already wired).  
+   - Check that the three libraries (Movies, TV Shows, Anime) were created automatically.  
+   - Server settings (hardware transcoding, no auto-delete, no media deletion from clients) were applied by `setup_accelerated_apps.py`. Verify in **Settings → Troubleshooting → Download Logs** if in doubt.  
+   - If `PLEX_TOKEN` was not set at deploy time, run `setup_accelerated_apps.py` manually after adding it to `.env`.  
+   - Follow the [TRaSH Plex guide](https://trash-guides.info/Plex/) for client-side tuning not covered by the automation.
+
+3. **Connect Sonarr/Radarr → Plex (on the Media VM)**
+   - Set `PLEX_HOST` and `PLEX_TOKEN` in `docker_compose/media/.env`.  
+   - Run `setup_media_apps.py` on the Media VM (or redeploy media):
 
      ```bash
-     accelerated exec plex ls /data/library
-     accelerated exec immich-server ls /photos/library
+     cd ~/media   # or docker_compose/media
+     python3 setup_media_apps.py
      ```
 
-   - On the host, run `ls /dev/dri` and confirm it exists.  
-     Optionally use `intel_gpu_top` while transcoding to confirm GPU usage.
+   - This adds Plex as a notification connection in both Sonarr and Radarr. After an import, the *arr will call Plex's API to refresh just the affected library section — no waiting for a scheduled scan.
 
-2. **Configure Plex**
-   - Visit Plex at `http://<accelerated-vm-ip>:32400` for initial setup.  
-   - Point libraries at:
-     - `/data/library/movies`
-     - `/data/library/tv`
-     - `/data/library/anime` (if used)
-   - Follow the [TRaSH Plex guide](https://trash-guides.info/Plex/) for server and client tuning.  
-     This repo does not duplicate those settings; it assumes TRaSH as the source of truth.
-
-3. **Configure Immich**
-   - Visit the Immich web UI on its configured port (e.g. `http://<accelerated-vm-ip>:2283`).  
+4. **Configure Immich**
+   - Visit the Immich web UI at `http://<accelerated-vm-ip>:2283`.  
    - Create the admin account and complete initial setup.  
-   - Ensure upload paths and storage mapping align with `/photos/library`.
+   - Ensure upload paths align with `/photos/library`.
 
-4. **Wire through Core**
-   - On the Core VM, add routes for Plex and Immich in `docker_compose/core/.env`
-     via `CADDY_EXTRA_SERVICES` (see [Chapter 3A](Chapter3a-core-stack.md#caddy)).  
-   - Regenerate the Caddyfile and reload Caddy.  
-   - Decide whether Plex and/or Immich should sit behind SSO (`:sso` suffix) or use
-     per-app authentication only.
+5. **Wire through Core**
+   - Add routes for Plex and Immich in `docker_compose/core/.env` via `CADDY_EXTRA_SERVICES`
+     (see [Chapter 3A — Core stack](Chapter3a-core-stack.md)).  
+   - Decide access model: Plex has its own authentication and works well with direct LAN/Tailscale access on port `32400`. Immich benefits from a Caddy reverse proxy for external access.
 
-5. **Pin image tags**
-   - After confirming a stable deployment, pin:
-     - `PLEX_TAG` (if you add it to `.env`)  
-     - `IMMICH_VERSION`  
-   - This keeps redeploys predictable.
+6. **Pin image tags**
+   - After confirming a stable deployment, pin `PLEX_TAG` and `IMMICH_VERSION` in `.env` to keep redeploys predictable.
 
 ---
 

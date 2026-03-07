@@ -7,16 +7,16 @@ Invoked by deploy.py or run manually:
 
 Phases:
   0  logging + args
-  1  .env + guardrails (paths, DB password)
-  2  GPU guardrail (/dev/dri + compose devices stanza)
-  3  config directories + ownership
-  4  observability wiring (Alloy/node_exporter/cAdvisor) when enabled
-  5  compose validation
-  6  optional bring-up (--up)
+  1  NFS mounts (optional, interactive only)
+  2  .env + guardrails (paths, DB password, Plex claim token)
+  3  GPU guardrail (/dev/dri + compose devices stanza)
+  4  config directories + ownership
+  5  observability wiring (Alloy/node_exporter/cAdvisor) when enabled
+  6  compose validation
+  7  optional bring-up (--up)
 
 Does NOT:
   - create .env from .env.example
-  - edit fstab or manage NFS (future extension if needed)
   - start the stack unless --up is passed
 """
 
@@ -29,6 +29,12 @@ import shutil
 import subprocess
 import sys
 from pathlib import Path
+
+# NFS mounts this bootstrap manages (label → default mount point).
+_NFS_MOUNTS = [
+    ("media library (MEDIA_LIBRARY_ROOT)", "/mnt/media/library", "/mnt/media", "MEDIA_LIBRARY_ROOT"),
+    ("photos library (IMMICH_UPLOAD_ROOT)", "/mnt/photos/library", "/mnt/photos", "IMMICH_UPLOAD_ROOT"),
+]
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parent.parent
@@ -79,6 +85,129 @@ def _env_path_display(env_file: Path) -> str:
         return str(env_file.resolve())
 
 
+def phase_nfs(env: dict[str, str]) -> None:
+    """Interactively configure NFS fstab entries for media and photos mounts.
+
+    Only runs in interactive mode (skipped by --non-interactive / deploy).
+    Each mount is offered separately; user can skip any they don't need.
+    """
+    if not sys.stdin.isatty():
+        return
+
+    answer = input(
+        "\nConfigure NFS mounts for media/photos library? [y/N] "
+    ).strip().lower()
+    if answer not in ("y", "yes"):
+        return
+
+    nas_host = input("NAS hostname or IP: ").strip()
+    if not nas_host:
+        log.info("Skipping NFS (no NAS host provided).")
+        return
+
+    for label, default_mount, _parent, env_var in _NFS_MOUNTS:
+        current = env.get(env_var, default_mount)
+        mount_path = (
+            input(f"  Mount path for {label} [{current}]: ").strip()
+            or current
+        )
+        export_path = input(
+            f"  NAS export path for {label} (e.g. /volume1/media/library): "
+        ).strip()
+        if not export_path:
+            log.info(f"  Skipping {label} (no export path).")
+            continue
+
+        ro_answer = input(f"  Mount {label} read-only? [Y/n] ").strip().lower()
+        rw = "ro" if ro_answer not in ("n", "no") else "rw"
+
+        fstab_spec = f"{nas_host}:{export_path}"
+        fstab_line = (
+            f"{fstab_spec}\t{mount_path}\tnfs\t"
+            f"nofail,_netdev,x-systemd.automount,timeout=10,vers=4,{rw}\t0\t0"
+        )
+
+        fstab = Path("/etc/fstab")
+        fstab_lines = fstab.read_text().splitlines(keepends=True) if fstab.is_file() else []
+
+        existing_idx: int | None = None
+        for i, line in enumerate(fstab_lines):
+            stripped = line.strip()
+            if not stripped or stripped.startswith("#"):
+                continue
+            fields = stripped.split()
+            if len(fields) >= 2 and fields[1] == mount_path:
+                existing_idx = i
+                break
+
+        if existing_idx is not None:
+            if fstab_lines[existing_idx].rstrip("\n") == fstab_line:
+                log.info(f"  Mount for {mount_path} already in /etc/fstab with correct options; skipping.")
+            else:
+                log.info(
+                    f"  Updating /etc/fstab entry for {mount_path}: "
+                    f"{fstab_spec} → {mount_path} (nofail, automount, {rw})"
+                )
+                fstab_lines[existing_idx] = fstab_line + "\n"
+                fstab.write_text("".join(fstab_lines))
+        else:
+            log.info(f"  Adding to /etc/fstab: {fstab_spec} → {mount_path} (nofail, automount, {rw})")
+            with fstab.open("a") as f:
+                f.write(fstab_line + "\n")
+
+        mp = Path(mount_path)
+        mp.mkdir(parents=True, exist_ok=True)
+
+    subprocess.run(["systemctl", "daemon-reload"], check=False)
+    result = subprocess.run(["mount", "-a"], capture_output=True)
+    if result.returncode != 0:
+        log.warning(
+            "mount -a failed (e.g. NAS unreachable). Boot will not hang "
+            "(nofail); fix and run: mount -a"
+        )
+    else:
+        log.info("Mounts applied.")
+
+
+def _warn_plex_claim(env: dict[str, str], config_base: Path, *, force: bool) -> None:
+    """Warn if PLEX_CLAIM is unset on what looks like a first-run.
+
+    Plex must be claimed on first start or it starts as an unclaimed server.
+    After the first successful start the claim is consumed; leave it empty on
+    subsequent deploys.
+
+    'First run' heuristic: PLEX_CLAIM is empty AND the Plex preferences file
+    does not yet exist (server has never started successfully).
+    """
+    claim = env.get("PLEX_CLAIM", "").strip()
+    plex_prefs = (
+        config_base
+        / "plex"
+        / "Library"
+        / "Application Support"
+        / "Plex Media Server"
+        / "Preferences.xml"
+    )
+
+    if claim or plex_prefs.is_file():
+        return
+
+    msg = (
+        "PLEX_CLAIM is not set and Plex has not been started before.\n"
+        "Without a claim token Plex will start as an unclaimed (unmanaged) server.\n"
+        "  1. Go to https://www.plex.tv/claim  (expires in 4 minutes)\n"
+        "  2. Copy the token (e.g. claim-xxxxxxxxxxxxxxxxxxxx)\n"
+        "  3. Set PLEX_CLAIM=<token> in .env\n"
+        "  4. Re-run bootstrap / deploy\n"
+        "After Plex starts successfully you can clear PLEX_CLAIM from .env."
+    )
+    if force:
+        log.warning(msg + "\nContinuing due to --force (Plex will start unclaimed).")
+        return
+    log.error(msg)
+    raise SystemExit(1)
+
+
 def _load_env_or_die() -> tuple[dict[str, str], Path]:
     env_file = SCRIPT_DIR / ".env"
     if not env_file.is_file():
@@ -111,7 +240,7 @@ def _validate_paths(env: dict[str, str], real_user: str, env_file: Path) -> None
             log.error(f"Required var {var} is unset in {env_loc}.")
         raise SystemExit(1)
 
-    def _ensure_dir(path_str: str, label: string) -> Path:  # type: ignore[name-defined]
+    def _ensure_dir(path_str: str, label: str) -> Path:
         p = Path(path_str)
         if not p.is_dir():
             try:
@@ -325,14 +454,24 @@ def main(argv: list[str] | None = None) -> None:
     real_user, real_home = get_real_user()
     log.info(f"Real user: {real_user} (home: {real_home})")
 
+    # Phase 1: NFS (interactive only, skipped in deploy/non-interactive mode)
+    if not args.non_interactive:
+        env_peek, _ = _load_env_or_die()
+        phase_nfs(env_peek)
+
+    # Phase 2: .env, paths, passwords, Plex claim
     env, env_file = _load_env_or_die()
 
     _validate_paths(env, real_user, env_file)
     _validate_db_password(env, env_file, force=args.force)
-    _gpu_guardrail(env, force=args.force, non_interactive=args.non_interactive)
 
     config_base = resolve_config_base(env.get("CONFIG_ROOT", "./config"), SCRIPT_DIR)
     _ensure_config_dirs(config_base, real_user)
+
+    _warn_plex_claim(env, config_base, force=args.force)
+
+    # Phase 3: GPU
+    _gpu_guardrail(env, force=args.force, non_interactive=args.non_interactive)
 
     if env.get("ENABLE_OBSERVABILITY", "1") == "1":
         setup_observability_config(config_base, env, SCRIPT_DIR)

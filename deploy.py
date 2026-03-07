@@ -435,6 +435,23 @@ def _post_deploy_core(sdir: Path) -> None:
         sys.path.pop(0)
 
 
+def _post_deploy_accelerated(sdir: Path) -> None:
+    """Configure Plex server settings and library sections after stack starts."""
+    env_file = sdir / ".env"
+    if not env_file.is_file():
+        return
+    env = load_env(env_file)
+
+    sys.path.insert(0, str(sdir))
+    try:
+        import setup_accelerated_apps
+        setup_accelerated_apps.setup(env)
+    except Exception as exc:
+        log.warning("Accelerated app setup failed: %s", exc)
+    finally:
+        sys.path.pop(0)
+
+
 def _post_deploy_media(sdir: Path) -> None:
     """Configure Prowlarr indexers, qBittorrent, Sonarr/Radarr, and trigger Recyclarr."""
     env_file = sdir / ".env"
@@ -572,6 +589,8 @@ def _deploy_one(
         _post_deploy_core(sdir)
     elif stack == "media":
         _post_deploy_media(sdir)
+    elif stack == "accelerated":
+        _post_deploy_accelerated(sdir)
 
     _write_stack_functions(installed_dir, real_home, default_file)
     return True

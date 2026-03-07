@@ -28,6 +28,7 @@ The Accelerated VM is the only VM that should ever own the GPU. Other VMs and th
 - [Step 7 – Add the GPU to the VM](#step-7--add-the-gpu-to-the-vm)
 - [Quick Reference](#quick-reference)
 - [Troubleshooting](#troubleshooting)
+  - [Emergency local CLI access via nomodeset](#want-to-temporarily-reclaim-host-video-emergency-local-cli-access)
 
 ---
 
@@ -280,8 +281,48 @@ qm set 230 -hostpci0 0000:00:02.0,pcie=1,rombar=0
 - This is rare for `00:02.0` on Intel platforms but can happen with unusual BIOS configurations.
 - An ACS override patch exists but carries security tradeoffs. Try updating the BIOS first.
 
-**Want to temporarily reclaim host video?**
-- At the GRUB boot menu, press `e` to edit the boot entry and add `nomodeset` to the kernel line. This gives you a basic framebuffer console without loading `i915`.
+**Want to temporarily reclaim host video? (Emergency local CLI access)**
+
+After blacklisting `i915`, the HDMI port goes dark permanently — but you can get a working CLI back for a single boot session without undoing anything. This is useful if SSH and the web UI are both unreachable.
+
+> **What this does:** `nomodeset` tells the kernel not to switch the display to a graphics mode. The `i915` driver is still blacklisted, but the BIOS/UEFI hands off a basic text framebuffer that Linux keeps using. You get a usable (but low-resolution) console. The change is **not persistent** — the next normal boot returns to the no-display state.
+
+**Step-by-step:**
+
+1. **Connect** a keyboard and HDMI monitor to the Proxmox host.
+
+2. **Reboot or power-cycle** the machine:
+   ```bash
+   reboot
+   ```
+   Or hold the power button if the host is unresponsive.
+
+3. **Interrupt GRUB.** As soon as the machine starts:
+   - Hold `Shift` (BIOS/legacy boot) **or** spam `Esc` (UEFI boot) until the GRUB menu appears.
+   - On Proxmox the default timeout is short (3 seconds). Be ready — start pressing immediately after the BIOS splash clears.
+   - If you miss the window, reboot and try again.
+
+4. **Select the boot entry.** The top entry (`Proxmox VE GNU/Linux`) is already highlighted. Do **not** press `Enter` yet.
+
+5. **Press `e`** to open the entry editor. You will see a multi-line kernel command block.
+
+6. **Find the `linux` line.** It starts with `linux` and contains your kernel path and boot parameters, including `quiet intel_iommu=on iommu=pt`. It looks roughly like:
+   ```
+   linux /boot/vmlinuz-... root=... quiet intel_iommu=on iommu=pt ...
+   ```
+
+7. **Navigate to the end of the `linux` line** using the arrow keys. Add a space and then `nomodeset`:
+   ```
+   ... quiet intel_iommu=on iommu=pt nomodeset
+   ```
+
+8. **Boot with the edited entry:** press `Ctrl+X` or `F10`.
+
+9. **Log in as root** when the login prompt appears. You now have a full shell — fix whatever needs fixing (network config, SSH keys, IP address, etc.).
+
+10. **Reboot normally when done.** The `nomodeset` edit was not saved; the next boot returns to the standard (no-display) state.
+
+> **Tip:** If the GRUB menu never appears, the timeout may be set to 0. In that case, try holding `Shift` earlier (right after power-on, before the BIOS splash). If the machine has already been configured to boot quickly and you consistently miss the window, you can make the timeout persistent from SSH: `sed -i 's/^GRUB_TIMEOUT=.*/GRUB_TIMEOUT=5/' /etc/default/grub && update-grub`.
 
 ---
 

@@ -21,6 +21,11 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 - [What's in `docker_compose/media/`](#whats-in-docker_composemedia)
 - [Configuration reference (TRaSH)](#configuration-reference-trash)
 - [Environment: `.env.example`](#environment-envexample)
+  - [Paths and identity](#paths-and-identity)
+  - [VPN (required for torrent routing)](#vpn-required-for-torrent-routing)
+  - [Plex integration](#plex-integration)
+  - [*arr app authentication](#arr-app-authentication)
+  - [Optional overlays](#optional-overlays)
 - [Compose files: Notable details](#compose-files-notable-details)
 - [Bootstrap script: What it does](#bootstrap-script-what-it-does)
 - [Deploying the media stack](#deploying-the-media-stack)
@@ -55,7 +60,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 | **compose.ntfy.yml** | Optional lightweight push notifications overlay |
 | **.env.example** | Template for required values and optional feature toggles |
 | **bootstrap.py** | Idempotent first-run checks: env validation, mount checks, config directory creation, VPN guardrail |
-| **setup_media_apps.py** | Post-deploy setup: adds Prowlarr indexers (13 public torrent sites including 1337x, TPB, EZTV, YTS, Nyaa.si, and others), FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, and qBittorrent categories/settings via API. Called automatically by `deploy.py` after compose up. |
+| **setup_media_apps.py** | Post-deploy automation via API: Prowlarr indexers (13 public torrent sites) + FlareSolverr proxy, qBittorrent categories and TRaSH settings, Sonarr/Radarr root folders + download clients + TRaSH naming, Prowlarr app sync, Plex library refresh connection (when `PLEX_HOST` and `PLEX_TOKEN` are set). Called automatically by `deploy.py`. |
 
 All overlays are selected from `.env` by `ENABLE_*` flags and are automatically included by `deploy.py` and the generated `media` shell helper.
 
@@ -108,6 +113,15 @@ Use `id your_user` on the host to get `PUID` and `PGID`.
 | **EXPRESSVPN_LAN_CIDR** | Comma-separated LAN subnets for return routes (optional). |
 
 The activation code is required and validated by `bootstrap.py` and `deploy.py`. See the [ExpressVPN container docs](https://github.com/Misioslav/expressvpn) for available servers and protocols.
+
+### Plex integration
+
+| Variable | Purpose |
+|----------|---------|
+| **PLEX_HOST** | LAN IP or hostname of the Accelerated VM running Plex (e.g. `192.168.1.140`). Used by `setup_media_apps.py` to register a Plex notification connection in Sonarr and Radarr so they trigger a library refresh on every import. |
+| **PLEX_TOKEN** | Permanent Plex API token (`X-Plex-Token`). Same token used in `accelerated/.env`. See [How to find your Plex token](https://support.plex.tv/articles/204059436-finding-an-authentication-token-x-plex-token/). |
+
+Both are optional — if either is absent, `setup_media_apps.py` skips Plex setup and logs a message. Add them and re-run `python3 setup_media_apps.py` to wire up Plex at any time (idempotent).
 
 ### *arr app authentication
 
@@ -276,6 +290,7 @@ Optional deploy flags:
 - **Prowlarr** — 13 public torrent indexers (1337x, TPB, EZTV, KAT, LimeTorrents, YTS, Torrent Downloads, Knaben, Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`
 - **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming via `setup_media_apps.py`; quality profiles (including anime), custom formats, and quality settings via Recyclarr (when enabled)
 - **Prowlarr → Sonarr/Radarr app sync** via `setup_media_apps.py`
+- **Plex library refresh connection** — Sonarr and Radarr are wired to call Plex's API after every import, so the library updates immediately. Requires `PLEX_HOST` and `PLEX_TOKEN` in `.env`. If absent at deploy time, add them and re-run `python3 setup_media_apps.py`
 - **Recyclarr** — initial sync triggered on first deploy (via `docker compose exec`), then runs on its cron schedule (`RECYCLARR_CRON`, default `@weekly`)
 
 Recommended post-deploy checks:
@@ -326,7 +341,7 @@ Reference: [TRaSH SABnzbd](https://trash-guides.info/Downloaders/SABnzbd/)
 
 Reference: [TRaSH Sonarr](https://trash-guides.info/Sonarr/)
 
-**Automated by deploy:** `setup_media_apps.py` configures root folders, download clients, and TRaSH naming on deploy — skip steps 2–4 for those. If Recyclarr is enabled, it syncs TRaSH quality definitions, custom formats, and quality profiles on deploy and weekly thereafter — skip step 5.
+**Automated by deploy:** `setup_media_apps.py` configures root folders, download clients, TRaSH naming, and Plex library refresh connection on deploy — skip steps 2–5 for those. If Recyclarr is enabled, it syncs TRaSH quality definitions, custom formats, and quality profiles — skip step 6.
 
 1. Open `http://<media-vm-ip>:8989`.
 2. **Settings -> Media Management**:
@@ -339,15 +354,17 @@ Reference: [TRaSH Sonarr](https://trash-guides.info/Sonarr/)
 4. **Settings -> Download Clients**:
    - qBittorrent: host `vpn`, port `8080`, category `tv` (qBittorrent uses `network_mode: service:vpn`, so it's reachable at the `vpn` hostname)
    - SABnzbd (if enabled): host `sabnzbd`, port `8080`, category `tv`
-5. **Settings -> Profiles / Custom Formats**:
+5. **Settings -> Connect**:
+   - Plex Media Server: host `<accelerated-vm-ip>`, port `32400`, token from `.env`. **Automated** when `PLEX_HOST` and `PLEX_TOKEN` are set in `.env`.
+6. **Settings -> Profiles / Custom Formats**:
    - Apply TRaSH quality settings, profiles, and custom formats.
-6. Verify by adding a test series and checking import succeeds without remote path mapping.
+7. Verify by adding a test series and checking import succeeds without remote path mapping.
 
 ### Radarr
 
 Reference: [TRaSH Radarr](https://trash-guides.info/Radarr/)
 
-**Automated by deploy:** `setup_media_apps.py` configures root folders, download clients, and TRaSH naming on deploy — skip steps 2–4 for those. If Recyclarr is enabled, it syncs TRaSH quality definitions, custom formats, and quality profiles on deploy and weekly thereafter — skip step 5.
+**Automated by deploy:** `setup_media_apps.py` configures root folders, download clients, TRaSH naming, and Plex library refresh connection on deploy — skip steps 2–5 for those. If Recyclarr is enabled, it syncs TRaSH quality definitions, custom formats, and quality profiles — skip step 6.
 
 1. Open `http://<media-vm-ip>:7878`.
 2. **Settings -> Media Management**:
@@ -358,8 +375,10 @@ Reference: [TRaSH Radarr](https://trash-guides.info/Radarr/)
 4. Add download clients:
    - qBittorrent category `movies`
    - SABnzbd category `movies` (if enabled)
-5. Apply TRaSH naming, quality profiles, and custom formats.
-6. Verify by adding one test movie and confirming import path under `/data/library/movies`.
+5. **Settings -> Connect**:
+   - Plex Media Server: host `<accelerated-vm-ip>`, port `32400`, token from `.env`. **Automated** when `PLEX_HOST` and `PLEX_TOKEN` are set in `.env`.
+6. Apply TRaSH naming, quality profiles, and custom formats.
+7. Verify by adding one test movie and confirming import path under `/data/library/movies`.
 
 ### Prowlarr and FlareSolverr
 
@@ -494,3 +513,4 @@ Cleanuparr monitors Sonarr/Radarr download queues and automatically handles stal
 - [Chapter 2C — Media VM](Chapter2c-media.md): architecture, storage design, and why this stack exists.
 - [Chapter 2 — VM overview](Chapter2-vms.md): VM inventory and lifecycle.
 - [Chapter 3A — Core stack](Chapter3a-core-stack.md): same deployment pattern for another VM role.
+- [Chapter 3D — Accelerated stack](Chapter3d-accelerated-stack.md): Plex (playback VM), `setup_accelerated_apps.py`, and the two-token model (`PLEX_CLAIM` vs `PLEX_TOKEN`).

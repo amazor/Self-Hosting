@@ -149,8 +149,28 @@ def phase_nfs(real_user: str) -> None:
     )
 
     fstab = Path("/etc/fstab")
-    if fstab.is_file() and mount_path in fstab.read_text():
-        log.info(f"Mount for {mount_path} already in /etc/fstab; skipping.")
+    fstab_lines = fstab.read_text().splitlines(keepends=True) if fstab.is_file() else []
+
+    existing_idx: int | None = None
+    for i, line in enumerate(fstab_lines):
+        stripped = line.strip()
+        if not stripped or stripped.startswith("#"):
+            continue
+        fields = stripped.split()
+        if len(fields) >= 2 and fields[1] == mount_path:
+            existing_idx = i
+            break
+
+    if existing_idx is not None:
+        if fstab_lines[existing_idx].rstrip("\n") == fstab_line:
+            log.info(f"Mount for {mount_path} already in /etc/fstab with correct options; skipping.")
+        else:
+            log.info(
+                f"Updating /etc/fstab entry for {mount_path}: "
+                f"{fstab_spec} -> {mount_path} (nofail, automount)"
+            )
+            fstab_lines[existing_idx] = fstab_line + "\n"
+            fstab.write_text("".join(fstab_lines))
     else:
         log.info(
             f"Adding to /etc/fstab: {fstab_spec} -> {mount_path} "

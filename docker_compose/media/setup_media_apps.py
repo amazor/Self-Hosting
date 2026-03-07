@@ -767,6 +767,89 @@ def _configure_arr_indexers(app_name: str, base_url: str, headers: dict,
 
 
 # ---------------------------------------------------------------------------
+# Plex notification connection (Sonarr / Radarr → Plex library refresh)
+# ---------------------------------------------------------------------------
+
+
+def _setup_plex_connection(
+    app_name: str,
+    base_url: str,
+    headers: dict,
+    plex_host: str,
+    plex_token: str,
+) -> None:
+    """Add Plex as a notification connection in Sonarr or Radarr.
+
+    When media is imported, *arr will call the Plex API to refresh just the
+    affected library section — no need to wait for Plex's scheduled scan.
+    Idempotent: skips if a Plex connection already exists.
+    """
+    url = f"{base_url}/api/v3/notification"
+    existing = _api(url, headers)
+    if existing:
+        for conn in existing:
+            if conn.get("implementation") == "PlexServer":
+                log.info("%s Plex notification connection already configured.", app_name)
+                return
+
+    schemas = _api(f"{url}/schema", headers)
+    if not schemas:
+        log.warning("Could not fetch %s notification schemas.", app_name)
+        return
+
+    schema = None
+    for s in schemas:
+        if s.get("implementation") == "PlexServer":
+            schema = dict(s)
+            break
+    if schema is None:
+        log.warning("PlexServer notification schema not found in %s.", app_name)
+        return
+
+    schema["name"] = "Plex"
+    schema["onDownload"] = True
+    schema["onUpgrade"] = True
+    schema.pop("id", None)
+    schema.pop("presets", None)
+
+    field_values = {
+        "host": plex_host,
+        "port": 32400,
+        "useSsl": False,
+        "authToken": plex_token,
+        "updateLibrary": True,
+        "signIn": False,
+    }
+    for field in schema.get("fields", []):
+        name = field.get("name", "")
+        if name in field_values:
+            field["value"] = field_values[name]
+
+    result = _api(url, headers, method="POST", data=schema)
+    if result and result.get("id"):
+        log.info("%s Plex notification connection added (host=%s:32400).", app_name, plex_host)
+    else:
+        log.warning("Failed to add Plex notification connection to %s.", app_name)
+
+
+def setup_plex_connect(
+    sonarr_url: str,
+    sonarr_key: str | None,
+    radarr_url: str,
+    radarr_key: str | None,
+    plex_host: str,
+    plex_token: str,
+) -> None:
+    """Wire Plex library refresh into Sonarr and Radarr."""
+    if sonarr_key:
+        headers = {"X-Api-Key": sonarr_key, "Content-Type": "application/json"}
+        _setup_plex_connection("Sonarr", sonarr_url, headers, plex_host, plex_token)
+    if radarr_key:
+        headers = {"X-Api-Key": radarr_key, "Content-Type": "application/json"}
+        _setup_plex_connection("Radarr", radarr_url, headers, plex_host, plex_token)
+
+
+# ---------------------------------------------------------------------------
 # Cleanuparr post-deploy instructions
 # ---------------------------------------------------------------------------
 
@@ -870,6 +953,20 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
             "Radarr", "http://localhost:7878",
             {"X-Api-Key": radarr_key, "Content-Type": "application/json"},
             env,
+        )
+
+    plex_host = env.get("PLEX_HOST", "").strip()
+    plex_token = env.get("PLEX_TOKEN", "").strip()
+    if plex_host and plex_token:
+        setup_plex_connect(
+            "http://localhost:8989", sonarr_key,
+            "http://localhost:7878", radarr_key,
+            plex_host, plex_token,
+        )
+    else:
+        log.info(
+            "Skipping Plex notification setup (PLEX_HOST and PLEX_TOKEN not set in .env).\n"
+            "Set both in .env and re-run: python3 setup_media_apps.py"
         )
 
     if env.get("ENABLE_CLEANUPARR", "0") == "1":
