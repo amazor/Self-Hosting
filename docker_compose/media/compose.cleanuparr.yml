@@ -11,15 +11,24 @@ services:
   # Configure in UI at http://<host>:11011: add *arr and download client connections (hostnames: sonarr, radarr, sabnzbd, qbittorrent).
   # Can remove failed/stalled items, enforce seeding time/ratio, trigger replacement searches.
   cleanuparr:
-    image: cleanuparr/cleanuparr:${CLEANUPARR_TAG:-latest}
+    image: ghcr.io/cleanuparr/cleanuparr:${CLEANUPARR_TAG:-latest}
     container_name: cleanuparr
     environment:
       - TZ=${TZ:-Etc/UTC}
       - PUID=${PUID:-1000}
       - PGID=${PGID:-1000}
+      - UMASK=022
     volumes:
       - ${CONFIG_ROOT:-./config}/cleanuparr:/config
+      # Same mount as qBittorrent so Cleanuparr can check hardlinks for unlinked download detection.
+      - ${MEDIA_ROOT:-/mnt/media}:/data:ro
     # Web UI and API on 11011
     ports:
       - "11011:11011"
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:11011/health"]
+      interval: 30s
+      timeout: 10s
+      start_period: 30s
+      retries: 3
     restart: unless-stopped
