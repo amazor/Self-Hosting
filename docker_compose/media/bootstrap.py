@@ -282,6 +282,12 @@ def validate_env(env: dict[str, str], real_user: str, env_file: Path) -> None:
         # works without NFS. In prod, mount NFS at this path (mount replaces dir).
         required_subdirs = (
             "downloads",
+            "downloads/qbittorrent",
+            "downloads/qbittorrent/incomplete",
+            "downloads/qbittorrent/completed",
+            "downloads/qbittorrent/completed/movies",
+            "downloads/qbittorrent/completed/tv",
+            "downloads/qbittorrent/completed/anime",
             "library",
             "library/tv",
             "library/movies",
@@ -342,6 +348,37 @@ def validate_env(env: dict[str, str], real_user: str, env_file: Path) -> None:
     # *arr apps validate root folder paths exist inside the container.
     # MEDIA_ROOT is mounted at /data, so these must exist on the host.
     for subdir in ("library/tv", "library/movies", "library/anime"):
+        target = media_root / subdir
+        if not target.is_dir():
+            target.mkdir(parents=True, exist_ok=True)
+            try:
+                shutil.chown(target, user=real_user)
+            except (PermissionError, LookupError):
+                pass
+
+    # Download client directories — *arr apps check these at config time,
+    # so they must exist before the stack starts (even if nothing has
+    # downloaded yet).  qBittorrent is always part of the base stack;
+    # SABnzbd dirs are created only when the overlay is enabled.
+    dl_subdirs = [
+        "downloads/qbittorrent",
+        "downloads/qbittorrent/incomplete",
+        "downloads/qbittorrent/completed",
+        "downloads/qbittorrent/completed/movies",
+        "downloads/qbittorrent/completed/tv",
+        "downloads/qbittorrent/completed/anime",
+    ]
+    if env.get("ENABLE_SABNZBD", "0") == "1":
+        dl_subdirs += [
+            "downloads/sabnzbd",
+            "downloads/sabnzbd/completed",
+            "downloads/sabnzbd/completed/movies",
+            "downloads/sabnzbd/completed/tv",
+            "downloads/sabnzbd/completed/anime",
+            "downloads/sabnzbd/intermediate",
+            "downloads/sabnzbd/tmp",
+        ]
+    for subdir in dl_subdirs:
         target = media_root / subdir
         if not target.is_dir():
             target.mkdir(parents=True, exist_ok=True)
