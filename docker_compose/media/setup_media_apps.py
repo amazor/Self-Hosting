@@ -129,6 +129,25 @@ RADARR_NAMING: dict[str, object] = {
     ),
 }
 
+# TRaSH-recommended media management settings (Sonarr + Radarr).
+# Enables hardlinks, media info analysis, subtitle/extra file imports,
+# and defers proper/repack scoring to Custom Formats (Recyclarr syncs those).
+# Ref: https://trash-guides.info/Sonarr/  https://trash-guides.info/Radarr/
+MEDIA_MANAGEMENT: dict[str, object] = {
+    "copyUsingHardlinks": True,
+    "importExtraFiles": True,
+    "extraFileExtensions": "srt,nfo,sub,idx,ass,ssa,smi",
+    "enableMediaInfo": True,
+    "downloadPropersAndRepacks": "doNotPrefer",
+    "deleteEmptyFolders": True,
+}
+
+# Defaults for torrent indexer health settings.
+# Applied to all torrent indexers in Sonarr/Radarr after Prowlarr sync.
+# Ref: https://wiki.servarr.com/radarr/settings#torrent-tracker-configuration
+TORRENT_MIN_SEEDERS_DEFAULT = 5
+PROWLARR_SYNC_WAIT_S = 30
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -433,6 +452,25 @@ def _setup_naming(app_name: str, base_url: str, headers: dict,
         log.warning("Failed to update %s naming config.", app_name)
 
 
+def _setup_media_management(app_name: str, base_url: str,
+                            headers: dict) -> None:
+    """Configure media management settings per TRaSH guide."""
+    url = f"{base_url}/api/v3/config/mediamanagement"
+    current = _api(url, headers)
+    if current is None:
+        log.warning("Could not read %s media management config.", app_name)
+        return
+    current.update(MEDIA_MANAGEMENT)
+    result = _api(url, headers, method="PUT", data=current)
+    if result is not None:
+        log.info(
+            "%s media management updated (hardlinks, media info, extras).",
+            app_name,
+        )
+    else:
+        log.warning("Failed to update %s media management config.", app_name)
+
+
 def _setup_root_folders(app_name: str, base_url: str, headers: dict,
                         folders: list[str]) -> None:
     """Add root folders idempotently (skips existing paths)."""
@@ -466,7 +504,22 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
     if existing:
         for dc in existing:
             if dc.get("implementation") == "QBittorrent":
-                log.info("%s qBittorrent download client already exists.", app_name)
+                changed = False
+                for flag in ("removeCompletedDownloads", "removeFailedDownloads"):
+                    if not dc.get(flag):
+                        dc[flag] = True
+                        changed = True
+                if changed:
+                    _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
+                    log.info(
+                        "%s qBittorrent download client updated "
+                        "(remove completed/failed).", app_name,
+                    )
+                else:
+                    log.info(
+                        "%s qBittorrent download client already configured.",
+                        app_name,
+                    )
                 return
 
     schemas = _api(f"{url}/schema", headers)
@@ -485,6 +538,8 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
 
     schema["name"] = "qBittorrent"
     schema["enable"] = True
+    schema["removeCompletedDownloads"] = True
+    schema["removeFailedDownloads"] = True
     schema.pop("id", None)
     schema.pop("presets", None)
 
@@ -512,21 +567,23 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
 
 
 def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str]) -> None:
-    """Configure Sonarr: TRaSH naming, root folders, qBittorrent client."""
+    """Configure Sonarr: TRaSH naming, media management, root folders, qBittorrent."""
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Sonarr", f"{sonarr_url}/api/v3/health", headers):
         return
     _setup_naming("Sonarr", sonarr_url, headers, SONARR_NAMING)
+    _setup_media_management("Sonarr", sonarr_url, headers)
     _setup_root_folders("Sonarr", sonarr_url, headers, SONARR_ROOT_FOLDERS)
     _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env)
 
 
 def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str]) -> None:
-    """Configure Radarr: TRaSH naming, root folders, qBittorrent client."""
+    """Configure Radarr: TRaSH naming, media management, root folders, qBittorrent."""
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Radarr", f"{radarr_url}/api/v3/health", headers):
         return
     _setup_naming("Radarr", radarr_url, headers, RADARR_NAMING)
+    _setup_media_management("Radarr", radarr_url, headers)
     _setup_root_folders("Radarr", radarr_url, headers, RADARR_ROOT_FOLDERS)
     _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env)
 
@@ -601,6 +658,114 @@ def setup_prowlarr_apps(prowlarr_url: str, prowlarr_key: str,
 
 
 # ---------------------------------------------------------------------------
+# Torrent indexer health defaults (Sonarr / Radarr)
+# ---------------------------------------------------------------------------
+
+
+def _configure_arr_indexers(app_name: str, base_url: str, headers: dict,
+                            env: dict[str, str]) -> None:
+    """Set minimum seeders and seed criteria on all torrent indexers.
+
+    After Prowlarr syncs indexers to Sonarr/Radarr, this applies the
+    TORRENT_MIN_SEEDERS / TORRENT_SEED_RATIO / TORRENT_SEED_TIME defaults
+    from .env to every torrent indexer.  Polls briefly for indexers to
+    appear if Prowlarr sync is still propagating.
+    """
+    try:
+        min_seeders = int(env.get("TORRENT_MIN_SEEDERS",
+                                  str(TORRENT_MIN_SEEDERS_DEFAULT)))
+    except ValueError:
+        min_seeders = TORRENT_MIN_SEEDERS_DEFAULT
+
+    seed_ratio_str = env.get("TORRENT_SEED_RATIO", "")
+    seed_ratio: float | None = None
+    if seed_ratio_str:
+        try:
+            seed_ratio = float(seed_ratio_str)
+        except ValueError:
+            pass
+
+    seed_time_str = env.get("TORRENT_SEED_TIME", "")
+    seed_time: int | None = None
+    if seed_time_str:
+        try:
+            seed_time = int(seed_time_str)
+        except ValueError:
+            pass
+
+    url = f"{base_url}/api/v3/indexer"
+    deadline = time.monotonic() + PROWLARR_SYNC_WAIT_S
+    indexers: list | None = None
+    while time.monotonic() < deadline:
+        indexers = _api(url, headers)
+        if indexers:
+            break
+        time.sleep(HEALTH_POLL_S)
+
+    if not indexers:
+        log.info(
+            "%s: no indexers found (Prowlarr sync may not have run yet); "
+            "re-run setup_media_apps.py to apply torrent health defaults.",
+            app_name,
+        )
+        return
+
+    torrent_indexers = [i for i in indexers if i.get("protocol") == "torrent"]
+    if not torrent_indexers:
+        log.info("%s: no torrent indexers to configure.", app_name)
+        return
+
+    updated = 0
+    for idx in torrent_indexers:
+        seeders_changed = idx.get("minimumSeeders") != min_seeders
+
+        seed_criteria = idx.get("seedCriteria") or {}
+        criteria_changed = False
+        if seed_ratio is not None and seed_criteria.get("seedRatio") != seed_ratio:
+            seed_criteria["seedRatio"] = seed_ratio
+            criteria_changed = True
+        if seed_time is not None and seed_criteria.get("seedTime") != seed_time:
+            seed_criteria["seedTime"] = seed_time
+            criteria_changed = True
+
+        if not seeders_changed and not criteria_changed:
+            continue
+
+        if seeders_changed:
+            idx["minimumSeeders"] = min_seeders
+        if criteria_changed:
+            idx["seedCriteria"] = seed_criteria
+
+        result = _api(
+            f"{url}/{idx['id']}", headers, method="PUT", data=idx,
+        )
+        if result is not None:
+            updated += 1
+        else:
+            log.debug(
+                "Failed to update indexer %s in %s.", idx.get("name"), app_name,
+            )
+
+    extras = []
+    if seed_ratio is not None:
+        extras.append(f"seedRatio={seed_ratio}")
+    if seed_time is not None:
+        extras.append(f"seedTime={seed_time}m")
+    extra_str = (", " + ", ".join(extras)) if extras else ""
+
+    if updated:
+        log.info(
+            "%s: updated %d torrent indexer(s) (minimumSeeders=%d%s).",
+            app_name, updated, min_seeders, extra_str,
+        )
+    else:
+        log.info(
+            "%s: torrent indexer defaults already applied (%d indexer(s)).",
+            app_name, len(torrent_indexers),
+        )
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -635,6 +800,19 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
     if prowlarr_key:
         setup_prowlarr_apps(
             "http://localhost:9696", prowlarr_key, sonarr_key, radarr_key,
+        )
+
+    if sonarr_key:
+        _configure_arr_indexers(
+            "Sonarr", "http://localhost:8989",
+            {"X-Api-Key": sonarr_key, "Content-Type": "application/json"},
+            env,
+        )
+    if radarr_key:
+        _configure_arr_indexers(
+            "Radarr", "http://localhost:7878",
+            {"X-Api-Key": radarr_key, "Content-Type": "application/json"},
+            env,
         )
 
     return True

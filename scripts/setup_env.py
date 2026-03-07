@@ -48,6 +48,17 @@ def _detect_lan_ip() -> str | None:
         return None
 
 
+def _detect_lan_cidr(ip: str) -> str | None:
+    """Return the /24 CIDR for the given LAN IP (e.g. 192.168.1.202 → 192.168.1.0/24)."""
+    import ipaddress
+
+    try:
+        network = ipaddress.IPv4Network(f"{ip}/24", strict=False)
+        return str(network)
+    except ValueError:
+        return None
+
+
 def _detect_docker_gid() -> int | None:
     """Return the GID of the 'docker' group on this host, or None."""
     import grp
@@ -190,6 +201,19 @@ def main() -> None:
 
         media_updates["PUID"] = (str(uid), f"current user UID ({uid})")
         media_updates["PGID"] = (str(gid), f"current user GID ({gid})")
+
+        ip = _detect_lan_ip()
+        if ip:
+            lan_cidr = _detect_lan_cidr(ip)
+            if lan_cidr:
+                # Docker Compose creates a custom bridge (typically 172.18.0.0/16).
+                # The *arr containers reach qBittorrent via vpn:8080 over that bridge,
+                # so it must be included alongside the LAN subnet.
+                vpn_cidr = f"{lan_cidr},172.18.0.0/16"
+                media_updates["EXPRESSVPN_LAN_CIDR"] = (
+                    vpn_cidr,
+                    f"detected LAN {lan_cidr} + Docker Compose bridge; verify before use",
+                )
         if docker_gid is not None:
             media_updates["DOCKER_GID"] = (
                 str(docker_gid),
