@@ -15,7 +15,7 @@
     "to": "now"
   },
   "timepicker": {},
-  "refresh": "30s",
+  "refresh": "15s",
   "schemaVersion": 39,
   "fiscalYearStartMonth": 0,
   "liveNow": false,
@@ -104,7 +104,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".+",
+        "allValue": ".*",
         "refresh": 1,
         "sort": 1,
         "label": "Node"
@@ -121,7 +121,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".+",
+        "allValue": ".*",
         "refresh": 1,
         "sort": 1,
         "label": "VM Role"
@@ -138,7 +138,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".+",
+        "allValue": ".*",
         "refresh": 1,
         "sort": 1,
         "label": "Host"

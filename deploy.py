@@ -433,7 +433,7 @@ def _post_deploy_core(sdir: Path) -> None:
             "then paste config/authentik/blueprints/homelab-sso.yaml."
         )
     finally:
-        sys.path.pop(0)
+        sys.path.remove(str(sdir))
 
 
 def _post_deploy_accelerated(sdir: Path) -> None:
@@ -450,7 +450,7 @@ def _post_deploy_accelerated(sdir: Path) -> None:
     except Exception as exc:
         log.warning("Accelerated app setup failed: %s", exc)
     finally:
-        sys.path.pop(0)
+        sys.path.remove(str(sdir))
 
     if clear_env_var(env_file, "PLEX_CLAIM"):
         log.info(
@@ -475,7 +475,7 @@ def _post_deploy_media(sdir: Path) -> None:
     except Exception as exc:
         log.warning("Media app setup failed: %s", exc)
     finally:
-        sys.path.pop(0)
+        sys.path.remove(str(sdir))
 
     # Phase 2: Recyclarr initial sync — cron mode doesn't sync on start,
     # so trigger the first sync via exec into the already-running daemon.

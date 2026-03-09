@@ -677,11 +677,11 @@ def populate_env_api_keys(
 ) -> None:
     """Write *arr API keys from config.xml into .env for Prometheus exporters.
 
-    Only runs when ENABLE_EXPORTERS=1.  Handles three cases per key:
+    Only runs when ENABLE_EXPORTERS=1.  config.xml is the source of truth;
+    .env is always overwritten to match.  Handles three cases per key:
       - commented out  (``# SONARR_API_KEY=``)  → uncomment + fill
-      - present, empty (``SONARR_API_KEY=``)     → fill
+      - present        (``SONARR_API_KEY=xyz``)  → overwrite with current key
       - missing entirely                         → append
-    Already-populated keys are left untouched.
     """
     if env.get("ENABLE_EXPORTERS", "1") != "1":
         return
@@ -709,22 +709,9 @@ def populate_env_api_keys(
             commented = re.match(rf"^#\s*{re.escape(var)}\s*=(.*)", stripped)
             uncommented = re.match(rf"^{re.escape(var)}\s*=(.*)", stripped)
 
-            if commented:
+            if commented or uncommented:
                 seen.add(var)
-                rhs = commented.group(1).strip()
-                if not rhs:
-                    new_lines.append(f"{var}={val}")
-                else:
-                    new_lines.append(line)
-                matched = True
-                break
-            if uncommented:
-                seen.add(var)
-                rhs = uncommented.group(1).strip()
-                if not rhs:
-                    new_lines.append(f"{var}={val}")
-                else:
-                    new_lines.append(line)
+                new_lines.append(f"{var}={val}")
                 matched = True
                 break
 
@@ -739,11 +726,10 @@ def populate_env_api_keys(
 
     env_file.write_text("\n".join(new_lines) + "\n")
 
-    populated = [v for v in env_vars if v in seen and not env.get(v)]
-    all_set = populated + appended
+    all_set = list(env_vars)
     if all_set:
         log.info(
-            "Populated exporter API keys in .env: %s",
+            "Synced exporter API keys from config.xml → .env: %s",
             ", ".join(all_set),
         )
 
