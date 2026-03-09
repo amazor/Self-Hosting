@@ -69,6 +69,8 @@ services:
     user: "${PUID:-1000}:${PGID:-1000}"
     group_add:
       - "${DOCKER_GID:-989}"
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     command:
       - run
       - "--server.http.listen-addr=0.0.0.0:12345"
