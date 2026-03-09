@@ -423,6 +423,7 @@ def ensure_config_directories(
         "ENABLE_SABNZBD": ["sabnzbd"],
         "ENABLE_BAZARR": ["bazarr"],
         "ENABLE_NTFY": ["ntfy", "ntfy/cache"],
+        "ENABLE_EXPORTERS": ["scraparr"],
     }
     for var, dirs in overlay_dirs.items():
         if env.get(var, "0") == "1":
@@ -755,6 +756,7 @@ def print_summary(env: dict[str, str]) -> None:
         "SABnzbd": env.get("ENABLE_SABNZBD", "0"),
         "Bazarr": env.get("ENABLE_BAZARR", "0"),
         "ntfy": env.get("ENABLE_NTFY", "0"),
+        "Exporters (scraparr+qbt)": env.get("ENABLE_EXPORTERS", "0"),
     }
 
     log.info("")

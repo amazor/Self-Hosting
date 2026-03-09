@@ -221,9 +221,6 @@ def fix_ownership(config_base: Path) -> None:
 
 def ensure_prometheus_config(config_base: Path, env: dict[str, str]) -> None:
     conf = config_base / "prometheus" / "prometheus.yml"
-    if conf.is_file():
-        log.info("prometheus.yml already exists; not overwriting.")
-        return
 
     hostname, vm_role, node = resolve_vm_identity(env, SCRIPT_DIR)
 
@@ -335,6 +332,20 @@ scrape_configs:
       - files: ["/etc/prometheus/targets/scrape-targets-expressvpn.json"]
         refresh_interval: 5m
 
+  # --- scraparr (*arr suite metrics exporter; media VM; port 7100) ---
+  # Targets from SCRAPARR_EXPORTER_TARGETS in .env (hostname:ip). Re-run bootstrap to regenerate.
+  - job_name: "scraparr"
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/scrape-targets-scraparr.json"]
+        refresh_interval: 5m
+
+  # --- qBittorrent exporter (media VM; port 17871) ---
+  # Targets from QBITTORRENT_EXPORTER_TARGETS in .env (hostname:ip). Re-run bootstrap to regenerate.
+  - job_name: "qbittorrent"
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/scrape-targets-qbittorrent.json"]
+        refresh_interval: 5m
+
   # --- Blackbox exporter self-scrape (exporter health metrics) ---
   - job_name: "blackbox-exporter"
     static_configs:
@@ -370,14 +381,11 @@ scrape_configs:
         regex: module
 """
     )
-    log.info(f"Created starter Prometheus config: {conf}")
+    log.info(f"Generated Prometheus config: {conf}")
 
 
 def ensure_loki_config(config_base: Path, env: dict[str, str]) -> None:
     conf = config_base / "loki" / "loki-config.yml"
-    if conf.is_file():
-        log.info("loki-config.yml already exists; not overwriting.")
-        return
 
     retention = env.get("LOKI_RETENTION", "30d")
     conf.write_text(
@@ -439,15 +447,12 @@ analytics:
   reporting_enabled: false
 """
     )
-    log.info(f"Created starter Loki config: {conf}")
+    log.info(f"Generated Loki config: {conf}")
 
 
 def ensure_blackbox_config(config_base: Path) -> None:
     """Generate blackbox_exporter module config (probers for HTTP, TCP, ICMP, DNS)."""
     conf = config_base / "blackbox-exporter" / "blackbox.yml"
-    if conf.is_file():
-        log.info("blackbox.yml already exists; not overwriting.")
-        return
 
     conf.write_text(
         """\
@@ -492,7 +497,7 @@ modules:
       preferred_ip_protocol: ip4
 """
     )
-    log.info(f"Created starter Blackbox exporter config: {conf}")
+    log.info(f"Generated Blackbox exporter config: {conf}")
 
 
 def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
@@ -506,6 +511,8 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
       - scrape-targets-cadvisor.json       (port 8081)
       - scrape-targets-plex-exporter.json  (port 9000, from PLEX_EXPORTER_TARGETS)
       - scrape-targets-expressvpn.json     (port 9797, from EXPRESSVPN_EXPORTER_TARGETS)
+      - scrape-targets-scraparr.json       (port 7100, from SCRAPARR_EXPORTER_TARGETS)
+      - scrape-targets-qbittorrent.json    (port 17871, from QBITTORRENT_EXPORTER_TARGETS)
 
     A single shared file caused the node-exporter job to also scrape cAdvisor
     endpoints (and vice-versa), doubling container metrics on remote VMs.
@@ -608,14 +615,70 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
                 "labels": base_labels,
             })
 
+    # scraparr (port 7100) — *arr suite metrics exporter on media VM.
+    scraparr_raw = env.get("SCRAPARR_EXPORTER_TARGETS", "").strip()
+    scraparr_entries: list[dict] = []
+    if scraparr_raw:
+        for pair in scraparr_raw.split(","):
+            pair = pair.strip()
+            if ":" not in pair:
+                continue
+            parts = pair.split(":")
+            if len(parts) < 2:
+                continue
+            name, ip = parts[0].strip(), parts[1].strip()
+            if not name or not ip:
+                continue
+            scraparr_entries.append({
+                "targets": [f"{ip}:7100"],
+                "labels": {
+                    "instance": name,
+                    "host": name,
+                    "vm_role": name,
+                    "node": default_node,
+                    "env": "prod",
+                    "service": "scraparr",
+                },
+            })
+
+    # qBittorrent exporter (port 17871) — download client metrics on media VM.
+    qbt_raw = env.get("QBITTORRENT_EXPORTER_TARGETS", "").strip()
+    qbt_entries: list[dict] = []
+    if qbt_raw:
+        for pair in qbt_raw.split(","):
+            pair = pair.strip()
+            if ":" not in pair:
+                continue
+            parts = pair.split(":")
+            if len(parts) < 2:
+                continue
+            name, ip = parts[0].strip(), parts[1].strip()
+            if not name or not ip:
+                continue
+            qbt_entries.append({
+                "targets": [f"{ip}:17871"],
+                "labels": {
+                    "instance": name,
+                    "host": name,
+                    "vm_role": name,
+                    "node": default_node,
+                    "env": "prod",
+                    "service": "qbittorrent-exporter",
+                },
+            })
+
     ne_file = targets_dir / "scrape-targets-node-exporter.json"
     ca_file = targets_dir / "scrape-targets-cadvisor.json"
     plex_file = targets_dir / "scrape-targets-plex-exporter.json"
     evpn_file = targets_dir / "scrape-targets-expressvpn.json"
+    scraparr_file = targets_dir / "scrape-targets-scraparr.json"
+    qbt_file = targets_dir / "scrape-targets-qbittorrent.json"
     ne_file.write_text(json.dumps(ne_entries, indent=2) + "\n")
     ca_file.write_text(json.dumps(ca_entries, indent=2) + "\n")
     plex_file.write_text(json.dumps(plex_entries, indent=2) + "\n")
     evpn_file.write_text(json.dumps(evpn_entries, indent=2) + "\n")
+    scraparr_file.write_text(json.dumps(scraparr_entries, indent=2) + "\n")
+    qbt_file.write_text(json.dumps(qbt_entries, indent=2) + "\n")
 
     bb_file = targets_dir / "blackbox-targets.json"
     if not bb_file.is_file():
@@ -640,14 +703,15 @@ def generate_scrape_targets(config_base: Path, env: dict[str, str]) -> None:
         log.info(f"No remote scrape targets (SCRAPE_TARGETS empty): {targets_dir}")
     if plex_entries:
         log.info(f"Plex exporter targets: {len(plex_entries)} (port 9000)")
+    if scraparr_entries:
+        log.info(f"scraparr exporter targets: {len(scraparr_entries)} (port 7100)")
+    if qbt_entries:
+        log.info(f"qBittorrent exporter targets: {len(qbt_entries)} (port 17871)")
 
 
 def ensure_grafana_provisioning(config_base: Path) -> None:
     ds_dir = config_base / "grafana" / "provisioning" / "datasources"
     ds_file = ds_dir / "datasources.yml"
-    if ds_file.is_file():
-        log.info("Grafana datasources provisioning already exists; not overwriting.")
-        return
 
     ds_dir.mkdir(parents=True, exist_ok=True)
     ds_file.write_text(
@@ -671,7 +735,7 @@ datasources:
     editable: true
 """
     )
-    log.info(f"Created Grafana datasource provisioning: {ds_file}")
+    log.info(f"Generated Grafana datasource provisioning: {ds_file}")
 
 
 def ensure_grafana_dashboard_provisioning(config_base: Path) -> None:
@@ -685,9 +749,8 @@ def ensure_grafana_dashboard_provisioning(config_base: Path) -> None:
     dash_prov_dir.mkdir(parents=True, exist_ok=True)
 
     provider_file = dash_prov_dir / "provider.yml"
-    if not provider_file.is_file():
-        provider_file.write_text(
-            """\
+    provider_file.write_text(
+        """\
 apiVersion: 1
 
 providers:
@@ -701,8 +764,8 @@ providers:
       path: /etc/grafana/provisioning/dashboards/json
       foldersFromFilesStructure: false
 """
-        )
-        log.info(f"Created Grafana dashboard provider: {provider_file}")
+    )
+    log.info(f"Generated Grafana dashboard provider: {provider_file}")
 
     json_dir = dash_prov_dir / "json"
     json_dir.mkdir(parents=True, exist_ok=True)

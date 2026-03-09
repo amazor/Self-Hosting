@@ -69,6 +69,29 @@ def _detect_docker_gid() -> int | None:
         return None
 
 
+def _parse_scrape_targets(env_path: Path) -> dict[str, str]:
+    """Read SCRAPE_TARGETS from an env file and return {hostname: ip} pairs."""
+    if not env_path.is_file():
+        return {}
+    from scripts.homelab_common import load_env
+
+    env = load_env(env_path)
+    raw = env.get("SCRAPE_TARGETS", "").strip()
+    if not raw:
+        return {}
+    result: dict[str, str] = {}
+    for pair in raw.split(","):
+        pair = pair.strip()
+        if ":" not in pair:
+            continue
+        parts = pair.split(":")
+        if len(parts) >= 2:
+            name, ip = parts[0].strip(), parts[1].strip()
+            if name and ip:
+                result[name] = ip
+    return result
+
+
 # ---------------------------------------------------------------------------
 # .env.example updater
 # ---------------------------------------------------------------------------
@@ -128,6 +151,64 @@ def _update_env_example(
 
     path.write_text("\n".join(output) + "\n")
     return updated
+
+
+def _fill_missing_env_vars(
+    path: Path,
+    updates: dict[str, tuple[str, str]],
+) -> list[str]:
+    """Fill empty or missing variables in an existing .env file.
+
+    Unlike _update_env_example, this does NOT overwrite existing values.
+    Only fills vars that are missing, empty, or commented-out-and-empty.
+    """
+    import re
+
+    lines = path.read_text().splitlines()
+    new_lines: list[str] = []
+    filled: list[str] = []
+    seen: set[str] = set()
+
+    for line in lines:
+        stripped = line.strip()
+        matched = False
+        for var, (val, _note) in updates.items():
+            commented = re.match(rf"^#\s*{re.escape(var)}\s*=(.*)", stripped)
+            uncommented = re.match(rf"^{re.escape(var)}\s*=(.*)", stripped)
+
+            if commented:
+                seen.add(var)
+                rhs = commented.group(1).strip()
+                if not rhs:
+                    new_lines.append(f"{var}={val}")
+                    filled.append(var)
+                else:
+                    new_lines.append(line)
+                matched = True
+                break
+            if uncommented:
+                seen.add(var)
+                rhs = uncommented.group(1).strip()
+                if not rhs:
+                    new_lines.append(f"{var}={val}")
+                    filled.append(var)
+                else:
+                    new_lines.append(line)
+                matched = True
+                break
+
+        if not matched:
+            new_lines.append(line)
+
+    for var, (val, _note) in updates.items():
+        if var not in seen:
+            new_lines.append(f"{var}={val}")
+            filled.append(var)
+
+    if filled:
+        path.write_text("\n".join(new_lines) + "\n")
+
+    return filled
 
 
 # ---------------------------------------------------------------------------
@@ -266,6 +347,30 @@ def main() -> None:
                 f"Proxmox node name ({proxmox_node}); override if needed",
             )
 
+        # Derive media VM exporter targets from SCRAPE_TARGETS.
+        # If .env exists and has a media: entry, pre-fill all media-hosted
+        # exporter targets (ExpressVPN, scraparr, qBittorrent) with the same
+        # hostname:ip — they all run on the media VM.
+        mon_env = REPO_ROOT / "docker_compose" / "monitoring" / ".env"
+        scrape_hosts = _parse_scrape_targets(
+            mon_env if mon_env.is_file() else mon_example
+        )
+        media_ip = scrape_hosts.get("media")
+        if media_ip:
+            target = f"media:{media_ip}"
+            mon_updates["EXPRESSVPN_EXPORTER_TARGETS"] = (
+                target,
+                f"derived from SCRAPE_TARGETS (media VM at {media_ip})",
+            )
+            mon_updates["SCRAPARR_EXPORTER_TARGETS"] = (
+                target,
+                f"derived from SCRAPE_TARGETS (media VM at {media_ip})",
+            )
+            mon_updates["QBITTORRENT_EXPORTER_TARGETS"] = (
+                target,
+                f"derived from SCRAPE_TARGETS (media VM at {media_ip})",
+            )
+
         updated = _update_env_example(mon_example, mon_updates)
         if updated:
             log.info(
@@ -273,6 +378,14 @@ def main() -> None:
             )
         else:
             log.info("Monitoring .env.example: nothing to update")
+
+        # Also fill empty/missing vars in .env (does not overwrite existing values).
+        if mon_env.is_file() and mon_updates:
+            env_filled = _fill_missing_env_vars(mon_env, mon_updates)
+            if env_filled:
+                log.info(
+                    f"Monitoring .env: filled {', '.join(env_filled)}"
+                )
     else:
         log.warning(f"Monitoring .env.example not found: {mon_example}")
 
