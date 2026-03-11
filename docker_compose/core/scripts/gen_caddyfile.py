@@ -19,7 +19,8 @@ from dataclasses import dataclass
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+STACK_DIR = SCRIPT_DIR.parent
+REPO_ROOT = STACK_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.homelab_common import load_env, log, resolve_config_base, setup_logging
@@ -249,12 +250,12 @@ def generate(env: dict[str, str], script_dir: Path) -> Path:
 
 def main() -> None:
     setup_logging()
-    env_file = SCRIPT_DIR / ".env"
+    env_file = STACK_DIR / ".env"
     if not env_file.is_file():
         log.error(".env not found. Copy .env.example to .env and configure.")
         raise SystemExit(1)
     env = load_env(env_file)
-    generate(env, SCRIPT_DIR)
+    generate(env, STACK_DIR)
 
 
 if __name__ == "__main__":

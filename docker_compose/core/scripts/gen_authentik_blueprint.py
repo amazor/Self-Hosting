@@ -15,13 +15,13 @@ import sys
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+STACK_DIR = SCRIPT_DIR.parent
+REPO_ROOT = STACK_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.homelab_common import load_env, log, resolve_config_base, setup_logging
 
-# Reuse Caddy extra-services parsing so SSO apps stay in sync with Caddyfile.
-import gen_caddyfile as _gen_caddyfile
+from docker_compose.core.scripts import gen_caddyfile as _gen_caddyfile
 
 # Default flows shipped with Authentik (used for proxy providers).
 DEFAULT_AUTHZ_FLOW_SLUG = "default-provider-authorization-implicit-consent"
@@ -239,12 +239,12 @@ def generate(env: dict[str, str], script_dir: Path) -> Path | None:
 
 def main() -> None:
     setup_logging()
-    env_file = SCRIPT_DIR / ".env"
+    env_file = STACK_DIR / ".env"
     if not env_file.is_file():
-        log.error("No .env in %s; run bootstrap first or copy .env.example to .env.", SCRIPT_DIR)
+        log.error("No .env in %s; run bootstrap first or copy .env.example to .env.", STACK_DIR)
         sys.exit(1)
     env = load_env(env_file)
-    result = generate(env, SCRIPT_DIR)
+    result = generate(env, STACK_DIR)
     if result is None:
         log.info("Set CADDY_EXTRA_SERVICES with :sso entries to generate the blueprint.")
 

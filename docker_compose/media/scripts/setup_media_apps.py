@@ -26,7 +26,8 @@ from pathlib import Path
 from xml.etree import ElementTree
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+STACK_DIR = SCRIPT_DIR.parent
+REPO_ROOT = STACK_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.homelab_common import load_env, log, resolve_config_base, setup_logging
@@ -1321,12 +1322,12 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
 
 def main() -> None:
     setup_logging()
-    env_file = SCRIPT_DIR / ".env"
+    env_file = STACK_DIR / ".env"
     if not env_file.is_file():
         log.error("No .env found.")
         sys.exit(1)
     env = load_env(env_file)
-    setup(env, SCRIPT_DIR)
+    setup(env, STACK_DIR)
 
 
 if __name__ == "__main__":

@@ -21,7 +21,8 @@ import urllib.request
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-REPO_ROOT = SCRIPT_DIR.parent.parent
+STACK_DIR = SCRIPT_DIR.parent
+REPO_ROOT = STACK_DIR.parent.parent
 sys.path.insert(0, str(REPO_ROOT))
 
 from scripts.homelab_common import load_env, log, resolve_config_base, setup_logging
@@ -205,15 +206,15 @@ def apply(env: dict[str, str], script_dir: Path) -> bool:
 
 def main() -> None:
     setup_logging()
-    env_file = SCRIPT_DIR / ".env"
+    env_file = STACK_DIR / ".env"
     if not env_file.is_file():
         log.error(
             "No .env in %s; run bootstrap first or copy .env.example to .env.",
-            SCRIPT_DIR,
+            STACK_DIR,
         )
         sys.exit(1)
     env = load_env(env_file)
-    if not apply(env, SCRIPT_DIR):
+    if not apply(env, STACK_DIR):
         sys.exit(1)
 
 
