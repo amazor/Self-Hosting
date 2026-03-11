@@ -62,6 +62,32 @@ PROWLARR_INDEXERS = [
 
 FLARESOLVERR_TAG_NAME = "flaresolverr"
 
+# ---------------------------------------------------------------------------
+# Usenet indexers to add to Prowlarr (require API keys from .env).
+# Only added when ENABLE_SABNZBD=1 and the corresponding API key is set.
+# ---------------------------------------------------------------------------
+
+PROWLARR_USENET_INDEXERS = [
+    {
+        "name": "NZBgeek",
+        "definitionName": "NZBgeek",
+        "env_key": "NZBGEEK_API_KEY",
+        "fields": {"apiKey": None},  # filled from env at runtime
+    },
+]
+
+# SABnzbd download categories per TRaSH guide (same structure as qBittorrent).
+# Category dirs are relative to SABnzbd's Completed Download Folder.
+# Ref: https://trash-guides.info/Downloaders/SABnzbd/Paths-and-Categories/
+SABNZBD_CATEGORIES = {
+    "tv": "tv",
+    "movies": "movies",
+    "anime": "anime",
+}
+
+SABNZBD_DL_HOST = "sabnzbd"
+SABNZBD_DL_PORT = 8080
+
 # qBittorrent categories per TRaSH guide.
 # Ref: https://trash-guides.info/Downloaders/qBittorrent/
 QBIT_CATEGORIES = {
@@ -309,9 +335,80 @@ def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> None:
             failed += 1
 
     log.info(
-        "Prowlarr indexers: %d added, %d already existed, %d failed.",
+        "Prowlarr torrent indexers: %d added, %d already existed, %d failed.",
         added, skipped, failed,
     )
+
+
+def setup_prowlarr_usenet_indexers(
+    prowlarr_url: str, api_key: str, env: dict[str, str],
+) -> None:
+    """Add Usenet indexers (e.g. NZBGeek) to Prowlarr when API keys are set."""
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+
+    existing = _api(f"{prowlarr_url}/api/v1/indexer", headers)
+    if existing is None:
+        log.warning("Could not list Prowlarr indexers for Usenet setup.")
+        return
+    existing_defs = {idx.get("definitionName", "").lower() for idx in existing}
+
+    added = 0
+    skipped = 0
+    failed = 0
+    for idx_def in PROWLARR_USENET_INDEXERS:
+        env_key = idx_def["env_key"]
+        api_key_value = env.get(env_key, "").strip()
+        if not api_key_value:
+            log.info(
+                "Skipping Prowlarr Usenet indexer %s (%s not set in .env).",
+                idx_def["name"], env_key,
+            )
+            continue
+
+        if idx_def["definitionName"].lower() in existing_defs:
+            skipped += 1
+            continue
+
+        schema = _get_indexer_schema(prowlarr_url, headers, idx_def["definitionName"])
+        if not schema:
+            log.debug("No schema found for %s, skipping.", idx_def["name"])
+            failed += 1
+            continue
+
+        schema["name"] = idx_def["name"]
+        schema["enable"] = True
+        schema["priority"] = idx_def.get("priority", 25)
+        schema["appProfileId"] = 1
+        schema["tags"] = []
+
+        for key in ("id", "presets"):
+            schema.pop(key, None)
+
+        field_overrides = dict(idx_def.get("fields", {}))
+        for field_name, val in field_overrides.items():
+            if val is None:
+                field_overrides[field_name] = api_key_value
+
+        for field in schema.get("fields", []):
+            name = field.get("name", "")
+            if name in field_overrides:
+                field["value"] = field_overrides[name]
+
+        result = _api(
+            f"{prowlarr_url}/api/v1/indexer", headers,
+            method="POST", data=schema,
+        )
+        if result and result.get("id"):
+            added += 1
+        else:
+            log.debug("Failed to add Usenet indexer %s", idx_def["name"])
+            failed += 1
+
+    if added or skipped or failed:
+        log.info(
+            "Prowlarr Usenet indexers: %d added, %d already existed, %d failed.",
+            added, skipped, failed,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -433,6 +530,104 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
 
 
 # ---------------------------------------------------------------------------
+# SABnzbd setup
+# ---------------------------------------------------------------------------
+
+
+def _sabnzbd_api(
+    base_url: str, api_key: str, mode: str,
+    extra_params: dict[str, str] | None = None,
+) -> dict | None:
+    """Call SABnzbd API (mode-based, not REST)."""
+    params: dict[str, str] = {
+        "mode": mode,
+        "apikey": api_key,
+        "output": "json",
+    }
+    if extra_params:
+        params.update(extra_params)
+    url = f"{base_url}/api?{urllib.parse.urlencode(params)}"
+    try:
+        req = urllib.request.Request(url, method="GET")
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except (urllib.error.URLError, OSError, json.JSONDecodeError):
+        return None
+
+
+def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> None:
+    """Verify SABnzbd configuration and ensure categories exist via API.
+
+    The bootstrap pre-seeds sabnzbd.ini with server + categories + paths.
+    This function acts as a post-start verification layer: it confirms the
+    server is reachable and creates any missing categories via API (e.g.,
+    if SABnzbd was already running before the INI was seeded).
+    """
+    api_key = _read_sabnzbd_api_key(config_base)
+    if not api_key:
+        log.warning("SABnzbd API key not found; skipping SABnzbd config verification.")
+        return
+
+    deadline = time.monotonic() + HEALTH_TIMEOUT_S
+    config: dict | None = None
+    while time.monotonic() < deadline:
+        config = _sabnzbd_api(sabnzbd_url, api_key, "get_config")
+        if config and config.get("config"):
+            break
+        config = None
+        time.sleep(HEALTH_POLL_S)
+
+    if not config:
+        log.warning("SABnzbd not ready within %ds; skipping config verification.", HEALTH_TIMEOUT_S)
+        return
+
+    sab_config = config["config"]
+
+    servers = sab_config.get("servers", [])
+    if servers:
+        enabled = [s for s in servers if str(s.get("enable", "0")) == "1"]
+        log.info(
+            "SABnzbd: %d server(s) configured (%d enabled).",
+            len(servers), len(enabled),
+        )
+    else:
+        log.warning(
+            "SABnzbd: no servers configured. Add your Usenet provider "
+            "in the SABnzbd UI or set USENET_SERVER_* in .env and re-deploy."
+        )
+
+    existing_cats = {
+        c.get("name", "").lower() for c in sab_config.get("categories", [])
+    }
+    added = 0
+    for cat_name, cat_dir in SABNZBD_CATEGORIES.items():
+        if cat_name.lower() in existing_cats:
+            continue
+        result = _sabnzbd_api(
+            sabnzbd_url, api_key, "set_config",
+            {
+                "section": "categories",
+                "keyword": cat_name,
+                "name": cat_name,
+                "pp": "3",
+                "dir": cat_dir,
+                "script": "Default",
+                "priority": "-100",
+                "newzbin": cat_name,
+            },
+        )
+        if result:
+            added += 1
+
+    if added:
+        log.info("SABnzbd: %d categories added via API (%s).",
+                 added, ", ".join(SABNZBD_CATEGORIES.keys()))
+    else:
+        log.info("SABnzbd: categories already configured (%s).",
+                 ", ".join(SABNZBD_CATEGORIES.keys()))
+
+
+# ---------------------------------------------------------------------------
 # Sonarr / Radarr setup (naming, root folders, download client)
 # ---------------------------------------------------------------------------
 
@@ -498,7 +693,8 @@ def _setup_root_folders(app_name: str, base_url: str, headers: dict,
 
 
 def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
-                                category: str, env: dict[str, str]) -> None:
+                                category: str, env: dict[str, str],
+                                priority: int = 1) -> None:
     """Add qBittorrent download client via schema (idempotent)."""
     url = f"{base_url}/api/v3/downloadclient"
     existing = _api(url, headers)
@@ -510,11 +706,15 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
                     if not dc.get(flag):
                         dc[flag] = True
                         changed = True
+                if dc.get("priority", 1) != priority:
+                    dc["priority"] = priority
+                    changed = True
                 if changed:
                     _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
                     log.info(
                         "%s qBittorrent download client updated "
-                        "(remove completed/failed).", app_name,
+                        "(priority=%d, remove completed/failed).",
+                        app_name, priority,
                     )
                 else:
                     log.info(
@@ -539,6 +739,7 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
 
     schema["name"] = "qBittorrent"
     schema["enable"] = True
+    schema["priority"] = priority
     schema["removeCompletedDownloads"] = True
     schema["removeFailedDownloads"] = True
     schema.pop("id", None)
@@ -560,33 +761,133 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
     result = _api(url, headers, method="POST", data=schema)
     if result and result.get("id"):
         log.info(
-            "%s qBittorrent download client added (category=%s).",
-            app_name, category,
+            "%s qBittorrent download client added (category=%s, priority=%d).",
+            app_name, category, priority,
         )
     else:
         log.warning("Failed to add qBittorrent download client to %s.", app_name)
 
 
-def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str]) -> None:
-    """Configure Sonarr: TRaSH naming, media management, root folders, qBittorrent."""
+def _read_sabnzbd_api_key(config_base: Path) -> str | None:
+    """Read api_key from SABnzbd's sabnzbd.ini (pre-seeded by bootstrap)."""
+    ini_file = config_base / "sabnzbd" / "sabnzbd.ini"
+    if not ini_file.is_file():
+        return None
+    try:
+        for line in ini_file.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("api_key") and "=" in stripped:
+                return stripped.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
+def _setup_download_client_sabnzbd(
+    app_name: str, base_url: str, headers: dict,
+    category: str, sabnzbd_api_key: str,
+    priority: int = 1,
+) -> None:
+    """Add SABnzbd download client via schema (idempotent)."""
+    url = f"{base_url}/api/v3/downloadclient"
+    existing = _api(url, headers)
+    if existing:
+        for dc in existing:
+            if dc.get("implementation") == "Sabnzbd":
+                changed = False
+                for flag in ("removeCompletedDownloads", "removeFailedDownloads"):
+                    if not dc.get(flag):
+                        dc[flag] = True
+                        changed = True
+                if dc.get("priority", 1) != priority:
+                    dc["priority"] = priority
+                    changed = True
+                if changed:
+                    _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
+                    log.info(
+                        "%s SABnzbd download client updated "
+                        "(priority=%d, remove completed/failed).",
+                        app_name, priority,
+                    )
+                else:
+                    log.info(
+                        "%s SABnzbd download client already configured.",
+                        app_name,
+                    )
+                return
+
+    schemas = _api(f"{url}/schema", headers)
+    if not schemas:
+        log.warning("Could not fetch %s download client schemas.", app_name)
+        return
+
+    schema = None
+    for s in schemas:
+        if s.get("implementation") == "Sabnzbd":
+            schema = dict(s)
+            break
+    if schema is None:
+        log.warning("Sabnzbd schema not found in %s.", app_name)
+        return
+
+    schema["name"] = "SABnzbd"
+    schema["enable"] = True
+    schema["priority"] = priority
+    schema["removeCompletedDownloads"] = True
+    schema["removeFailedDownloads"] = True
+    schema.pop("id", None)
+    schema.pop("presets", None)
+
+    field_overrides = {
+        "host": SABNZBD_DL_HOST,
+        "port": SABNZBD_DL_PORT,
+        "apiKey": sabnzbd_api_key,
+    }
+    for field in schema.get("fields", []):
+        name = field.get("name", "")
+        if name in field_overrides:
+            field["value"] = field_overrides[name]
+        elif "category" in name.lower() and "imported" not in name.lower():
+            field["value"] = category
+
+    result = _api(url, headers, method="POST", data=schema)
+    if result and result.get("id"):
+        log.info(
+            "%s SABnzbd download client added (category=%s, priority=%d).",
+            app_name, category, priority,
+        )
+    else:
+        log.warning("Failed to add SABnzbd download client to %s.", app_name)
+
+
+def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
+                 sabnzbd_api_key: str | None = None) -> None:
+    """Configure Sonarr: TRaSH naming, media management, root folders, download clients."""
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Sonarr", f"{sonarr_url}/api/v3/health", headers):
         return
     _setup_naming("Sonarr", sonarr_url, headers, SONARR_NAMING)
     _setup_media_management("Sonarr", sonarr_url, headers)
     _setup_root_folders("Sonarr", sonarr_url, headers, SONARR_ROOT_FOLDERS)
-    _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env)
+    qbit_priority = 2 if sabnzbd_api_key else 1
+    _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env, qbit_priority)
+    if sabnzbd_api_key:
+        _setup_download_client_sabnzbd("Sonarr", sonarr_url, headers, "tv", sabnzbd_api_key, 1)
 
 
-def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str]) -> None:
-    """Configure Radarr: TRaSH naming, media management, root folders, qBittorrent."""
+def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
+                 sabnzbd_api_key: str | None = None) -> None:
+    """Configure Radarr: TRaSH naming, media management, root folders, download clients."""
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Radarr", f"{radarr_url}/api/v3/health", headers):
         return
     _setup_naming("Radarr", radarr_url, headers, RADARR_NAMING)
     _setup_media_management("Radarr", radarr_url, headers)
     _setup_root_folders("Radarr", radarr_url, headers, RADARR_ROOT_FOLDERS)
-    _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env)
+    qbit_priority = 2 if sabnzbd_api_key else 1
+    _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env, qbit_priority)
+    if sabnzbd_api_key:
+        _setup_download_client_sabnzbd("Radarr", radarr_url, headers, "movies", sabnzbd_api_key, 1)
 
 
 # ---------------------------------------------------------------------------
@@ -878,7 +1179,11 @@ def _print_cleanuparr_instructions(config_base: Path,
     radarr_key = _read_api_key(config_base, "radarr") or "<check config/radarr/config.xml>"
     qbit_user = env.get("QBITTORRENT_USERNAME", "admin")
     qbit_pass = env.get("QBITTORRENT_PASSWORD", "adminadmin")
+    usenet_enabled = env.get("ENABLE_SABNZBD", "0") == "1"
+    sabnzbd_key = _read_sabnzbd_api_key(config_base) if usenet_enabled else None
     vm_ip = _detect_lan_ip()
+
+    step = 0
 
     log.info("")
     log.info("=" * 64)
@@ -886,29 +1191,42 @@ def _print_cleanuparr_instructions(config_base: Path,
     log.info("=" * 64)
     log.info("  Open: http://%s:11011", vm_ip)
     log.info("")
-    log.info("  1. Add Sonarr connection:")
+    step += 1
+    log.info("  %d. Add Sonarr connection:", step)
     log.info("       Host: http://sonarr:8989")
     log.info("       API Key: %s", sonarr_key)
     log.info("")
-    log.info("  2. Add Radarr connection:")
+    step += 1
+    log.info("  %d. Add Radarr connection:", step)
     log.info("       Host: http://radarr:7878")
     log.info("       API Key: %s", radarr_key)
     log.info("")
-    log.info("  3. Add qBittorrent download client:")
+    step += 1
+    log.info("  %d. Add qBittorrent download client:", step)
     log.info("       Host: http://vpn:8080")
     log.info("       Username: %s", qbit_user)
     log.info("       Password: %s", qbit_pass)
     log.info("")
-    log.info("  4. Enable Queue Cleaner (strikes for stalled downloads).")
+    if usenet_enabled:
+        step += 1
+        sab_key_display = sabnzbd_key or "<check config/sabnzbd/sabnzbd.ini>"
+        log.info("  %d. Add SABnzbd download client:", step)
+        log.info("       Host: http://sabnzbd:8080")
+        log.info("       API Key: %s", sab_key_display)
+        log.info("")
+    step += 1
+    log.info("  %d. Enable Queue Cleaner (strikes for stalled downloads).", step)
     log.info("     Recommended: start with defaults, tune thresholds later.")
     log.info("")
-    log.info("  5. Enable Malware Blocker (Settings > Malware Blocker).")
+    step += 1
+    log.info("  %d. Enable Malware Blocker (Settings > Malware Blocker).", step)
     log.info("     Add official blocklists for Sonarr and Radarr:")
     log.info("       https://cleanuparr.pages.dev/static/blacklist")
     log.info("       https://cleanuparr.pages.dev/static/whitelist_with_subtitles")
     log.info("     Also enable 'Delete Known Malware' for auto-updated patterns.")
     log.info("")
-    log.info("  6. Enable Search (Settings > General > Search Enabled).")
+    step += 1
+    log.info("  %d. Enable Search (Settings > General > Search Enabled).", step)
     log.info("     Auto-searches for replacements after removing bad downloads.")
     log.info("=" * 64)
     log.info("")
@@ -929,20 +1247,37 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
     sonarr_key = _read_api_key(config_base, "sonarr")
     radarr_key = _read_api_key(config_base, "radarr")
 
+    usenet_enabled = env.get("ENABLE_SABNZBD", "0") == "1"
+    sabnzbd_key: str | None = None
+    if usenet_enabled:
+        sabnzbd_key = _read_sabnzbd_api_key(config_base)
+        if not sabnzbd_key:
+            log.warning(
+                "SABnzbd enabled but API key not found in sabnzbd.ini; "
+                "skipping SABnzbd download client setup in *arrs."
+            )
+
     if prowlarr_key:
         setup_prowlarr_indexers("http://localhost:9696", prowlarr_key)
+        if usenet_enabled:
+            setup_prowlarr_usenet_indexers(
+                "http://localhost:9696", prowlarr_key, env,
+            )
     else:
         log.warning("Prowlarr API key not found; skipping indexer setup.")
 
     setup_qbittorrent("http://localhost:8080", env)
 
+    if usenet_enabled:
+        setup_sabnzbd("http://localhost:8081", config_base, env)
+
     if sonarr_key:
-        setup_sonarr("http://localhost:8989", sonarr_key, env)
+        setup_sonarr("http://localhost:8989", sonarr_key, env, sabnzbd_key)
     else:
         log.warning("Sonarr API key not found; skipping Sonarr setup.")
 
     if radarr_key:
-        setup_radarr("http://localhost:7878", radarr_key, env)
+        setup_radarr("http://localhost:7878", radarr_key, env, sabnzbd_key)
     else:
         log.warning("Radarr API key not found; skipping Radarr setup.")
 

@@ -574,6 +574,204 @@ def seed_qbittorrent_config(
     )
 
 
+_SABNZBD_UNWANTED_EXTENSIONS = (
+    "ade, adp, app, application, appref-ms, asp, aspx, asx, bas, bat, bgi, "
+    "cab, cer, chm, cmd, cnt, com, cpl, crt, csh, der, diagcab, exe, fxp, "
+    "gadget, grp, hlp, hpj, hta, htc, inf, ins, iso, isp, its, jar, jnlp, "
+    "js, jse, ksh, lnk, mad, maf, mag, mam, maq, mar, mas, mat, mau, mav, "
+    "maw, mcf, mda, mdb, mde, mdt, mdw, mdz, msc, msh, msh1, msh2, mshxml, "
+    "msh1xml, msh2xml, msi, msp, mst, msu, ops, osd, pcd, pif, pl, plg, "
+    "prf, prg, printerexport, ps1, ps1xml, ps2, ps2xml, psc1, psc2, psd1, "
+    "psdm1, pst, py, pyc, pyo, pyw, pyz, pyzw, reg, scf, scr, sct, shb, "
+    "shs, sln, theme, tmp, url, vb, vbe, vbp, vbs, vcxproj, vhd, vhdx, "
+    "vsmacros, vsw, webpnp, website, ws, wsc, wsf, wsh, xbap, xll, xnk"
+)
+
+_SABNZBD_INI_TEMPLATE = """\
+__version__ = 19
+__encoding__ = utf-8
+[misc]
+api_key = {api_key}
+nzb_key = {nzb_key}
+host = 0.0.0.0
+port = 8080
+host_whitelist = sabnzbd,
+complete_dir = /data/downloads/sabnzbd/completed
+download_dir = /data/downloads/sabnzbd/tmp
+nzb_backup_dir = /config/nzb-backup
+admin_dir = admin
+log_dir = logs
+auto_browser = 0
+check_new_rel = 0
+enable_https = 0
+propagation_delay = 5
+direct_unpack = 1
+safe_postproc = 1
+pause_on_post_processing = 0
+flat_unpack = 0
+pre_check = 0
+fail_hopeless_jobs = 1
+pause_on_pwrar = 1
+deobfuscate_final_filenames = 1
+sfv_check = 1
+enable_recursive = 1
+ignore_samples = 0
+unwanted_extensions = {unwanted_extensions}
+action_on_unwanted_extensions = 2
+replace_spaces = 0
+replace_dots = 0
+replace_illegal = 1
+sanitize_safe = 0
+[logging]
+log_level = 1
+max_log_size = 5242880
+log_backups = 5
+[servers]
+[[{server_name}]]
+name = {server_name}
+displayname = {server_displayname}
+host = {server_host}
+port = {server_port}
+username = {server_username}
+password = {server_password}
+connections = {server_connections}
+ssl = {server_ssl}
+ssl_verify = 3
+enable = 1
+priority = 0
+optional = 0
+retention = 0
+timeout = 120
+send_group = 0
+{second_server}[categories]
+[[*]]
+name = *
+priority = -100
+pp = 3
+script = Default
+newzbin =
+order = 0
+dir =
+[[tv]]
+name = tv
+priority = -100
+pp = 3
+script = Default
+newzbin = tv
+order = 1
+dir = tv
+[[movies]]
+name = movies
+priority = -100
+pp = 3
+script = Default
+newzbin = movies
+order = 2
+dir = movies
+[[anime]]
+name = anime
+priority = -100
+pp = 3
+script = Default
+newzbin = anime
+order = 3
+dir = anime
+"""
+
+
+def seed_sabnzbd_config(
+    config_base: Path,
+    env: dict[str, str],
+    real_user: str,
+) -> None:
+    """Pre-seed sabnzbd.ini with Usenet server, paths, API key, and categories.
+
+    Writes a minimal sabnzbd.ini so SABnzbd starts fully configured — no
+    setup wizard required.  The Usenet provider connection (USENET_SERVER_*)
+    and download categories (tv, movies, anime per TRaSH guide) are baked in.
+
+    Category dirs are relative to complete_dir (/data/downloads/sabnzbd/completed),
+    matching the Chapter 2c layout.
+
+    Only runs when ENABLE_SABNZBD=1 and sabnzbd.ini does not already exist.
+    """
+    if env.get("ENABLE_SABNZBD", "0") != "1":
+        return
+
+    conf_dir = config_base / "sabnzbd"
+    conf_file = conf_dir / "sabnzbd.ini"
+    if conf_file.is_file():
+        return
+
+    server_host = env.get("USENET_SERVER_HOST", "")
+    if not server_host:
+        log.info(
+            "USENET_SERVER_HOST not set; skipping sabnzbd.ini seed. "
+            "Configure Usenet server manually in the SABnzbd UI."
+        )
+        return
+
+    server_name = server_host.replace(".", "_").replace("-", "_")
+    server_displayname = env.get("USENET_SERVER_HOST", server_host)
+
+    second_server = ""
+    s2_host = env.get("USENET_SERVER2_HOST", "")
+    if s2_host:
+        s2_name = s2_host.replace(".", "_").replace("-", "_")
+        second_server = (
+            f"[[{s2_name}]]\n"
+            f"name = {s2_name}\n"
+            f"displayname = {s2_host}\n"
+            f"host = {s2_host}\n"
+            f"port = {env.get('USENET_SERVER2_PORT', '563')}\n"
+            f"username = {env.get('USENET_SERVER2_USERNAME', '')}\n"
+            f"password = {env.get('USENET_SERVER2_PASSWORD', '')}\n"
+            f"connections = {env.get('USENET_SERVER2_CONNECTIONS', '8')}\n"
+            f"ssl = {env.get('USENET_SERVER2_SSL', '1')}\n"
+            "ssl_verify = 3\n"
+            "enable = 1\n"
+            "priority = 1\n"
+            "optional = 1\n"
+            "retention = 0\n"
+            "timeout = 120\n"
+            "send_group = 0\n"
+        )
+
+    conf_dir.mkdir(parents=True, exist_ok=True)
+    nzb_backup = conf_dir / "nzb-backup"
+    nzb_backup.mkdir(parents=True, exist_ok=True)
+
+    conf_file.write_text(
+        _SABNZBD_INI_TEMPLATE.format(
+            api_key=secrets.token_hex(16),
+            nzb_key=secrets.token_hex(16),
+            unwanted_extensions=_SABNZBD_UNWANTED_EXTENSIONS,
+            server_name=server_name,
+            server_displayname=server_displayname,
+            server_host=server_host,
+            server_port=env.get("USENET_SERVER_PORT", "563"),
+            server_username=env.get("USENET_SERVER_USERNAME", ""),
+            server_password=env.get("USENET_SERVER_PASSWORD", ""),
+            server_connections=env.get("USENET_SERVER_CONNECTIONS", "30"),
+            server_ssl=env.get("USENET_SERVER_SSL", "1"),
+            second_server=second_server,
+        )
+    )
+    try:
+        shutil.chown(conf_file, user=real_user)
+    except (PermissionError, LookupError):
+        pass
+
+    servers_msg = server_host
+    if s2_host:
+        servers_msg += f" + {s2_host} (fill)"
+    log.info(
+        "Pre-seeded sabnzbd.ini (server=%s, categories=tv/movies/anime, "
+        "TRaSH switches, unwanted extensions blocklist).",
+        servers_msg,
+    )
+
+
 def copy_example_configs(
     config_base: Path,
     env: dict[str, str],
@@ -834,6 +1032,7 @@ def main(argv: list[str] | None = None) -> None:
     ensure_config_directories(config_base, env, real_user)
     seed_arr_configs(config_base, env, real_user)
     seed_qbittorrent_config(config_base, env, real_user)
+    seed_sabnzbd_config(config_base, env, real_user)
     copy_example_configs(config_base, env, real_user)
     populate_api_keys(config_base, real_user)
     populate_env_api_keys(config_base, env_file, env)
