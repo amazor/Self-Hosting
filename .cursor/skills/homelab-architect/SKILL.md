@@ -51,6 +51,7 @@ Documentation should feel like **structured notes**, not a textbook. For the cha
 |------|--------|
 | **Infrastructure** | Proxmox VE; Cloud-Init (templates, cloning, pitfalls); VM snapshots and backup strategies |
 | **Containers** | Docker & docker-compose (no Kubernetes); configs vs data vs logs; *arr stack, Plex, Immich, Home Assistant |
+| **Automation** | `deploy.py` orchestrator + `BootstrapRunner` framework; per-stack `stack_config.py` modules; `StepTracker` progress output; env-driven config generation |
 | **Reverse proxies** | User-friendly tools vs vanilla Nginx; security and maintenance implications |
 | **Storage** | Synology NAS; NFS mounts with Proxmox; data placement and recovery implications |
 | **Observability & security** | Monitoring, logs, metrics, alerting; debuggability as a first-class goal; permissions, network exposure, secrets management |

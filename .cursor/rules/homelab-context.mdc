@@ -29,13 +29,16 @@ Build a robust, scalable, automated home server hosting:
 - **Compute:** Beelink EQi13 (Debian Cloud-Init template, Docker host)
 - **Storage:** Synology NAS
 - **Workloads:** Docker Compose per-VM stacks
-- **Automation:** Cloud-Init + repo-driven bootstrap scripts
+- **Automation:** Cloud-Init + `deploy.py` orchestrator + `BootstrapRunner` framework (per-stack `stack_config.py` modules)
 
 ## Repo Structure
 
 - **docs/** — Journey chapters + reasoning (Chapter0, Chapter1, Chapter2, Chapter2a, Chapter2c, …)
 - **proxmox/** — Template automation: `scripts/`, `snippets/` (Cloud-Init)
-- **docker_compose/** — Per-VM stacks: `core/`, `monitoring/`, `apps/`, `media/`, `accelerated/` (each with compose.yml, .env.example, bootstrap.py)
+- **scripts/** — Shared Python framework: `homelab_common.py` (helpers), `homelab_bootstrap.py` (`BootstrapRunner`), `homelab_logging.py` (`StepTracker`), `setup_env.py`
+- **docker_compose/** — Per-VM stacks: `core/`, `monitoring/`, `media/`, `accelerated/` (each with `compose.yml`, `.env.example`, `bootstrap.py`, `stack_config.py`, and optional `scripts/` subdirectory)
+- **docker_compose/common/** — Shared compose overlays (e.g. `compose.observability.yml` symlinked into each stack)
+- **deploy.py** — Top-level orchestrator (validates env, runs bootstrap, creates symlinks/shell helpers, runs compose up)
 
 ## Architecture Rules
 
