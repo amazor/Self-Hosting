@@ -39,6 +39,12 @@ services:
       - /dev/dri:/dev/dri
     ports:
       - "32400:32400"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:32400/identity || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 60s
     restart: unless-stopped
     networks:
       - accelerated_internal

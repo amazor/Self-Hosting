@@ -22,6 +22,7 @@ from scripts.homelab_common import (
     clear_env_var,
     get_real_user,
     is_placeholder,
+    set_env_var,
 )
 
 # ---------------------------------------------------------------------------
@@ -29,6 +30,8 @@ from scripts.homelab_common import (
 # ---------------------------------------------------------------------------
 
 STACK_NAME = "accelerated"
+REQUIRES_ROOT = True
+REQUIRES_DEBIAN = True
 REQUIRES_DOCKER = True
 
 REQUIRED_VARS = [
@@ -44,8 +47,11 @@ COMPOSE_OVERLAYS: list[tuple[str, str, str, str]] = [
 ]
 
 POST_DEPLOY_ACTIONS = [
-    "Claim Plex server if this is first run:\n"
-    "Open http://<host>:32400/web and sign in with your Plex account",
+    "First-run Plex claim (one-time only):\n"
+    "  1. Get a claim token: https://www.plex.tv/claim (expires in 4 minutes)\n"
+    "  2. Set PLEX_CLAIM=claim-xxxx in .env\n"
+    "  3. Re-run: python3 deploy.py accelerated\n"
+    "  PLEX_TOKEN is auto-extracted from Preferences.xml after Plex starts.",
 ]
 
 
@@ -142,15 +148,26 @@ def _warn_plex_claim(
             tracker.detail("Cleared stale PLEX_CLAIM (Plex already claimed)")
         return
 
-    if claim or plex_prefs.is_file():
+    if plex_prefs.is_file():
+        tracker.detail("Plex already claimed (Preferences.xml exists)")
+        return
+
+    if claim:
+        tracker.detail(
+            "PLEX_CLAIM is set — Plex will consume it on first start. "
+            "PLEX_TOKEN will be auto-extracted afterward."
+        )
         return
 
     msg = (
-        "PLEX_CLAIM is not set and Plex has not been started before.\n"
-        "Get a claim token from https://www.plex.tv/claim (4 min expiry)"
+        "PLEX_CLAIM is not set and Plex has not been claimed.\n"
+        "  1. Get a claim token: https://www.plex.tv/claim\n"
+        "     (token expires in 4 minutes — set it and deploy promptly)\n"
+        "  2. Set PLEX_CLAIM=claim-xxxx in .env\n"
+        "  3. Re-run deploy. PLEX_TOKEN will be auto-extracted after Plex starts."
     )
     if force:
-        tracker.warn(msg + " (continuing with --force)")
+        tracker.warn(msg + "\n(continuing with --force)")
     else:
         tracker.fail(msg)
         raise SystemExit(1)
@@ -215,6 +232,132 @@ def _ensure_config_dirs(config_base: Path, tracker: StepTracker) -> None:
 
 
 # ---------------------------------------------------------------------------
+# VA-API driver installation
+# ---------------------------------------------------------------------------
+
+_VAAPI_PACKAGES = [
+    "intel-media-va-driver-non-free",
+    "vainfo",
+    "intel-gpu-tools",
+]
+
+
+def _all_packages_installed(packages: list[str]) -> bool:
+    """Return True if every package in the list is already installed."""
+    for pkg in packages:
+        result = subprocess.run(
+            ["dpkg", "-s", pkg],
+            capture_output=True,
+        )
+        if result.returncode != 0:
+            return False
+    return True
+
+
+def _ensure_nonfree_repo(tracker: StepTracker) -> bool:
+    """Ensure the Debian non-free component is available for apt.
+
+    Handles both traditional sources.list format and DEB822 .sources files.
+    Returns True if the repo was added (apt-get update needed).
+    """
+    # --- Check DEB822 .sources files first (Debian 12+ default) ---
+    sources_d = Path("/etc/apt/sources.list.d")
+    if sources_d.is_dir():
+        for src_file in sources_d.glob("*.sources"):
+            content = src_file.read_text()
+            if "non-free" in content:
+                tracker.detail("non-free component already present in DEB822 sources")
+                return False
+            if "Components:" in content and "main" in content:
+                new_lines: list[str] = []
+                modified = False
+                for line in content.splitlines():
+                    if line.startswith("Components:") and "non-free" not in line:
+                        line = line.rstrip() + " non-free non-free-firmware"
+                        modified = True
+                    new_lines.append(line)
+                if modified:
+                    src_file.write_text("\n".join(new_lines) + "\n")
+                    tracker.detail(f"Added non-free to {src_file.name}")
+                    return True
+
+    # --- Fall back to traditional sources.list ---
+    sources_list = Path("/etc/apt/sources.list")
+    if not sources_list.is_file():
+        tracker.warn("No /etc/apt/sources.list found; cannot add non-free repo")
+        return False
+
+    content = sources_list.read_text()
+    if "non-free" in content:
+        tracker.detail("non-free component already present in sources.list")
+        return False
+
+    new_lines = []
+    modified = False
+    for line in content.splitlines():
+        stripped = line.strip()
+        if (
+            not stripped.startswith("#")
+            and stripped.startswith("deb ")
+            and "main" in stripped
+            and "non-free" not in stripped
+        ):
+            line = line.rstrip() + " non-free non-free-firmware"
+            modified = True
+        new_lines.append(line)
+
+    if modified:
+        sources_list.write_text("\n".join(new_lines) + "\n")
+        tracker.detail("Added non-free component to sources.list")
+    return modified
+
+
+def _install_vaapi_packages(
+    env: dict[str, str], tracker: StepTracker, *, force: bool,
+) -> None:
+    """Install Intel VA-API drivers and verification tools."""
+    if _all_packages_installed(_VAAPI_PACKAGES):
+        tracker.detail("VA-API packages already installed")
+        tracker.success("VA-API ready")
+        return
+
+    repo_changed = _ensure_nonfree_repo(tracker)
+    if repo_changed:
+        tracker.detail("Running apt-get update for new repo components...")
+        subprocess.run(
+            ["apt-get", "update", "-qq"],
+            capture_output=True,
+        )
+
+    tracker.detail(f"Installing: {', '.join(_VAAPI_PACKAGES)}")
+    result = subprocess.run(
+        ["apt-get", "install", "-y", "-qq"] + _VAAPI_PACKAGES,
+        capture_output=True,
+    )
+    if result.returncode != 0:
+        stderr = result.stderr.decode() if result.stderr else ""
+        msg = f"Failed to install VA-API packages\n{stderr}"
+        if force:
+            tracker.warn(msg + " (continuing with --force)")
+            return
+        tracker.fail(msg)
+        raise SystemExit(1)
+
+    # Verify GPU access via vainfo
+    vainfo = subprocess.run(["vainfo"], capture_output=True, text=True)
+    if vainfo.returncode == 0:
+        for line in vainfo.stdout.splitlines()[:5]:
+            tracker.detail(line.strip())
+        tracker.success("VA-API packages installed and verified")
+    else:
+        tracker.warn(
+            "VA-API packages installed but vainfo failed — "
+            "GPU may not be passed through yet. "
+            "Verify /dev/dri exists after configuring GPU passthrough."
+        )
+
+
+# ---------------------------------------------------------------------------
 # Bootstrap steps
 # ---------------------------------------------------------------------------
 
@@ -254,6 +397,7 @@ def bootstrap_steps(
         ("Validating paths", lambda t: _validate_paths(env, t)),
         ("Checking DB password", lambda t: _validate_db_password(env, t, force=args.force)),
         ("Creating config directories", lambda t: _ensure_config_dirs(config_base, t)),
+        ("Installing VA-API packages", lambda t: _install_vaapi_packages(env, t, force=args.force)),
         ("Checking Plex claim", lambda t: _warn_plex_claim(env, config_base, t, force=args.force)),
         ("GPU guardrail", lambda t: _gpu_guardrail(env, t, force=args.force)),
     ]
@@ -266,14 +410,54 @@ def bootstrap_steps(
 def post_deploy(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
-    """Configure Plex settings and library sections, then clear PLEX_CLAIM."""
+    """Extract PLEX_TOKEN if needed, configure Plex, then clear PLEX_CLAIM."""
+    from docker_compose.accelerated.scripts import setup_accelerated_apps
+
+    env_file = SCRIPT_DIR / ".env"
+    plex_token = env.get("PLEX_TOKEN", "").strip()
+
+    # Auto-extract PLEX_TOKEN from Preferences.xml on first run
+    if not plex_token:
+        tracker.detail("PLEX_TOKEN not set — attempting auto-extraction...")
+        if setup_accelerated_apps.wait_for_plex_noauth():
+            extracted = setup_accelerated_apps.extract_plex_token(config_base)
+            if extracted:
+                set_env_var(env_file, "PLEX_TOKEN", extracted)
+                env["PLEX_TOKEN"] = extracted
+                plex_token = extracted
+                tracker.detail("PLEX_TOKEN extracted and saved to .env")
+            else:
+                tracker.warn(
+                    "Could not extract PLEX_TOKEN from Preferences.xml. "
+                    "Plex may not have been claimed yet."
+                )
+        else:
+            tracker.warn("Plex not responding — skipping token extraction")
+
+    # Apply TRaSH prefs and create libraries
     try:
-        from docker_compose.accelerated.scripts import setup_accelerated_apps
         setup_accelerated_apps.setup(env)
         tracker.success("Plex configured via API")
     except Exception as exc:
         tracker.warn(f"Accelerated app setup failed: {exc}")
 
-    env_file = SCRIPT_DIR / ".env"
+    # Clear one-time claim token
     if clear_env_var(env_file, "PLEX_CLAIM"):
         tracker.detail("Cleared PLEX_CLAIM from .env (token consumed)")
+
+    # Cross-VM guidance: tell user what to copy to media VM
+    plex_host = env.get("PLEX_HOST", "").strip()
+    if plex_token and plex_host:
+        tracker.add_action(
+            "To enable Sonarr/Radarr → Plex refresh on the media VM, "
+            "add to docker_compose/media/.env:\n"
+            f"  PLEX_HOST={plex_host}\n"
+            f"  PLEX_TOKEN={plex_token}\n"
+            "Then redeploy: python3 deploy.py media"
+        )
+    elif plex_token:
+        tracker.add_action(
+            "PLEX_TOKEN was extracted. Set PLEX_HOST (this VM's LAN IP) in .env,\n"
+            "then copy both PLEX_HOST and PLEX_TOKEN to docker_compose/media/.env\n"
+            "to enable Sonarr/Radarr → Plex refresh notifications."
+        )

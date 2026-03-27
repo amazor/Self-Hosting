@@ -24,6 +24,7 @@ import time
 import urllib.error
 import urllib.parse
 import urllib.request
+import xml.etree.ElementTree as ET
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -168,6 +169,57 @@ def _wait_for_plex(plex_token: str) -> bool:
         time.sleep(HEALTH_POLL_S)
     log.warning("Plex not ready within %ds.", HEALTH_TIMEOUT_S)
     return False
+
+
+def wait_for_plex_noauth() -> bool:
+    """Poll Plex /identity without authentication headers.
+
+    Used during first-run token extraction when PLEX_TOKEN is not yet known.
+    The /identity endpoint responds without auth on the local network.
+    """
+    log.info("Waiting for Plex to be ready (no auth, up to %ds)...", HEALTH_TIMEOUT_S)
+    deadline = time.monotonic() + HEALTH_TIMEOUT_S
+    while time.monotonic() < deadline:
+        req = urllib.request.Request(
+            f"{PLEX_BASE_URL}/identity",
+            headers={"Accept": "application/json"},
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    return True
+        except (urllib.error.URLError, urllib.error.HTTPError, OSError):
+            pass
+        time.sleep(HEALTH_POLL_S)
+    log.warning("Plex not ready within %ds.", HEALTH_TIMEOUT_S)
+    return False
+
+
+def extract_plex_token(config_base: Path) -> str | None:
+    """Read PlexOnlineToken from Preferences.xml after Plex has consumed a claim.
+
+    Returns the token string, or None if the file doesn't exist or the
+    attribute is missing (e.g. Plex was never claimed).
+    """
+    prefs_path = (
+        config_base / "plex" / "Library" / "Application Support"
+        / "Plex Media Server" / "Preferences.xml"
+    )
+    if not prefs_path.is_file():
+        log.debug("Preferences.xml not found: %s", prefs_path)
+        return None
+
+    try:
+        tree = ET.parse(prefs_path)
+        token = tree.getroot().get("PlexOnlineToken")
+        if token:
+            log.info("Extracted PLEX_TOKEN from Preferences.xml")
+            return token
+        log.debug("PlexOnlineToken attribute not found in Preferences.xml")
+        return None
+    except (ET.ParseError, OSError) as exc:
+        log.warning("Failed to parse Preferences.xml: %s", exc)
+        return None
 
 
 # ---------------------------------------------------------------------------

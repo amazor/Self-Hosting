@@ -413,6 +413,13 @@ def main() -> None:
                 f"Proxmox node name ({proxmox_node}); override if needed",
             )
 
+        ip = _detect_lan_ip()
+        if ip:
+            acc_updates["PLEX_HOST"] = (
+                ip,
+                f"detected LAN IP ({ip}); address media VM uses to reach Plex",
+            )
+
         updated = _update_env_example(acc_example, acc_updates)
         if updated:
             log.info(

@@ -46,8 +46,12 @@ COMPOSE_OVERLAYS: list[tuple[str, str, str, str]] = [
 ]
 
 POST_DEPLOY_ACTIONS = [
-    "Create an Authentik admin user and add to admin group\n"
-    "Open https://auth.<domain>/if/flow/initial-setup/",
+    "Create an Authentik admin user:\n"
+    "  Open https://auth.<domain>/if/flow/initial-setup/\n"
+    "  (or set AUTHENTIK_BOOTSTRAP_EMAIL/PASSWORD in .env for automatic creation)",
+    "Assign users to SSO groups:\n"
+    "  Set AUTHENTIK_ADMIN_USERS and/or AUTHENTIK_MEDIA_USERS in .env\n"
+    "  then re-deploy (requires AUTHENTIK_BOOTSTRAP_TOKEN)",
 ]
 
 

@@ -87,6 +87,37 @@ def clear_env_var(env_file: Path, key: str) -> bool:
     return False
 
 
+def set_env_var(env_file: Path, key: str, value: str) -> bool:
+    """Set *key* to *value* in *env_file*, preserving file structure.
+
+    Finds the first line whose key matches (commented or not) and replaces it
+    with ``KEY=value``.  If the key is not found, appends it.  Returns True if
+    the file was modified, False if the key already had the target value.
+    """
+    import re
+
+    if not env_file.is_file():
+        env_file.write_text(f"{key}={value}\n")
+        return True
+
+    lines = env_file.read_text().splitlines()
+    for i, line in enumerate(lines):
+        stripped = line.strip()
+        commented = re.match(rf"^#\s*{re.escape(key)}\s*=(.*)", stripped)
+        uncommented = re.match(rf"^{re.escape(key)}\s*=(.*)", stripped)
+        if commented or uncommented:
+            existing = (uncommented or commented).group(1).strip().strip("\"'")
+            if uncommented and existing == value:
+                return False
+            lines[i] = f"{key}={value}"
+            env_file.write_text("\n".join(lines) + "\n")
+            return True
+
+    lines.append(f"{key}={value}")
+    env_file.write_text("\n".join(lines) + "\n")
+    return True
+
+
 def load_env(path: Path) -> dict[str, str]:
     """Parse a .env file into a dict (comments and blanks are skipped).
 
