@@ -102,7 +102,8 @@ def _tls_directive(env: dict[str, str]) -> str:
 
 def _global_block(env: dict[str, str]) -> str:
     domain = env.get("PUBLIC_BASE_DOMAIN", "example.com")
-    return f"{{\n  email admin@{domain}\n}}"
+    email = env.get("ACME_EMAIL", "") or f"admin@{domain}"
+    return f"{{\n  email {email}\n}}"
 
 
 def _authentik_block(env: dict[str, str], tls: str) -> str:

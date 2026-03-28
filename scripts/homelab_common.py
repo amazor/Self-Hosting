@@ -55,6 +55,8 @@ def is_placeholder(val: str | None) -> bool:
         return True
     if val.startswith("CHANGE_ME"):
         return True
+    if "${" in val:
+        return True
     if val in _PLACEHOLDER_VALUES:
         return True
     if any(val.endswith(s) for s in _PLACEHOLDER_SUFFIXES):
@@ -123,13 +125,13 @@ def load_env(path: Path) -> dict[str, str]:
     """Parse a .env file into a dict (comments and blanks are skipped).
 
     Handles ``KEY=VALUE``, optional surrounding quotes, and empty values.
-    Simple ``${VAR}`` expansion is supported using previously-defined values
-    from the same file (single pass, definition order).
+    ``${VAR}`` expansion is supported using any variable defined in the same
+    file regardless of ordering.  Circular references are left unexpanded.
     """
     _var_re = re.compile(r"\$\{([^}]+)\}")
-    env: dict[str, str] = {}
+    raw_env: dict[str, str] = {}
     if not path.is_file():
-        return env
+        return raw_env
     for raw in path.read_text().splitlines():
         line = raw.strip()
         if not line or line.startswith("#"):
@@ -141,9 +143,17 @@ def load_env(path: Path) -> dict[str, str]:
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
             value = value[1:-1]
-        value = _var_re.sub(lambda m: env.get(m.group(1), m.group(0)), value)
-        env[key] = value
-    return env
+        raw_env[key] = value
+
+    def _expand(value: str, resolving: frozenset[str] = frozenset()) -> str:
+        def _replacer(m: re.Match) -> str:
+            name = m.group(1)
+            if name in resolving or name not in raw_env:
+                return m.group(0)
+            return _expand(raw_env[name], resolving | {name})
+        return _var_re.sub(_replacer, value)
+
+    return {k: _expand(v, frozenset({k})) for k, v in raw_env.items()}
 
 
 # ---------------------------------------------------------------------------
