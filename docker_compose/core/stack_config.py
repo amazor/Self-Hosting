@@ -49,9 +49,10 @@ POST_DEPLOY_ACTIONS = [
     "Create an Authentik admin user:\n"
     "  Open https://auth.<domain>/if/flow/initial-setup/\n"
     "  (or set AUTHENTIK_BOOTSTRAP_EMAIL/PASSWORD in .env for automatic creation)",
-    "Assign users to SSO groups:\n"
-    "  Set AUTHENTIK_ADMIN_USERS and/or AUTHENTIK_MEDIA_USERS in .env\n"
-    "  then re-deploy (requires AUTHENTIK_BOOTSTRAP_TOKEN)",
+    "Set passwords for provisioned users:\n"
+    "  Users from AUTHENTIK_ADMIN_USERS / AUTHENTIK_MEDIA_USERS are created by\n"
+    "  the blueprint without passwords. Log in as akadmin at https://auth.<domain>\n"
+    "  and set passwords in Directory → Users.",
 ]
 
 

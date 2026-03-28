@@ -15,9 +15,8 @@ Desktop.ini
 
 # --- Secrets & env (example is committed; real .env is not) ---
 .env
+.env.*
 !.env.example
-.env.local
-.env.*.local
 *.pem
 *.key
 secrets/

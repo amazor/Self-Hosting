@@ -201,6 +201,49 @@ def _build_blueprint_yaml(env: dict[str, str]) -> str:
             ])
         lines.append("")
 
+    # --- Users ---
+    # Create users from AUTHENTIK_ADMIN_USERS / AUTHENTIK_MEDIA_USERS and assign
+    # them to the appropriate groups.  akadmin is skipped (auto-created by
+    # Authentik bootstrap as superuser, already has full access).
+    # Users are created without a password; the admin sets passwords in the GUI.
+    admin_usernames = [
+        u.strip() for u in env.get("AUTHENTIK_ADMIN_USERS", "").split(",") if u.strip()
+    ]
+    media_usernames = [
+        u.strip() for u in env.get("AUTHENTIK_MEDIA_USERS", "").split(",") if u.strip()
+    ]
+
+    all_usernames: dict[str, list[str]] = {}
+    for username in admin_usernames:
+        all_usernames.setdefault(username, []).append("group_homelab_users")
+    for username in media_usernames:
+        all_usernames.setdefault(username, [])
+        if media_apps:
+            all_usernames[username].append("group_homelab_media")
+
+    # Remove akadmin — it already exists as superuser with full access.
+    all_usernames.pop("akadmin", None)
+
+    if all_usernames:
+        lines.extend([
+            "  # --- Users (from AUTHENTIK_ADMIN_USERS / AUTHENTIK_MEDIA_USERS) ---",
+            "  # Created without a password. Log in as akadmin and set passwords",
+            "  # in Directory → Users after first deploy.",
+        ])
+        for username, group_ids in all_usernames.items():
+            lines.extend([
+                "  - model: authentik_core.user",
+                "    state: present",
+                "    identifiers:",
+                "      username: " + repr(username),
+                "    attrs:",
+                "      name: " + repr(username.title()),
+                "      groups:",
+            ])
+            for gid in group_ids:
+                lines.append("        - !KeyOf " + gid)
+            lines.append("")
+
     return "\n".join(lines)
 
 
