@@ -115,9 +115,13 @@ def _chown_dir(path: Path, uid: int, gid: int, label: str, tracker: StepTracker)
         tracker.warn(f"Could not chown {path} to {uid}:{gid}")
 
 
-def _fix_ownership(config_base: Path, tracker: StepTracker) -> None:
-    host_uid = os.getuid()
-    host_gid = os.getegid()
+def _fix_ownership(config_base: Path, env: dict[str, str], tracker: StepTracker) -> None:
+    try:
+        host_uid = int(env.get("PUID", "") or os.getuid())
+        host_gid = int(env.get("PGID", "") or os.getegid())
+    except ValueError:
+        host_uid = os.getuid()
+        host_gid = os.getegid()
     _chown_dir(config_base / "prometheus" / "data", _PROMETHEUS_UID, _PROMETHEUS_UID, "Prometheus data", tracker)
     _chown_dir(config_base / "loki" / "data", _LOKI_UID, _LOKI_UID, "Loki data", tracker)
     _chown_dir(config_base / "grafana" / "data", _GRAFANA_UID, _GRAFANA_UID, "Grafana data", tracker)
@@ -425,6 +429,7 @@ apiVersion: 1
 
 datasources:
   - name: Prometheus
+    uid: prometheus
     type: prometheus
     access: proxy
     url: http://prometheus:9090
@@ -432,6 +437,7 @@ datasources:
     editable: true
 
   - name: Loki
+    uid: loki
     type: loki
     access: proxy
     url: http://loki:3100
@@ -487,7 +493,7 @@ def bootstrap_steps(
         ("Creating config directories", lambda t: (
             _ensure_config_directories(config_base, t),
             _check_disk_space(config_base, t),
-            _fix_ownership(config_base, t),
+            _fix_ownership(config_base, env, t),
         )),
         ("Generating Prometheus config", lambda t: _ensure_prometheus_config(env, config_base, t)),
         ("Generating Loki config", lambda t: _ensure_loki_config(env, config_base, t)),

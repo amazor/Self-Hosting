@@ -29,6 +29,12 @@
 #
 # Docs: docs/Chapter2b-monitoring.md
 
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "10m"
+    max-file: "3"
+
 services:
   # --- Grafana: dashboards + log search ---
   # Single UI for metrics (Prometheus) and logs (Loki). Datasources are
@@ -37,6 +43,7 @@ services:
   grafana:
     image: grafana/grafana:${GRAFANA_TAG:-latest}
     container_name: grafana
+    logging: *default-logging
     # Official image runs as UID 472 (grafana user). Explicit user = non-root best practice.
     user: "472"
     environment:
@@ -69,6 +76,7 @@ services:
   prometheus:
     image: prom/prometheus:${PROMETHEUS_TAG:-latest}
     container_name: prometheus
+    logging: *default-logging
     # nobody (65534) = non-root; official image default. Bootstrap chowns data dir to this UID.
     user: "nobody"
     command:
@@ -101,6 +109,7 @@ services:
   loki:
     image: grafana/loki:${LOKI_TAG:-3}
     container_name: loki
+    logging: *default-logging
     # UID 10001 = official image non-root user. Bootstrap chowns data dir to this UID.
     user: "10001"
     command: -config.file=/etc/loki/loki-config.yml
@@ -133,6 +142,7 @@ services:
   blackbox-exporter:
     image: prom/blackbox-exporter:${BLACKBOX_TAG:-latest}
     container_name: blackbox-exporter
+    logging: *default-logging
     command:
       - "--config.file=/config/blackbox.yml"
     volumes:
@@ -151,21 +161,20 @@ services:
 
   # --- Uptime Kuma: uptime checks + alerting ---
   # HTTP/TCP/HTTP(s) keyword checks with built-in notifications. Data is a
-  # small SQLite DB — NFS not supported. Runs as VM user (PUID:PGID) so the app
-  # can write to the bind mount; bootstrap chowns config/uptime-kuma and sets permissions.
+  # small SQLite DB — NFS not supported.
+  # v2 uses embedded MariaDB which only accepts user "node" (UID 1000) or root.
+  # Let the image entrypoint handle user switching; bootstrap chowns config/uptime-kuma.
   # Docs: https://github.com/louislam/uptime-kuma
   uptime-kuma:
     image: louislam/uptime-kuma:${UPTIME_KUMA_TAG:-2}
     container_name: uptime-kuma
-    user: "${PUID:-1000}:${PGID:-1000}"
+    logging: *default-logging
     volumes:
       - ${CONFIG_ROOT:-./config}/uptime-kuma:/app/data
     ports:
       - "3001:3001"
     security_opt:
       - no-new-privileges:true
-    cap_drop:
-      - ALL
     restart: unless-stopped
     networks:
       - monitoring_internal
