@@ -328,10 +328,10 @@ Reference: [TRaSH SABnzbd](https://trash-guides.info/Downloaders/SABnzbd/)
 
 **Note:** SABnzbd is not managed by Recyclarr or `setup_media_apps.py`. Configure SABnzbd **paths and categories** in the SABnzbd UI, then add it as a download client in Sonarr/Radarr manually.
 
-1. Open `http://<media-vm-ip>:8081`.
+1. Open `http://<media-vm-ip>:8082`.
 2. **Config -> Folders**:
    - Completed Download Folder: `/data/downloads/sabnzbd/completed`
-   - Temporary/intermediate: `/data/downloads/sabnzbd/tmp` and `/data/downloads/sabnzbd/intermediate`
+   - Temporary Download Folder: `/data/downloads/sabnzbd/tmp`
 3. **Config -> Categories**:
    - `tv` -> `tv` (relative folder)
    - `movies` -> `movies` (relative folder)

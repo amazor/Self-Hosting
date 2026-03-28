@@ -1270,7 +1270,7 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
     setup_qbittorrent("http://localhost:8080", env)
 
     if usenet_enabled:
-        setup_sabnzbd("http://localhost:8081", config_base, env)
+        setup_sabnzbd("http://localhost:8082", config_base, env)
 
     if sonarr_key:
         setup_sonarr("http://localhost:8989", sonarr_key, env, sabnzbd_key)

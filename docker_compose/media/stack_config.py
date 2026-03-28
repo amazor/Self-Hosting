@@ -36,6 +36,7 @@ SUPPORTS_UP = False
 REQUIRED_VARS = [
     "MEDIA_ROOT",
     "CONFIG_ROOT",
+    "EXPRESSVPN_CODE",
 ]
 
 COMPOSE_OVERLAYS: list[tuple[str, str, str, str]] = [
@@ -76,15 +77,9 @@ def _env_path_display(env_file: Path) -> str:
 def _validate_media_env(
     env: dict[str, str], args, tracker: StepTracker,  # noqa: ANN001
 ) -> None:
-    """Validate EXPRESSVPN_CODE, MEDIA_ROOT, and compose guardrails."""
+    """Validate MEDIA_ROOT structure and compose guardrails."""
     from scripts.homelab_common import get_real_user
     real_user, _ = get_real_user()
-
-    if not env.get("EXPRESSVPN_CODE"):
-        tracker.fail(
-            "EXPRESSVPN_CODE not set. Get code from https://www.expressvpn.com/setup"
-        )
-        raise SystemExit(1)
 
     media_root_str = env.get("MEDIA_ROOT", "")
     if not media_root_str:
@@ -135,8 +130,7 @@ def _validate_media_env(
         dl_subdirs += [
             "downloads/sabnzbd", "downloads/sabnzbd/completed",
             "downloads/sabnzbd/completed/movies", "downloads/sabnzbd/completed/tv",
-            "downloads/sabnzbd/completed/anime", "downloads/sabnzbd/intermediate",
-            "downloads/sabnzbd/tmp",
+            "downloads/sabnzbd/completed/anime", "downloads/sabnzbd/tmp",
         ]
     for subdir in dl_subdirs:
         target = media_root / subdir
@@ -413,7 +407,7 @@ def _populate_api_keys(
 def _populate_env_api_keys(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
-    if env.get("ENABLE_EXPORTERS", "1") != "1":
+    if env.get("ENABLE_EXPORTERS", "0") != "1":
         return
 
     keys = {app: _read_api_key(config_base, app) for app in ("sonarr", "radarr", "prowlarr")}

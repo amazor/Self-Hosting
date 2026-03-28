@@ -3,14 +3,15 @@
 # Enable via ENABLE_SABNZBD=1 in .env; bootstrap and media_compose select overlays from .env.
 #
 # Usenet traffic does not use the VPN container; SABnzbd runs on the default network.
-# Sonarr/Radarr add SABnzbd as download client: host sabnzbd, port 8080 (container port; host 8081).
+# Sonarr/Radarr add SABnzbd as download client: host sabnzbd, port 8080 (container port; host 8082).
 # Paths: MEDIA_ROOT and CONFIG_ROOT from .env. Mount MEDIA_ROOT at /data for path consistency.
 # Chapter 2c model: /data/downloads/sabnzbd/... and /data/library/...
 
 services:
   # --- SABnzbd — Usenet download client ---
   # LinuxServer: https://docs.linuxserver.io/images/docker-sabnzbd
-  # In SABnzbd UI: set Completed to /downloads/completed; temp/intermediate to /downloads/intermediate, /downloads/tmp.
+  # Bootstrap pre-seeds sabnzbd.ini with correct paths:
+  #   completed → /data/downloads/sabnzbd/completed   temp → /data/downloads/sabnzbd/tmp
   # Same MEDIA_ROOT as torrents so Sonarr/Radarr can hardlink from sabnzbd/completed into library.
   sabnzbd:
     image: lscr.io/linuxserver/sabnzbd:${SABNZBD_TAG:-latest}
@@ -23,7 +24,7 @@ services:
       - ${CONFIG_ROOT:-./config}/sabnzbd:/config
       # Single-root mapping prevents path translation issues with Sonarr/Radarr imports.
       - ${MEDIA_ROOT:-/mnt/media}:/data
-    # Host 8081 so 8080 remains qBittorrent Web UI on the VPN container.
+    # Host 8082: 8080 is qBittorrent (via VPN), 8081 is cAdvisor (observability overlay).
     ports:
-      - "8081:8080"
+      - "8082:8080"
     restart: unless-stopped

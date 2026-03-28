@@ -303,12 +303,8 @@ Each downloader manages its own internal workspace, but everything remains conta
 
   When complete, Sonarr or Radarr imports the file by creating a hardlink into the correct `/library/...` location, just like with torrents. Configure SABnzbd categories so content lands in these subfolders.
 
-- `sabnzbd/intermediate/`  
-  Temporary directory used while assembling Usenet articles.  
-  • Used internally by: SABnzbd only  
-
 - `sabnzbd/tmp/`  
-  Working directory used during repair and extraction.  
+  Temporary directory used while assembling, repairing, and extracting Usenet articles.  
   • Used internally by: SABnzbd only  
 
 Only the `completed/` directories (and their category subfolders) are consumed by the *arr applications.  

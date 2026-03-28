@@ -3,26 +3,39 @@
 # Syncs TRaSH Guide quality definitions, custom formats, quality profiles, and naming to Sonarr/Radarr.
 # API keys are in config/recyclarr/secrets.yml (bootstrap auto-populates from pre-seeded config.xml keys).
 # Ref: https://recyclarr.dev/reference/config-examples/  https://trash-guides.info/Guide-Sync/
+#
+# Quality strategy: grab best available now, upgrade to 4K/UHD when it becomes available.
+#   - Sonarr: WEB-2160p (Combined) — TRaSH-native combined profile; grabs WEB-1080p as
+#             fallback, upgrades to WEB-2160p when available.
+#   - Radarr: UHD Bluray + WEB — targets Bluray-2160p; qualities list extended with 1080p
+#             fallback so Radarr grabs Bluray-1080p/WEB-1080p when no 4K exists yet.
+#   - Anime:  Remux-1080p (anime rarely has 4K; separate profile keeps it clean).
+#
+# Golden Rule UHD: blocks x265 encodes that lack HDR/DV (4K SDR encodes are pointless).
+# Seeker (Cleanuparr) + RSS in Sonarr/Radarr handle the automatic upgrade trigger.
 
 # yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json
 
 sonarr:
-  # --- TV (WEB-1080p) — TRaSH Golden Rule: 720/1080p → x264 ---
-  # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-1080p
+  # --- TV (WEB-2160p Combined) — grab 1080p now, upgrade to 4K when available ---
+  # TRaSH-native combined profile: WEB-1080p as fallback, WEB-2160p as cutoff/target.
+  # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-2160p
   tv:
     base_url: "!secret sonarr_url"
     api_key: "!secret sonarr_apikey"
     quality_definition:
       type: series
     quality_profiles:
-      - trash_id: 72dae194fc92bf828f32cde7744e51a1  # WEB-1080p
+      - trash_id: c4cadd6b35b95f62c3d47a408e53e2f7  # WEB-2160p (Combined)
         reset_unmatched_scores:
           enabled: true
     custom_format_groups:
       add:
-        - trash_id: 158188097a58d7687dee647e04af0da3  # [Required] Golden Rule HD
+        # Golden Rule UHD: blocks x265 encodes with no HDR/DV (SDR 4K is not an upgrade).
+        # x265 (HD) is NOT selected here — 1080p x265 is also blocked per TRaSH Golden Rule.
+        - trash_id: e3f37512790f00d0e89e54fe5e790d1c  # [Required] Golden Rule UHD
           select:
-            - 47435ece6b99a0b477caf360e79ba0bb  # x265 (HD)
+            - 9b64dff695c2115facf1b6ea59c9bd07  # x265 (no HDR/DV)
 
   # --- Anime — TRaSH Anime quality profile ---
   # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles-anime/#quality-profile
@@ -37,19 +50,40 @@ sonarr:
           enabled: true
 
 radarr:
-  # --- Movies (HD Bluray + WEB 1080p) — TRaSH Golden Rule ---
-  # https://trash-guides.info/Radarr/radarr-setup-quality-profiles/#hd-bluray-web
+  # --- Movies (UHD Bluray + WEB) — grab 1080p now, upgrade to 4K when available ---
+  # Base profile: UHD Bluray + WEB (targets Bluray-2160p and WEB-2160p).
+  # Quality list extended with Bluray-1080p and WEB-1080p below 2160p as fallback.
+  # Radarr grabs the highest available; upgrades to Bluray-2160p when it appears.
+  # https://trash-guides.info/Radarr/radarr-setup-quality-profiles/#uhd-bluray-web
   movies:
     base_url: "!secret radarr_url"
     api_key: "!secret radarr_apikey"
     quality_definition:
       type: movie
     quality_profiles:
-      - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
+      - trash_id: 64fb5f9858489bdac2af690e27c8f42f  # UHD Bluray + WEB
         reset_unmatched_scores:
           enabled: true
+        upgrade:
+          allowed: true
+          until_quality: Bluray-2160p
+          until_score: 10000
+        # Override quality list to add 1080p below 2160p as fallback.
+        # Without this, UHD Bluray + WEB only accepts 2160p and will wait indefinitely.
+        qualities:
+          - name: Bluray-2160p
+          - name: WEB 2160p
+            qualities:
+              - WEBDL-2160p
+              - WEBRip-2160p
+          - name: Bluray-1080p
+          - name: WEB 1080p
+            qualities:
+              - WEBDL-1080p
+              - WEBRip-1080p
     custom_format_groups:
       add:
-        - trash_id: f8bf8eab4617f12dfdbd16303d8da245  # [Required] Golden Rule HD
+        # Golden Rule UHD: blocks x265 encodes with no HDR/DV (SDR 4K is not an upgrade).
+        - trash_id: ff204bbcecdd487d1cefcefdbf0c278d  # [Required] Golden Rule UHD
           select:
-            - dc98083864ea246d05a42df0d05f81cc  # x265 (HD)
+            - 839bea857ed2c0a8e084f3cbdbd65ecb  # x265 (no HDR/DV)
