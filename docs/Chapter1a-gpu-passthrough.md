@@ -37,8 +37,8 @@ The Accelerated VM is the only VM that should ever own the GPU. Other VMs and th
 Before starting:
 
 - Proxmox is installed and accessible via the web UI ([Chapter 1](Chapter1-proxmox.md)).
-- The target VM (Accelerated, VMID 230) is created from the template and uses **q35 + OVMF (UEFI)** — this is the default from [Chapter 1's template script](Chapter1-proxmox.md#step-4--automation-script-the-template-maker). q35 handles PCIe passthrough much better than the legacy i440fx chipset.
 - You have SSH or console access to the Proxmox host shell.
+- The Accelerated VM (VMID 230) is **only needed for [Step 7](#step-7--add-the-gpu-to-the-vm)** — you can complete all host-side preparation (Steps 1–6) first and create the VM afterwards. When you do create it, use the **q35 + OVMF (UEFI)** machine type (the default from [Chapter 1's template script](Chapter1-proxmox.md#step-4--automation-script-the-template-maker)). q35 handles PCIe passthrough much better than the legacy i440fx chipset.
 
 ---
 
@@ -93,17 +93,15 @@ update-grub
 
 VFIO is the kernel framework that allows safe device assignment to VMs.
 
-Add the required modules to `/etc/modules`:
+Create a drop-in file under `/etc/modules-load.d/` (the modern replacement for `/etc/modules`):
 
 ```bash
-cat >> /etc/modules << 'EOF'
+cat > /etc/modules-load.d/vfio.conf << 'EOF'
 vfio
 vfio_iommu_type1
 vfio_pci
 EOF
 ```
-
-Or edit the file manually (`nano /etc/modules`) and add those three lines.
 
 ---
 
@@ -239,7 +237,7 @@ sed -i 's/^GRUB_CMDLINE_LINUX_DEFAULT=.*/GRUB_CMDLINE_LINUX_DEFAULT="quiet intel
 update-grub
 
 # --- VFIO modules ---
-grep -q '^vfio$' /etc/modules || cat >> /etc/modules << 'EOF'
+cat > /etc/modules-load.d/vfio.conf << 'EOF'
 vfio
 vfio_iommu_type1
 vfio_pci

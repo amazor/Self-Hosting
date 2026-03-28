@@ -5,11 +5,16 @@ Used by core bootstrap and update-caddyfile scripts.
 Can be imported (call generate()) or run standalone.
 
 CADDY_EXTRA_SERVICES format (comma-separated):
-  FQDN:host:port[:sso]           — whole site; :sso = behind Authentik
-  FQDN/path:host:port[:sso]      — path only (e.g. /api no SSO, / with SSO)
+  subdomain:host:port[:sso]           — whole site; :sso = behind Authentik
+  subdomain/path:host:port[:sso]      — path only (e.g. /api no SSO, / with SSO)
+
+Subdomains are automatically expanded to FQDNs using PUBLIC_BASE_DOMAIN
+(e.g. ``sonarr`` → ``sonarr.example.com``).  Full FQDNs (containing a dot)
+are kept as-is for backward compatibility.
+
 Examples:
-  sonarr.example.com:192.168.1.130:8989:sso
-  sonarr.example.com/api:192.168.1.130:8989
+  sonarr:192.168.1.130:8989:sso
+  sonarr/api:192.168.1.130:8989
 """
 
 from __future__ import annotations
@@ -46,8 +51,12 @@ class _ExtraEntry:
     sso: bool
 
 
-def _parse_entry(raw: str) -> _ExtraEntry | None:
-    """Parse one CADDY_EXTRA_SERVICES entry."""
+def _parse_entry(raw: str, base_domain: str = "") -> _ExtraEntry | None:
+    """Parse one CADDY_EXTRA_SERVICES entry.
+
+    *base_domain* is appended to bare subdomains (no dot).  Full FQDNs
+    (containing a dot) are left unchanged for backward compatibility.
+    """
     raw = raw.strip()
     if not raw:
         return None
@@ -71,6 +80,9 @@ def _parse_entry(raw: str) -> _ExtraEntry | None:
     else:
         fqdn = fqdn_part
         path = ""
+
+    if "." not in fqdn and base_domain:
+        fqdn = f"{fqdn}.{base_domain}"
 
     return _ExtraEntry(fqdn=fqdn, path=path, upstream=upstream, sso=sso)
 
@@ -216,11 +228,12 @@ def generate(env: dict[str, str], script_dir: Path) -> Path:
         _whoami_block(env, tls),
     ]
 
+    base_domain = env.get("PUBLIC_BASE_DOMAIN", "example.com")
     extra_raw = env.get("CADDY_EXTRA_SERVICES", "")
     if extra_raw:
         groups: dict[str, list[_ExtraEntry]] = {}
         for token in extra_raw.split(","):
-            entry = _parse_entry(token)
+            entry = _parse_entry(token, base_domain=base_domain)
             if entry is None:
                 log.warning(
                     f"Skipping malformed CADDY_EXTRA_SERVICES entry: "

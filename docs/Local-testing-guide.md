@@ -149,7 +149,7 @@ All these hostnames resolve to **192.168.1.175** (core) via your hosts file; Cad
 To use `https://grafana.test.arpa` and `https://uptime.test.arpa` instead of direct IP:port, add to **core** `docker_compose/core/.env` in `CADDY_EXTRA_SERVICES` (comma-separated, append to the existing list):
 
 ```
-grafana.test.arpa:192.168.1.197:3000:sso,uptime.test.arpa:192.168.1.197:3001:sso
+grafana:192.168.1.197:3000:sso,uptime:192.168.1.197:3001:sso
 ```
 
 Then regenerate the Caddyfile and reload Caddy (re-run bootstrap or `./update-caddyfile.sh` on core), and ensure `grafana.test.arpa` and `uptime.test.arpa` are in your hosts file (see 1.1).

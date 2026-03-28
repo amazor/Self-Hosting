@@ -229,6 +229,7 @@ def _collect_caddy_fqdns(env: dict[str, str]) -> list[str]:
         if val and not is_placeholder(val):
             fqdns.append(val)
 
+    base_domain = env.get("PUBLIC_BASE_DOMAIN", "example.com")
     seen: set[str] = set(fqdns)
     raw = env.get("CADDY_EXTRA_SERVICES", "")
     for token in raw.split(","):
@@ -236,6 +237,8 @@ def _collect_caddy_fqdns(env: dict[str, str]) -> list[str]:
         if not token:
             continue
         fqdn = token.split(":")[0].split("/")[0]
+        if "." not in fqdn and base_domain:
+            fqdn = f"{fqdn}.{base_domain}"
         if fqdn and fqdn not in seen and not is_placeholder(fqdn):
             seen.add(fqdn)
             fqdns.append(fqdn)

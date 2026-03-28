@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 import shutil
 import socket
 import subprocess
@@ -122,8 +123,10 @@ def load_env(path: Path) -> dict[str, str]:
     """Parse a .env file into a dict (comments and blanks are skipped).
 
     Handles ``KEY=VALUE``, optional surrounding quotes, and empty values.
-    Variable expansion is *not* performed.
+    Simple ``${VAR}`` expansion is supported using previously-defined values
+    from the same file (single pass, definition order).
     """
+    _var_re = re.compile(r"\$\{([^}]+)\}")
     env: dict[str, str] = {}
     if not path.is_file():
         return env
@@ -138,6 +141,7 @@ def load_env(path: Path) -> dict[str, str]:
         value = value.strip()
         if len(value) >= 2 and value[0] == value[-1] and value[0] in ('"', "'"):
             value = value[1:-1]
+        value = _var_re.sub(lambda m: env.get(m.group(1), m.group(0)), value)
         env[key] = value
     return env
 

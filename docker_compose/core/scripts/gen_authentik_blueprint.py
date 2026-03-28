@@ -44,10 +44,11 @@ def _name_from_fqdn(fqdn: str) -> str:
 def _collect_sso_fqdns(env: dict[str, str]) -> list[tuple[str, str, str]]:
     """Return list of (fqdn, slug, name) for each SSO entry in CADDY_EXTRA_SERVICES (whole-site only)."""
     raw = env.get("CADDY_EXTRA_SERVICES", "")
+    base_domain = env.get("PUBLIC_BASE_DOMAIN", "example.com")
     seen: set[str] = set()
     out: list[tuple[str, str, str]] = []
     for token in raw.split(","):
-        entry = _gen_caddyfile._parse_entry(token)
+        entry = _gen_caddyfile._parse_entry(token, base_domain=base_domain)
         if entry is None or not entry.sso or entry.path != "":
             continue
         if entry.fqdn in seen:

@@ -111,16 +111,18 @@ Leave them empty to use the web UI flow after first start.
 
 **CADDY_EXTRA_SERVICES** — Comma-separated list. Each entry:
 
-- **FQDN:host:port[:sso]** — whole site; add `:sso` to put it behind Authentik.
-- **FQDN/path:host:port[:sso]** — path-only (e.g. `/api` without SSO, rest with SSO).
+- **subdomain:host:port[:sso]** — whole site; add `:sso` to put it behind Authentik.
+- **subdomain/path:host:port[:sso]** — path-only (e.g. `/api` without SSO, rest with SSO).
+
+Subdomains are automatically expanded to FQDNs using `PUBLIC_BASE_DOMAIN` (e.g. `sonarr` becomes `sonarr.example.com`). Full FQDNs (containing a dot) are kept as-is for backward compatibility.
 
 Examples (from `.env.example`):
 
 ```bash
 # Whole site behind SSO:
-# CADDY_EXTRA_SERVICES=sonarr.example.com:192.168.1.130:8989:sso
+# CADDY_EXTRA_SERVICES=sonarr:192.168.1.130:8989:sso
 # Path-only (e.g. API no SSO):
-# CADDY_EXTRA_SERVICES=sonarr.example.com/api:192.168.1.130:8989
+# CADDY_EXTRA_SERVICES=sonarr/api:192.168.1.130:8989
 ```
 
 Bootstrap uses `:sso` entries to generate **both**:
@@ -377,9 +379,9 @@ Caddy has no web UI. Routes are defined in the generated Caddyfile, which is bui
 **TODO (image):** Optional — screenshot of `.env` snippet showing `CADDY_EXTRA_SERVICES` with an example entry.
 
 1. Edit `docker_compose/core/.env` and set **CADDY_EXTRA_SERVICES** (see [Adding more services (Caddy routes)](#adding-more-services-caddy-routes)).
-   - Whole site behind SSO: `FQDN:host:port:sso`
-   - Whole site, no SSO: `FQDN:host:port`
-   - Path-only: `FQDN/path:host:port` or `FQDN/path:host:port:sso`
+   - Whole site behind SSO: `subdomain:host:port:sso`
+   - Whole site, no SSO: `subdomain:host:port`
+   - Path-only: `subdomain/path:host:port` or `subdomain/path:host:port:sso`
 2. From `docker_compose/core`, either:
    - Run **bootstrap** (or **deploy**): `python3 bootstrap.py` or `python3 deploy.py core` — regenerates Caddyfile and reloads Caddy, or
    - Run **update-caddyfile only**: `./update-caddyfile.sh` (or `./update-caddyfile.sh --no-reload` to only write the file).
