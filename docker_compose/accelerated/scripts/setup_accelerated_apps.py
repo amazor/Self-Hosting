@@ -53,7 +53,7 @@ PLEX_PREFS: dict[str, object] = {
     # Media analysis: needed for accurate duration, bitrate, and chapter info.
     "ButlerScanForMetadata": 1,
     # Transcoding: keep original quality wherever possible.
-    "TranscoderQuality": 2,                  # 2 = "Make my CPU hurt" (max quality)
+    "TranscoderQuality": 3,                  # 3 = "Make my CPU hurt" (max quality; 0=Auto, 1=Speed, 2=Quality, 3=CPU hurt)
     "TranscoderH264Preset": "veryfast",
     "HardwareAcceleratedCodecs": 1,          # enable hardware transcoding (GPU)
     "HardwareAcceleratedEncoders": 1,

@@ -358,7 +358,14 @@ def post_deploy(
 
     try:
         from docker_compose.core.scripts import apply_authentik_blueprint
-        apply_authentik_blueprint.apply(env, SCRIPT_DIR)
-        tracker.success("Authentik blueprint applied")
+        ok = apply_authentik_blueprint.apply(env, SCRIPT_DIR)
     except Exception as exc:
         tracker.warn(f"Authentik blueprint apply failed: {exc}")
+    else:
+        if ok:
+            tracker.success("Authentik blueprint applied")
+        else:
+            tracker.warn(
+                "Authentik blueprint apply skipped or failed. "
+                "Apply manually via Authentik UI → Customization → Blueprints."
+            )

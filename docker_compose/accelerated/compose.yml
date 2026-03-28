@@ -9,7 +9,7 @@
 #
 # Storage:
 #   - MEDIA_LIBRARY_ROOT → /data/library  (Plex, read-only)
-#   - IMMICH_UPLOAD_ROOT → /photos/library (Immich originals/derived)
+#   - IMMICH_UPLOAD_ROOT → /data          (Immich originals/derived; matches IMMICH_MEDIA_LOCATION default)
 #   - IMMICH_DB_ROOT     → /var/lib/postgresql/data (local disk, not NFS)
 #
 # GPU:
@@ -50,15 +50,19 @@ services:
       - accelerated_internal
 
   # --- Immich database (Postgres) ---
+  # Must use Immich's custom image: includes VectorChord + pgvector extensions required
+  # for smart search and face recognition. Vanilla postgres:16-alpine will fail at startup.
   immich-postgres:
-    image: postgres:16-alpine
+    image: ghcr.io/immich-app/postgres:${IMMICH_POSTGRES_TAG:-16-vectorchord0.5.3-pgvector0.8.1}
     container_name: immich-postgres
     environment:
       - POSTGRES_USER=postgres
       - POSTGRES_PASSWORD=${DB_PASSWORD:-postgres}
       - POSTGRES_DB=immich
+      - POSTGRES_INITDB_ARGS=--data-checksums
     volumes:
       - ${IMMICH_DB_ROOT:-./config/immich-postgres}:/var/lib/postgresql/data
+    shm_size: 128mb
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 10s
@@ -70,7 +74,7 @@ services:
 
   # --- Immich Redis ---
   immich-redis:
-    image: redis:7-alpine
+    image: redis:${IMMICH_REDIS_TAG:-7-alpine}
     container_name: immich-redis
     command: ["redis-server", "--save", "60", "1", "--loglevel", "warning"]
     restart: unless-stopped
@@ -87,19 +91,18 @@ services:
       immich-redis:
         condition: service_started
     environment:
-      - DB_HOST=immich-postgres
+      - DB_HOSTNAME=immich-postgres
       - DB_PORT=5432
       - DB_USERNAME=postgres
       - DB_PASSWORD=${DB_PASSWORD:-postgres}
       - DB_DATABASE_NAME=immich
-      # Upload location is backed by IMMICH_UPLOAD_ROOT → /photos/library.
-      - UPLOAD_LOCATION=/photos/library
       - REDIS_HOSTNAME=immich-redis
       - REDIS_PORT=6379
-      - NODE_ENV=production
-      - IMMICH_LOG_LEVEL=info
+      - TZ=${TZ:-Etc/UTC}
+      - IMMICH_LOG_LEVEL=log
     volumes:
-      - ${IMMICH_UPLOAD_ROOT:-/mnt/photos/library}:/photos/library
+      # IMMICH_MEDIA_LOCATION defaults to /data inside the container.
+      - ${IMMICH_UPLOAD_ROOT:-/mnt/photos/library}:/data
     devices:
       # Video transcoding via Intel Quick Sync / VAAPI
       - /dev/dri:/dev/dri
@@ -111,17 +114,17 @@ services:
       - accelerated_internal
 
   # --- Immich machine learning (CPU by default) ---
+  # For hardware-accelerated ML inference, append an accel suffix to the image tag
+  # (e.g. ${IMMICH_VERSION:-release}-openvino for Intel). See:
+  # https://immich.app/docs/features/ml-hardware-acceleration
   immich-machine-learning:
     image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v2}
     container_name: immich-machine-learning
-    depends_on:
-      immich-redis:
-        condition: service_started
     environment:
-      - REDIS_HOSTNAME=immich-redis
-      - REDIS_PORT=6379
-      - NODE_ENV=production
-      - IMMICH_LOG_LEVEL=info
+      - IMMICH_LOG_LEVEL=log
+    volumes:
+      # Persistent cache for ML models (CLIP, face recognition). Avoids re-download on recreation.
+      - ${CONFIG_ROOT:-./config}/immich-ml-cache:/cache
     restart: unless-stopped
     networks:
       - accelerated_internal

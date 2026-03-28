@@ -52,6 +52,11 @@ POST_DEPLOY_ACTIONS = [
     "  2. Set PLEX_CLAIM=claim-xxxx in .env\n"
     "  3. Re-run: python3 deploy.py accelerated\n"
     "  PLEX_TOKEN is auto-extracted from Preferences.xml after Plex starts.",
+    "Immich hardware transcoding (one-time setup after first login):\n"
+    "  1. Open Immich admin UI → Administration → Video Transcoding Settings\n"
+    "  2. Set Hardware Acceleration to 'Quick Sync' (Intel QSV) or 'VAAPI'\n"
+    "  3. Optionally enable Hardware Decoding for end-to-end GPU acceleration\n"
+    "  Ref: https://immich.app/docs/features/hardware-transcoding",
 ]
 
 
@@ -212,9 +217,8 @@ def _ensure_config_dirs(config_base: Path, tracker: StepTracker) -> None:
     real_user, _ = get_real_user()
     dirs = [
         config_base / "plex",
-        config_base / "immich",
         config_base / "immich-postgres",
-        config_base / "immich-redis",
+        config_base / "immich-ml-cache",
     ]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
@@ -436,10 +440,17 @@ def post_deploy(
 
     # Apply TRaSH prefs and create libraries
     try:
-        setup_accelerated_apps.setup(env)
-        tracker.success("Plex configured via API")
+        ok = setup_accelerated_apps.setup(env)
     except Exception as exc:
         tracker.warn(f"Accelerated app setup failed: {exc}")
+    else:
+        if ok:
+            tracker.success("Plex configured via API")
+        else:
+            tracker.warn(
+                "Plex setup skipped (PLEX_TOKEN missing or Plex unreachable). "
+                "Set PLEX_TOKEN and re-run: python3 deploy.py accelerated"
+            )
 
     # Clear one-time claim token
     if clear_env_var(env_file, "PLEX_CLAIM"):

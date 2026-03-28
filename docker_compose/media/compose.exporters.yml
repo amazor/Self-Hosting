@@ -1,7 +1,7 @@
 # Media VM — Prometheus exporters for pipeline visibility
 #
 # Provides metrics for D04 Media Pipeline dashboard.
-# Enable via ENABLE_EXPORTERS=1 in .env (default: 0; .env.example sets 1).
+# Enable via ENABLE_EXPORTERS=1 in .env (default: 1).
 #
 # Services:
 #   - scraparr: Prometheus exporter for Sonarr, Radarr, Prowlarr, Bazarr

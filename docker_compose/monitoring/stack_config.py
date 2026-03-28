@@ -36,7 +36,9 @@ REQUIRED_VARS = [
     "GRAFANA_ADMIN_PASSWORD",
 ]
 
-COMPOSE_OVERLAYS: list[tuple[str, str, str, str]] = []
+COMPOSE_OVERLAYS: list[tuple[str, str, str, str]] = [
+    ("ENABLE_OBSERVABILITY", "compose.observability.yml", "1", "Observability"),
+]
 
 # Container image UIDs
 _PROMETHEUS_UID = 65534
