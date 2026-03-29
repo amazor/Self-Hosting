@@ -242,7 +242,7 @@ def ensure_nfs_mount(
     fstab_spec = f"{host}:{export}"
     fstab_line = (
         f"{fstab_spec}\t{mount_point}\tnfs\t"
-        f"nofail,_netdev,x-systemd.automount,timeout=10,vers=3,{rw}\t0\t0"
+        f"nofail,_netdev,vers=3,{rw}\t0\t0"
     )
 
     fstab = Path("/etc/fstab")
