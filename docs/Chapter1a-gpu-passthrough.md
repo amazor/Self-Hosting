@@ -279,6 +279,19 @@ qm set 230 -hostpci0 0000:00:02.0,pcie=1,rombar=0
 - This is rare for `00:02.0` on Intel platforms but can happen with unusual BIOS configurations.
 - An ACS override patch exists but carries security tradeoffs. Try updating the BIOS first.
 
+**`/dev/dri` missing inside the VM even though passthrough looks correct?**
+- Check `lspci | grep VGA` **inside the VM**. If the GPU appears (e.g. `Intel Corporation Raptor Lake-P [Iris Xe Graphics]`) but `/dev/dri/` is missing, the `i915` kernel driver is not loading.
+- The most common cause: **cloud kernels** (e.g. `linux-image-*-cloud-amd64`) ship without GPU drivers like `i915`. Cloud kernels are stripped for virtual machines and assume no GPU access. Check with `uname -r` — if the kernel name contains `cloud`, that's the problem.
+- **Fix:** Install the generic kernel and remove the cloud one:
+  ```bash
+  sudo apt install -y linux-image-amd64
+  sudo apt remove --purge linux-image-cloud-amd64 linux-image-*-cloud-amd64
+  sudo update-grub
+  sudo reboot
+  ```
+  After reboot, `uname -r` should no longer say `cloud`, and `/dev/dri/card0` + `/dev/dri/renderD128` should appear.
+- If `lspci` **does not** show a VGA device at all, the passthrough itself is not working — re-check IOMMU, VFIO, and the VM's `hostpci0` configuration above.
+
 **Want to temporarily reclaim host video? (Emergency local CLI access)**
 
 After blacklisting `i915`, the HDMI port goes dark permanently — but you can get a working CLI back for a single boot session without undoing anything. This is useful if SSH and the web UI are both unreachable.

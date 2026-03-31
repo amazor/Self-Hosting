@@ -273,6 +273,18 @@ Inside the Accelerated VM:
 > Accelerated VM is booted, complete these steps **inside the VM** before running `bootstrap.py`
 > or `deploy.py`. The Docker containers depend on `/dev/dri` being present and functional.
 
+**0. Proxmox VM settings — CPU type and kernel:**
+
+Two VM-level settings are required before GPU passthrough and hardware workloads will function:
+
+- **CPU type must be `host`.** The default Proxmox CPU type (`kvm64` / `qemu64`) hides modern instruction sets. Immich's machine-learning container requires x86_v2 instructions (SSE4.2, POPCNT, etc.) — it will crash on startup with a NumPy error like `RuntimeError: NumPy was built with baseline optimizations: (X86_V2) but your machine doesn't support: (X86_V2)` if the CPU type is not `host`. Set it on the Proxmox host:
+  ```bash
+  qm set 230 -cpu host
+  ```
+  Or in the web UI: VM → Hardware → Processor → Type → `host`.
+
+- **The VM must run a generic kernel, not a cloud kernel.** Cloud kernels (`linux-image-*-cloud-amd64`) do not include the `i915` GPU driver, so `/dev/dri` will never appear even with correct passthrough. See [Chapter 1A troubleshooting](Chapter1a-gpu-passthrough.md#troubleshooting) for the fix.
+
 **1. Verify the GPU device files exist:**
 
 ```bash

@@ -1120,7 +1120,6 @@ def _setup_plex_connection(
         "useSsl": False,
         "authToken": plex_token,
         "updateLibrary": True,
-        "signIn": False,
     }
     for field in schema.get("fields", []):
         name = field.get("name", "")

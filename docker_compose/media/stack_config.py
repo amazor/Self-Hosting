@@ -248,7 +248,13 @@ def _seed_qbittorrent_config(
 
     conf_dir.mkdir(parents=True, exist_ok=True)
     conf_file.write_text(
-        f'[LegalNotice]\nAccepted=true\n\n[Preferences]\n'
+        f'[LegalNotice]\nAccepted=true\n\n'
+        f'[BitTorrent]\n'
+        f'Session\\DefaultSavePath=/data/downloads/qbittorrent/\n'
+        f'Session\\TempPath=/data/downloads/qbittorrent/incomplete/\n'
+        f'Session\\TempPathEnabled=true\n'
+        f'Session\\DisableAutoTMMByDefault=false\n\n'
+        f'[Preferences]\n'
         f'WebUI\\Username={username}\n'
         f'WebUI\\Password_PBKDF2="{password_hash}"\n'
     )

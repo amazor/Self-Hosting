@@ -130,18 +130,35 @@ Fill in this table as you boot each VM — you'll need every IP for the `.env` f
 If using hardware transcoding, complete this **before** deploying the accelerated stack.
 
 1. **Proxmox host** — enable IOMMU and VFIO, blacklist `i915` and `snd_hda_intel`. Full steps: [Chapter 1A (GPU passthrough)](Chapter1a-gpu-passthrough.md).
-2. Assign the GPU to VM 230:
+2. Assign the GPU to VM 230 and set CPU type to `host`:
 
 ```bash
-qm set 230 -hostpci0 0000:00:02.0,rombar=0
+qm set 230 -hostpci0 0000:00:02.0,pcie=1,rombar=0
+qm set 230 -cpu host
 ```
 
-3. **Inside the accelerated VM** — install VA-API driver and verify:
+   - **`pcie=1`** is required for q35 machines.
+   - **`cpu host`** exposes modern instruction sets (x86_v2) — Immich ML will crash without it.
+
+3. **Inside the accelerated VM** — ensure you are running a **generic kernel** (not a cloud kernel):
+
+```bash
+uname -r   # must NOT contain "cloud"
+```
+
+   Cloud kernels do not include the `i915` GPU driver, so `/dev/dri` will never appear. If your kernel says `cloud`, fix it:
+   ```bash
+   sudo apt install -y linux-image-amd64
+   sudo apt remove --purge linux-image-cloud-amd64 linux-image-*-cloud-amd64
+   sudo update-grub && sudo reboot
+   ```
+
+4. **Install VA-API driver and verify:**
 
 ```bash
 sudo apt install -y intel-media-va-driver vainfo
 vainfo
-ls /dev/dri
+ls /dev/dri   # should show card0 and renderD128
 ```
 
 ---
@@ -319,6 +336,18 @@ sudo mount -t nfs <NAS_IP>:/volume1/photos /mnt/photos/library
 sudo mkdir -p /mnt/media/library /mnt/photos/library
 sudo chown -R 1000:1000 /mnt/media /mnt/photos
 ```
+
+### NFS troubleshooting (Synology)
+
+Bootstrap writes fstab entries with `vers=3` (NFS v3). If NFS mounts fail:
+
+- **Synology NFS must be enabled globally:** Control Panel → File Services → NFS → "Enable NFS service."
+- **Each shared folder needs an NFS permission rule:** Shared Folders → select the folder → Edit → NFS Permissions → Create. Set Hostname/IP to your subnet (e.g. `192.168.1.0/24`), Privilege: Read/Write, Squash: Map all users to admin, Security: sys. Check "Enable asynchronous" and "Allow users to access mounted subfolders."
+- **NFS v4 unsupported:** Many Synology models default to NFS v3 only. If `mount` hangs or returns "Protocol not supported," `vers=3` is already set in bootstrap's fstab entries. For manual mounts, always pass `-o vers=3`.
+- **Test connectivity manually:**
+  ```bash
+  sudo mount -v -t nfs -o vers=3 <NAS_IP>:/volume1/<share> /mnt/test
+  ```
 
 ---
 
