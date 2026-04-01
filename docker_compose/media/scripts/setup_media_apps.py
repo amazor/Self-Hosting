@@ -203,7 +203,15 @@ def _api(url: str, headers: dict, *, method: str = "GET",
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read()
             return json.loads(raw) if raw else {}
-    except (urllib.error.URLError, urllib.error.HTTPError, OSError, json.JSONDecodeError) as exc:
+    except urllib.error.HTTPError as exc:
+        detail = ""
+        try:
+            detail = exc.read().decode("utf-8", errors="replace")
+        except Exception:
+            pass
+        log.debug("API %s %s → HTTP %s: %s", method, url, exc.code, detail)
+        return None
+    except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
         log.debug("API %s %s → %s", method, url, exc)
         return None
 
@@ -1094,39 +1102,23 @@ def _setup_plex_connection(
                 log.info("%s Plex notification connection already configured.", app_name)
                 return
 
-    schemas = _api(f"{url}/schema", headers)
-    if not schemas:
-        log.warning("Could not fetch %s notification schemas.", app_name)
-        return
-
-    schema = None
-    for s in schemas:
-        if s.get("implementation") == "PlexServer":
-            schema = dict(s)
-            break
-    if schema is None:
-        log.warning("PlexServer notification schema not found in %s.", app_name)
-        return
-
-    schema["name"] = "Plex"
-    schema["onDownload"] = True
-    schema["onUpgrade"] = True
-    schema.pop("id", None)
-    schema.pop("presets", None)
-
-    field_values = {
-        "host": plex_host,
-        "port": 32400,
-        "useSsl": False,
-        "authToken": plex_token,
-        "updateLibrary": True,
+    payload = {
+        "implementation": "PlexServer",
+        "configContract": "PlexServerSettings",
+        "name": "Plex",
+        "onDownload": True,
+        "onUpgrade": True,
+        "fields": [
+            {"name": "host", "value": plex_host},
+            {"name": "port", "value": 32400},
+            {"name": "useSsl", "value": False},
+            {"name": "authToken", "value": plex_token},
+            {"name": "updateLibrary", "value": True},
+            {"name": "signIn", "value": "startOAuth"},
+        ],
     }
-    for field in schema.get("fields", []):
-        name = field.get("name", "")
-        if name in field_values:
-            field["value"] = field_values[name]
 
-    result = _api(url, headers, method="POST", data=schema)
+    result = _api(url, headers, method="POST", data=payload)
     if result and result.get("id"):
         log.info("%s Plex notification connection added (host=%s:32400).", app_name, plex_host)
     else:
