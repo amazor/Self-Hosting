@@ -52,5 +52,6 @@ Apps/services to add once the current implementation is done:
 
 - **Fail2ban** — Host/access-plane protection (e.g. rate limiting whoami, SSH, Caddy logs); likely on `core` or a dedicated security layer.
 - **PaperlessNGX** — Document management (scan, OCR, tag, search); planned for the `apps` VM.
+- **qui** — Enhanced qBittorrent web UI (single binary, by autobrr team) for the `media` VM. Lower priority — adds tracker reannounce, automation rules, orphan scan, cross-seeding, OIDC (Authentik), and a reverse proxy so *arr apps don't need direct qBit credentials. Nice-to-have once cleanuperr covers the critical stalled-torrent loop.
 
 When editing any part of this project, keep these principles and structure in mind.

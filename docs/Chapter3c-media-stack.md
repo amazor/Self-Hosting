@@ -287,8 +287,8 @@ Optional deploy flags:
 **What's already automated:** After a successful `deploy.py media` run, the following are configured automatically — no manual UI work needed:
 
 - **qBittorrent** — WebUI password pre-seeded by bootstrap; save path, auto TMM, categories (`tv`, `movies`, `anime`), and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP-only protocol, encryption, seeding limits disabled, UPnP off, CSRF off) via `setup_media_apps.py`
-- **Prowlarr** — 13 public torrent indexers (1337x, TPB, EZTV, KAT, LimeTorrents, YTS, Torrent Downloads, Knaben, Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`
-- **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming via `setup_media_apps.py`; quality profiles (including anime), custom formats, and quality settings via Recyclarr (when enabled)
+- **Prowlarr** — 13 public torrent indexers (1337x, TPB, EZTV, KAT, LimeTorrents, YTS, Torrent Downloads, Knaben, Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`. Nyaa.si is configured with the "Anime - English-translated" category filter so results are pre-filtered for English subs at the indexer level
+- **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming (including [anime naming format](https://trash-guides.info/Sonarr/Sonarr-recommended-naming-scheme/) with audio language and 10-bit tokens) via `setup_media_apps.py`; quality profiles (including anime), custom formats, and quality settings via Recyclarr (when enabled)
 - **Prowlarr → Sonarr/Radarr app sync** via `setup_media_apps.py`
 - **Plex library refresh connection** — Sonarr and Radarr are wired to call Plex's API after every import, so the library updates immediately. Requires `PLEX_HOST` and `PLEX_TOKEN` in `.env`. If absent at deploy time, add them and re-run `python3 setup_media_apps.py`
 - **Recyclarr** — initial sync triggered on first deploy (via `docker compose exec`), then runs on its cron schedule (`RECYCLARR_CRON`, default `@weekly`)
@@ -300,7 +300,8 @@ Recommended post-deploy checks:
 3. Verify Sonarr/Radarr root folders and download clients are present (should be set by `setup_media_apps.py`).
 4. Verify Prowlarr indexers and app sync (should be configured by `setup_media_apps.py`).
 5. If enabled, configure Cleanuparr connections in its UI (`http://<media-vm-ip>:11011`) — deploy prints the exact values to paste. See [Cleanuparr setup](#cleanuparr-optional).
-6. If enabled, configure SABnzbd and Bazarr (these are not yet covered by automation).
+6. If enabled, configure SABnzbd in its UI (not yet covered by automation).
+7. If enabled, verify Bazarr shows Sonarr/Radarr connected and the language profile assigned (automated by `setup_media_apps.py`).
 
 ---
 
@@ -397,17 +398,29 @@ Reference: [TRaSH Prowlarr](https://trash-guides.info/Prowlarr/)
 
 ### Bazarr (optional)
 
-Reference: [TRaSH Bazarr](https://trash-guides.info/Bazarr/)
+Reference: [TRaSH Bazarr](https://trash-guides.info/Bazarr/), [TRaSH Suggested Scoring](https://trash-guides.info/Bazarr/Bazarr-suggested-scoring/)
 
-**Note:** Bazarr is not managed by `setup_media_apps.py` or Recyclarr; configure it in the UI.
+**Automated by deploy** — when `ENABLE_BAZARR=1`, `setup_media_apps.py` configures Bazarr via its API:
 
-1. Open `http://<media-vm-ip>:6767`.
-2. Configure Sonarr and Radarr connections:
-   - `http://sonarr:8989`
-   - `http://radarr:7878`
-3. Confirm library paths map to `/data/library/...`.
-4. Configure preferred subtitle languages and scoring.
-5. Verify by running subtitle search for one existing item.
+- **Sonarr/Radarr connections** — `http://sonarr:8989` and `http://radarr:7878` with API keys from `config.xml`
+- **Language profile** — "English + Hebrew" profile assigned to all existing and new series/movies
+- **Minimum scores** — 90 (series) and 80 (movies) per TRaSH suggested scoring
+- **Subtitle sync** — automatic synchronization with thresholds at 96 (series) / 86 (movies)
+- **Adaptive searching** — slows down after 1 week of no results, spaces searches 4 weeks apart
+- **Subtitle upgrades** — enabled with a 7-day upgrade window
+- **Providers** — five zero-credential providers: Gestdown, Wizdom (Hebrew), Podnapisi, YIFY Subtitles, Animetosho
+
+After deploy, verify by checking that Bazarr's UI (`http://<media-vm-ip>:6767`) shows Sonarr/Radarr connected and the language profile assigned.
+
+**Additional providers (require accounts):** if the default zero-credential providers are insufficient, you can enable these manually in the Bazarr UI (Settings > Providers):
+
+| Provider | Credentials | Coverage | Notes |
+|----------|-------------|----------|-------|
+| OpenSubtitles.com | Free account (username + password) | Largest DB, English + Hebrew + 180 languages | 20 downloads/day free; $20/yr VIP for 1000/day |
+| Ktuvit | Free account + hashed password | Hebrew-specific | Requires generating hashed password via external script |
+| Addic7ed | Free account (username + password) | English TV | Rate limited; Gestdown is a better free alternative |
+| SubSource | Free API key (from profile page) | Multi-language | Newer provider |
+| Subscene | Free account | Multi-language, good non-English | May require anti-captcha |
 
 ### Recyclarr
 
@@ -424,10 +437,10 @@ Reference: [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/)
 
 **What's automated by deploy** (see also the "Automated by deploy" notes in each app section above):
 
-- **`setup_media_apps.py`** (always) — Prowlarr indexers + FlareSolverr proxy, qBittorrent preferences + categories, Sonarr/Radarr root folders + qBittorrent download clients + TRaSH naming, Prowlarr app sync to Sonarr/Radarr
-- **Recyclarr** (when enabled) — TRaSH quality profiles for TV (WEB-1080p) and movies (HD Bluray + WEB), **plus anime** (Remux-1080p), quality definitions, custom formats, and Golden Rule HD scoring. Initial sync runs on first deploy; subsequent syncs follow the cron schedule.
+- **`setup_media_apps.py`** (always) — Prowlarr indexers + FlareSolverr proxy, qBittorrent preferences + categories, Sonarr/Radarr root folders + qBittorrent download clients + TRaSH naming, Prowlarr app sync to Sonarr/Radarr, Bazarr connections + language profile + providers + scoring (when `ENABLE_BAZARR=1`)
+- **Recyclarr** (when enabled) — TRaSH quality profiles for TV (WEB-1080p) and movies (HD Bluray + WEB), **plus anime** (Remux-1080p with `[Streaming Services] Asian` CF group for Crunchyroll/Funimation/HIDIVE scoring), quality definitions, custom formats, and Golden Rule HD scoring. Initial sync runs on first deploy; subsequent syncs follow the cron schedule.
 
-Because deploy automates root folders, download clients, naming, quality profiles, and custom formats, you can skip the corresponding manual UI steps in Sonarr, Radarr, and Prowlarr. qBittorrent preferences and categories are also automated. SABnzbd, Bazarr, and Cleanuparr still require manual UI configuration (Cleanuparr has no public API; deploy prints the connection details to paste into its UI).
+Because deploy automates root folders, download clients, naming, quality profiles, custom formats, and Bazarr subtitle configuration, you can skip the corresponding manual UI steps in Sonarr, Radarr, Prowlarr, and Bazarr. qBittorrent preferences and categories are also automated. SABnzbd and Cleanuparr still require manual UI configuration (Cleanuparr has no public API; deploy prints the connection details to paste into its UI).
 
 **Example configs:** In `docker_compose/media/` you will find `recyclarr.example.yml` and `recyclarr.secrets.example.yml`. Bootstrap copies these into `config/recyclarr/` **only when `ENABLE_RECYCLARR=1`** and only if the target does not already exist. **API keys are auto-populated** from the pre-seeded *arr `config.xml` files — no manual key editing is needed.
 

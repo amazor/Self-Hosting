@@ -48,6 +48,9 @@ sonarr:
       - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
         reset_unmatched_scores:
           enabled: true
+    custom_format_groups:
+      add:
+        - trash_id: 35fb4585dcd9e2a5ac732e4309f5a45a  # [Streaming Services] Asian
 
 radarr:
   # --- Movies (UHD Bluray + WEB) — grab 1080p now, upgrade to 4K when available ---

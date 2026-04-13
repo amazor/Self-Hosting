@@ -55,7 +55,8 @@ PROWLARR_INDEXERS = [
     {"name": "Torrent Downloads", "definitionName": "torrentdownloads"},
     {"name": "Knaben", "definitionName": "Knaben"},
     # Anime
-    {"name": "Nyaa.si", "definitionName": "nyaasi"},
+    {"name": "Nyaa.si", "definitionName": "nyaasi",
+     "fields": {"animeCategories": [5070]}},  # 5070 = Anime - English-translated
     {"name": "SubsPlease", "definitionName": "SubsPlease"},
     {"name": "Tokyo Toshokan", "definitionName": "tokyotosho"},
     {"name": "Shana Project", "definitionName": "shanaproject"},
@@ -132,10 +133,13 @@ SONARR_NAMING: dict[str, object] = {
     ),
     "animeEpisodeFormat": (
         "{Series TitleYear} - S{season:00}E{episode:00} - "
-        "{absolute:000} - {Episode CleanTitle} [{Custom Formats}"
-        "{Quality Full}]{[MediaInfo VideoDynamicRangeType]}"
+        "{absolute:000} - {Episode CleanTitle:90} "
+        "{[Custom Formats]}{[Quality Full]}"
         "{[Mediainfo AudioCodec}{ Mediainfo AudioChannels]}"
-        "{[MediaInfo VideoCodec]}{-Release Group}"
+        "{MediaInfo AudioLanguages}"
+        "{[MediaInfo VideoDynamicRangeType]}"
+        "[{Mediainfo VideoCodec }{MediaInfo VideoBitDepth}bit]"
+        "{-Release Group}"
     ),
     "seriesFolderFormat": "{Series TitleYear} [tvdbid-{TvdbId}]",
     "seasonFolderFormat": "Season {season:00}",
@@ -176,6 +180,15 @@ MEDIA_MANAGEMENT: dict[str, object] = {
 TORRENT_MIN_SEEDERS_DEFAULT = 5
 PROWLARR_SYNC_WAIT_S = 30
 
+# ---------------------------------------------------------------------------
+# Bazarr — subtitle automation (zero-credential providers only).
+# Ref: https://trash-guides.info/Bazarr/  https://wiki.bazarr.media/
+# ---------------------------------------------------------------------------
+
+BAZARR_PROFILE_NAME = "English + Hebrew"
+BAZARR_LANGUAGES = ["en", "he"]
+BAZARR_PROVIDERS = ["gestdown", "wizdom", "podnapisi", "yifysubtitles", "animetosho"]
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -192,6 +205,56 @@ def _read_api_key(config_base: Path, app: str) -> str | None:
         elem = tree.find("ApiKey")
         return elem.text.strip() if elem is not None and elem.text else None
     except ElementTree.ParseError:
+        return None
+
+
+def _read_bazarr_api_key(config_base: Path) -> str | None:
+    """Read Bazarr API key from its config.yaml (simple line parse, no PyYAML)."""
+    cfg = config_base / "bazarr" / "config" / "config.yaml"
+    if not cfg.is_file():
+        return None
+    in_auth = False
+    for line in cfg.read_text().splitlines():
+        stripped = line.strip()
+        if stripped == "auth:":
+            in_auth = True
+        elif in_auth and stripped.startswith("apikey:"):
+            return stripped.split(":", 1)[1].strip().strip("'\"")
+        elif not line.startswith((" ", "\t")) and stripped:
+            in_auth = False
+    return None
+
+
+def _bazarr_form_post(url: str, apikey: str,
+                      form: dict[str, str | list[str]]) -> int | None:
+    """POST form-encoded data to Bazarr's API. Returns HTTP status or None."""
+    full_url = f"{url}?apikey={apikey}"
+    body = urllib.parse.urlencode(form, doseq=True).encode()
+    req = urllib.request.Request(
+        full_url, data=body, method="POST",
+        headers={"Content-Type": "application/x-www-form-urlencoded"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return resp.status
+    except urllib.error.HTTPError as exc:
+        log.debug("Bazarr POST %s → HTTP %s", url, exc.code)
+        return exc.code
+    except (urllib.error.URLError, OSError) as exc:
+        log.debug("Bazarr POST %s → %s", url, exc)
+        return None
+
+
+def _bazarr_get(url: str, apikey: str) -> dict | list | None:
+    """GET JSON from Bazarr's API."""
+    full_url = f"{url}?apikey={apikey}"
+    req = urllib.request.Request(full_url)
+    try:
+        with urllib.request.urlopen(req, timeout=30) as resp:
+            return json.loads(resp.read())
+    except (urllib.error.HTTPError, urllib.error.URLError, OSError,
+            json.JSONDecodeError) as exc:
+        log.debug("Bazarr GET %s → %s", url, exc)
         return None
 
 
@@ -335,6 +398,13 @@ def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> None:
 
         for key in ("id", "presets"):
             schema.pop(key, None)
+
+        field_overrides = idx_def.get("fields", {})
+        if field_overrides:
+            for field in schema.get("fields", []):
+                name = field.get("name", "")
+                if name in field_overrides:
+                    field["value"] = field_overrides[name]
 
         result = _api(f"{prowlarr_url}/api/v1/indexer", headers, method="POST", data=schema)
         if result and result.get("id"):
@@ -1225,6 +1295,165 @@ def _print_cleanuparr_instructions(config_base: Path,
 
 
 # ---------------------------------------------------------------------------
+# Bazarr setup (subtitles)
+# ---------------------------------------------------------------------------
+
+
+def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
+                 radarr_key: str | None, config_base: Path) -> None:
+    """Configure Bazarr: Sonarr/Radarr connections, language profile,
+    providers, subtitle settings, and mass-assign profile.
+
+    Uses Bazarr's form-encoded settings API.
+    Ref: https://trash-guides.info/Bazarr/  https://wiki.bazarr.media/
+    """
+    # 1. Wait for Bazarr (ping is unauthenticated)
+    ping_url = f"{bazarr_url}/api/system/ping"
+    deadline = time.monotonic() + HEALTH_TIMEOUT_S
+    ready = False
+    while time.monotonic() < deadline:
+        try:
+            req = urllib.request.Request(ping_url)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                if resp.status == 200:
+                    ready = True
+                    break
+        except (urllib.error.URLError, OSError):
+            pass
+        time.sleep(HEALTH_POLL_S)
+    if not ready:
+        log.warning("Bazarr not ready within %ds; skipping setup.", HEALTH_TIMEOUT_S)
+        return
+
+    # 2. Read API key
+    apikey = _read_bazarr_api_key(config_base)
+    if not apikey:
+        log.warning("Bazarr API key not found in config.yaml; skipping setup.")
+        return
+
+    settings_url = f"{bazarr_url}/api/system/settings"
+
+    # 3. Check current state
+    current = _bazarr_get(settings_url, apikey) or {}
+    sonarr_configured = current.get("sonarr", {}).get("apikey", "")
+    radarr_configured = current.get("radarr", {}).get("apikey", "")
+
+    # 4–5. Sonarr + Radarr connections, minimum scores, subtitle/sync settings
+    form: dict[str, str | list[str]] = {}
+
+    if sonarr_key and sonarr_configured != sonarr_key:
+        form.update({
+            "settings-general-use_sonarr": "true",
+            "settings-sonarr-ip": "sonarr",
+            "settings-sonarr-port": "8989",
+            "settings-sonarr-base_url": "",
+            "settings-sonarr-ssl": "false",
+            "settings-sonarr-apikey": sonarr_key,
+        })
+    if radarr_key and radarr_configured != radarr_key:
+        form.update({
+            "settings-general-use_radarr": "true",
+            "settings-radarr-ip": "radarr",
+            "settings-radarr-port": "7878",
+            "settings-radarr-base_url": "",
+            "settings-radarr-ssl": "false",
+            "settings-radarr-apikey": radarr_key,
+        })
+
+    # Scoring (TRaSH recommended)
+    form["settings-general-minimum_score"] = "90"
+    form["settings-general-minimum_score_movie"] = "80"
+
+    # Subtitle settings
+    form.update({
+        "settings-general-subfolder": "current",
+        "settings-general-upgrade_subs": "true",
+        "settings-general-days_to_upgrade_subs": "7",
+        "settings-general-upgrade_manual": "true",
+        "settings-general-adaptive_searching": "true",
+        "settings-general-adaptive_searching_delay": "1w",
+        "settings-general-adaptive_searching_delta": "4w",
+    })
+
+    # Subsync (TRaSH recommended thresholds)
+    form.update({
+        "settings-subsync-use_subsync": "true",
+        "settings-subsync-use_subsync_threshold": "true",
+        "settings-subsync-subsync_threshold": "96",
+        "settings-subsync-use_subsync_movie_threshold": "true",
+        "settings-subsync-subsync_movie_threshold": "86",
+    })
+
+    # Providers (zero-credential only)
+    form["settings-general-enabled_providers"] = BAZARR_PROVIDERS
+
+    # 6. Enable subtitle languages
+    form["languages-enabled"] = BAZARR_LANGUAGES
+
+    # 7. Language profile
+    profile = [{
+        "profileId": 1,
+        "name": BAZARR_PROFILE_NAME,
+        "items": [
+            {"id": i + 1, "language": lang,
+             "hi": False, "forced": False, "audio_exclude": False}
+            for i, lang in enumerate(BAZARR_LANGUAGES)
+        ],
+        "cutoff": None,
+        "mustContain": [],
+        "mustNotContain": [],
+        "originalFormat": None,
+    }]
+    form["languages-profiles"] = json.dumps(profile)
+
+    # 8. POST all settings in one call
+    status = _bazarr_form_post(settings_url, apikey, form)
+    if status == 204:
+        log.info("Bazarr configured (connections, languages, providers, scoring).")
+    else:
+        log.warning("Bazarr settings POST returned %s; check config manually.", status)
+        return
+
+    # 9. Mass-assign language profile to all existing series/movies
+    profile_id = 1
+    _bazarr_assign_profiles(bazarr_url, apikey, profile_id)
+
+
+def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
+                            profile_id: int) -> None:
+    """Assign a language profile to all series and movies missing one."""
+    for kind, id_field in [("series", "sonarrSeriesId"),
+                           ("movies", "radarrId")]:
+        items = _bazarr_get(
+            f"{bazarr_url}/api/{kind}?start=0&length=-1", apikey,
+        )
+        if not items:
+            continue
+
+        data = items.get("data", []) if isinstance(items, dict) else items
+        needs_update = [
+            item[id_field] for item in data
+            if item.get("profileId") != profile_id and id_field in item
+        ]
+        if not needs_update:
+            log.info("Bazarr: all %s already have profile assigned.", kind)
+            continue
+
+        post_key = "seriesid" if kind == "series" else "radarrid"
+        form: dict[str, list[str]] = {
+            post_key: [str(i) for i in needs_update],
+            "profileid": [str(profile_id)] * len(needs_update),
+        }
+        status = _bazarr_form_post(
+            f"{bazarr_url}/api/{kind}", apikey, form,
+        )
+        if status == 204:
+            log.info("Bazarr: assigned profile to %d %s.", len(needs_update), kind)
+        else:
+            log.warning("Bazarr: profile assign for %s returned %s.", kind, status)
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -1304,6 +1533,17 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
             "Skipping Plex notification setup (PLEX_HOST and PLEX_TOKEN not set in .env).\n"
             "Set both in .env and re-run: python3 setup_media_apps.py"
         )
+
+    if env.get("ENABLE_BAZARR", "0") == "1":
+        bazarr_key = _read_bazarr_api_key(config_base)
+        if not bazarr_key:
+            log.warning("Bazarr enabled but API key not found; skipping Bazarr setup.")
+        elif not sonarr_key or not radarr_key:
+            log.warning("Bazarr enabled but missing Sonarr/Radarr API key(s); skipping Bazarr setup.")
+        else:
+            setup_bazarr(
+                "http://localhost:6767", sonarr_key, radarr_key, config_base,
+            )
 
     if env.get("ENABLE_CLEANUPARR", "0") == "1":
         _print_cleanuparr_instructions(config_base, env)

@@ -93,7 +93,7 @@ These tools reduce configuration drift and operational mess. Recyclarr (and alte
 | Bazarr | Subtitle automation |
 | ntfy | Lightweight completion notifications |
 
-These add redundancy and quality-of-life improvements. Bazarr uses the **same path root** as Sonarr and Radarr so it can see library paths and write subtitle files (e.g. `.srt`) next to media; that aligns with [TRaSH Bazarr](https://trash-guides.info/Bazarr/) (“paths must match the same root”). Configuration details are in [Chapter 3c](Chapter3c-media-stack.md).
+These add redundancy and quality-of-life improvements. Bazarr uses the **same path root** as Sonarr and Radarr so it can see library paths and write subtitle files (e.g. `.srt`) next to media; that aligns with [TRaSH Bazarr](https://trash-guides.info/Bazarr/) (“paths must match the same root”). When enabled (`ENABLE_BAZARR=1`), deploy configures Bazarr automatically via its API — Sonarr/Radarr connections, language profile (English + Hebrew), subtitle providers, TRaSH scoring, and adaptive searching. Configuration details are in [Chapter 3c](Chapter3c-media-stack.md).
 
 ---
 
@@ -361,6 +361,13 @@ Sonarr and Radarr must use a naming scheme that includes **non-recoverable infor
 
 **Quality settings**  
 TRaSH recommends configuring quality settings (file size), quality profiles, and custom formats in a defined order so low-quality or fake releases are avoided and the right codec/resolution choices are enforced. That configuration is covered in [Chapter 3c](Chapter3c-media-stack.md); the reasoning for the “Golden Rule” is below.
+
+**Anime and English subtitles**  
+The anime pipeline uses a three-layer strategy to ensure English-subtitled releases:
+
+1. **Indexer filtering** — Nyaa.si is configured with the “Anime - English-translated” category so raw Japanese-only releases are filtered out before Sonarr sees them. Ref: [TRaSH Anime FAQ](https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles-anime/#faq).
+2. **Custom Format scoring** — Recyclarr syncs the TRaSH `[Anime] Remux-1080p` profile with `Anime Raws` at −10000 (blocked) and `Dubs Only` at −10000, plus the `[Streaming Services] Asian` CF group to correctly score Crunchyroll/Funimation/HIDIVE web releases.
+3. **Naming** — The anime naming format includes `{MediaInfo AudioLanguages}` (shows `[JA]`) and `{MediaInfo VideoBitDepth}bit` (shows `10bit`) so you can visually confirm Japanese audio and 10-bit encoding in filenames.
 
 ---
 

@@ -258,6 +258,14 @@ def _all_packages_installed(packages: list[str]) -> bool:
     return True
 
 
+def _has_nonfree_component(line: str) -> bool:
+    """Check if a line contains 'non-free' as a standalone apt component.
+
+    Must not match 'non-free-firmware' (a different Debian component).
+    """
+    return "non-free" in line.split() or " non-free " in f" {line} "
+
+
 def _ensure_nonfree_repo(tracker: StepTracker) -> bool:
     """Ensure the Debian non-free component is available for apt.
 
@@ -269,17 +277,18 @@ def _ensure_nonfree_repo(tracker: StepTracker) -> bool:
     if sources_d.is_dir():
         for src_file in sources_d.glob("*.sources"):
             content = src_file.read_text()
-            if "non-free" in content:
-                tracker.detail("non-free component already present in DEB822 sources")
-                return False
+            for src_line in content.splitlines():
+                if src_line.startswith("Components:") and _has_nonfree_component(src_line):
+                    tracker.detail("non-free component already present in DEB822 sources")
+                    return False
             if "Components:" in content and "main" in content:
                 new_lines: list[str] = []
                 modified = False
-                for line in content.splitlines():
-                    if line.startswith("Components:") and "non-free" not in line:
-                        line = line.rstrip() + " non-free non-free-firmware"
+                for src_line in content.splitlines():
+                    if src_line.startswith("Components:") and not _has_nonfree_component(src_line):
+                        src_line = src_line.rstrip() + " non-free non-free-firmware"
                         modified = True
-                    new_lines.append(line)
+                    new_lines.append(src_line)
                 if modified:
                     src_file.write_text("\n".join(new_lines) + "\n")
                     tracker.detail(f"Added non-free to {src_file.name}")
@@ -292,7 +301,7 @@ def _ensure_nonfree_repo(tracker: StepTracker) -> bool:
         return False
 
     content = sources_list.read_text()
-    if "non-free" in content:
+    if any(_has_nonfree_component(ln) for ln in content.splitlines()):
         tracker.detail("non-free component already present in sources.list")
         return False
 
@@ -304,7 +313,7 @@ def _ensure_nonfree_repo(tracker: StepTracker) -> bool:
             not stripped.startswith("#")
             and stripped.startswith("deb ")
             and "main" in stripped
-            and "non-free" not in stripped
+            and not _has_nonfree_component(stripped)
         ):
             line = line.rstrip() + " non-free non-free-firmware"
             modified = True

@@ -335,7 +335,7 @@ def _deploy_one(
     installed_dir: Path,
     default_file: Path,
     args: argparse.Namespace,
-) -> bool:
+) -> tuple[bool, list[str]]:
     sdir = _stack_dir(stack)
     env_file = sdir / ".env"
     link_path = real_home / stack
@@ -349,7 +349,7 @@ def _deploy_one(
     with tracker.step("Validating environment"):
         if not env_file.is_file():
             tracker.fail(f"No .env found for {stack}")
-            return False
+            return False, []
 
         errors = _validate_stack_env(stack, config)
         if errors:
@@ -358,7 +358,7 @@ def _deploy_one(
             else:
                 for msg in errors:
                     tracker.fail(msg)
-                return False
+                return False, []
         tracker.success("Environment validated")
 
     # Step 2: Bootstrap
@@ -370,7 +370,7 @@ def _deploy_one(
             verbose=args.verbose,
         ):
             tracker.fail("Bootstrap failed")
-            return False
+            return False, []
         tracker.success("Bootstrap complete")
 
     # Step 3: Symlinks and state
@@ -404,7 +404,7 @@ def _deploy_one(
         )
         if result.returncode != 0:
             tracker.fail("docker compose up failed")
-            return False
+            return False, []
         tracker.success("Stack started")
 
     # Step 5: Post-deploy hooks
@@ -416,14 +416,14 @@ def _deploy_one(
             config_base = resolve_config_base(config_base_str, sdir)
             config.post_deploy(env, config_base, tracker)
 
-    # Register post-deploy actions
-    for action in getattr(config, "POST_DEPLOY_ACTIONS", []):
-        tracker.add_action(action)
+    # Collect post-deploy actions to surface in the deploy summary
+    actions: list[str] = list(getattr(config, "POST_DEPLOY_ACTIONS", []))
+    actions.extend(tracker._actions)
 
     # Shell helpers
     _write_stack_functions(installed_dir, real_home, default_file)
 
-    return True
+    return True, actions
 
 
 # ---------------------------------------------------------------------------
@@ -431,7 +431,10 @@ def _deploy_one(
 # ---------------------------------------------------------------------------
 
 
-def _print_deploy_summary(stacks: list[str]) -> None:
+def _print_deploy_summary(
+    stacks: list[str],
+    all_actions: list[tuple[str, list[str]]] | None = None,
+) -> None:
     """Print a consolidated summary of deployed stacks and their overlays."""
     log.info("")
     log.info("--- Deploy summary ---")
@@ -456,6 +459,15 @@ def _print_deploy_summary(stacks: list[str]) -> None:
             log.info(f"    Enabled:  {', '.join(enabled)}")
         if disabled:
             log.info(f"    Disabled: {', '.join(disabled)}")
+
+    if all_actions:
+        log.info("")
+        log.info("\u26a0 Action required:")
+        for stack, actions in all_actions:
+            for action in actions:
+                for i, line in enumerate(action.splitlines()):
+                    prefix = f"  [{stack}] " if i == 0 else "    "
+                    log.info(f"{prefix}{line}")
 
     log.info("")
     log.info(
@@ -527,8 +539,9 @@ def main(argv: list[str] | None = None) -> None:
             raise SystemExit(1)
 
     deployed: list[str] = []
+    all_actions: list[tuple[str, list[str]]] = []
     for stack in stacks:
-        ok = _deploy_one(
+        ok, actions = _deploy_one(
             stack,
             configs[stack],
             real_user=real_user,
@@ -541,9 +554,11 @@ def main(argv: list[str] | None = None) -> None:
         if not ok:
             raise SystemExit(1)
         deployed.append(stack)
+        if actions:
+            all_actions.append((stack, actions))
 
     _ensure_shell_rc(real_user, real_home)
-    _print_deploy_summary(deployed)
+    _print_deploy_summary(deployed, all_actions)
 
 
 if __name__ == "__main__":
