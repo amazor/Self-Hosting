@@ -297,10 +297,19 @@ You should see `card0` and `renderD128`. If `/dev/dri/` is missing, passthrough 
 
 ```bash
 sudo apt update
-sudo apt install -y intel-media-va-driver vainfo
+sudo apt install -y firmware-intel-graphics intel-media-va-driver vainfo
 ```
 
 For 12th–14th gen Intel CPUs, `intel-media-va-driver` (the **iHD** backend) is the correct package. Do **not** use the older `i965-va-driver` — it does not support these generations.
+
+`firmware-intel-graphics` (from the `non-free-firmware` component) ships the binary blobs the `i915` driver needs to fully initialize the passed-through iGPU. Without it `/dev/dri` may appear but `vainfo`/QSV fail to initialize. You do **not** need the broad `firmware-linux` metapackage — it only adds firmware for hardware this VM doesn't have (AMD/NVIDIA GPUs, various NICs, etc.). The stack bootstrap (`_install_vaapi_packages`) installs this package automatically, so this manual step is mainly for verifying GPU access before deploying.
+
+> ### ⚠️ Reboot After a Fresh Firmware Install
+> If `firmware-intel-graphics` was **not** present when the system booted, the `i915`
+> driver already loaded without it — newly installed firmware is only picked up after the
+> driver reloads. **Reboot the VM** (`sudo reboot`) after installing it, then re-run
+> `vainfo` to confirm the full codec profile list. The stack bootstrap surfaces this same
+> reminder as an "Action required" item when it installs the firmware for the first time.
 
 **3. Verify VA-API is working:**
 

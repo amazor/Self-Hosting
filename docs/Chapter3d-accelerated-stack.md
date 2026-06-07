@@ -454,6 +454,19 @@ Once the stack is up, most Plex configuration is handled automatically by `setup
    - If `PLEX_TOKEN` was not set at deploy time, run `setup_accelerated_apps.py` manually after adding it to `.env`.  
    - Follow the [TRaSH Plex guide](https://trash-guides.info/Plex/) for client-side tuning not covered by the automation.
 
+   > ### ⚠️ Confirm the GPU Is Actually Used: Look for the `(hw)` Tag
+   > Enabling hardware transcoding in settings does **not** guarantee it works — if the
+   > driver or firmware isn't loaded, Plex silently falls back to CPU. To confirm: play a
+   > file that forces a transcode (e.g. lower the quality in a client), then open
+   > **Settings → Status → Now Playing** (or the **Dashboard**). The active stream should
+   > read **`Transcode (hw)`**. If it shows just **`Transcode`** without the `(hw)` tag,
+   > Plex is transcoding on the **CPU** — this causes a large CPU spike and video
+   > stuttering. Recheck that hardware transcoding is enabled, that
+   > `/dev/dri/renderD128` is accessible inside the container
+   > (`accelerated exec plex ls -l /dev/dri`), and that the GPU firmware is loaded
+   > (reboot the VM after installing `firmware-intel-graphics` — see
+   > [Chapter 2D — VM-Side GPU Prerequisites](Chapter2d-accelerated.md#vm-side-gpu-prerequisites)).
+
 3. **Connect Sonarr/Radarr → Plex (on the Media VM)**
    - Set `PLEX_HOST` and `PLEX_TOKEN` in `docker_compose/media/.env`.  
    - Run `setup_media_apps.py` on the Media VM (or redeploy media):

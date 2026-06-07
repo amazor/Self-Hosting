@@ -30,6 +30,9 @@ services:
       - TZ=${TZ:-Etc/UTC}
       # Optional: first-run claim token from plex.tv; leave empty after initial registration.
       - PLEX_CLAIM=${PLEX_CLAIM:-}
+      # Force the iHD (intel-media-driver) VA-API backend for 12th-14th gen Intel QSV.
+      # The linuxserver image auto-joins the render/video device groups, so no group_add needed.
+      - LIBVA_DRIVER_NAME=iHD
     volumes:
       - ${CONFIG_ROOT:-./config}/plex:/config
       # Read-only view of final media library from Media VM.

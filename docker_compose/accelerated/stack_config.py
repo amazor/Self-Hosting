@@ -57,6 +57,12 @@ POST_DEPLOY_ACTIONS = [
     "  2. Set Hardware Acceleration to 'Quick Sync' (Intel QSV) or 'VAAPI'\n"
     "  3. Optionally enable Hardware Decoding for end-to-end GPU acceleration\n"
     "  Ref: https://immich.app/docs/features/hardware-transcoding",
+    "Confirm Plex is transcoding on the GPU, not the CPU:\n"
+    "  Play a file that forces a transcode, then check Plex → Settings →\n"
+    "  Status → Now Playing (or the Dashboard). The stream should read\n"
+    "  'Transcode (hw)'. If it shows 'Transcode' WITHOUT the (hw) tag, Plex is\n"
+    "  using the CPU — expect high CPU load and stuttering. Recheck that\n"
+    "  hardware transcoding is enabled and the GPU firmware/driver is loaded.",
 ]
 
 
@@ -240,6 +246,9 @@ def _ensure_config_dirs(config_base: Path, tracker: StepTracker) -> None:
 # ---------------------------------------------------------------------------
 
 _VAAPI_PACKAGES = [
+    # Binary firmware the i915 driver needs to fully init the passed-through iGPU.
+    # Without it /dev/dri may appear but VA-API/QSV fails to initialize.
+    "firmware-intel-graphics",
     "intel-media-va-driver-non-free",
     "vainfo",
     "intel-gpu-tools",
@@ -334,6 +343,11 @@ def _install_vaapi_packages(
         tracker.success("VA-API ready")
         return
 
+    # Track whether GPU firmware is being installed for the first time. Newly
+    # installed firmware is not loaded until the i915 driver reloads (reboot),
+    # so we surface a reboot reminder below only when it was actually missing.
+    firmware_present_before = _all_packages_installed(["firmware-intel-graphics"])
+
     repo_changed = _ensure_nonfree_repo(tracker)
     if repo_changed:
         tracker.detail("Running apt-get update for new repo components...")
@@ -356,6 +370,11 @@ def _install_vaapi_packages(
         tracker.fail(msg)
         raise SystemExit(1)
 
+    firmware_newly_installed = (
+        not firmware_present_before
+        and _all_packages_installed(["firmware-intel-graphics"])
+    )
+
     # Verify GPU access via vainfo
     vainfo = subprocess.run(["vainfo"], capture_output=True, text=True)
     if vainfo.returncode == 0:
@@ -367,6 +386,15 @@ def _install_vaapi_packages(
             "VA-API packages installed but vainfo failed — "
             "GPU may not be passed through yet. "
             "Verify /dev/dri exists after configuring GPU passthrough."
+        )
+
+    if firmware_newly_installed:
+        tracker.add_action(
+            "Reboot the Accelerated VM so the i915 driver loads the newly installed\n"
+            "GPU firmware (firmware-intel-graphics). Freshly installed firmware is not\n"
+            "picked up until the driver reloads — until then Plex/Immich hardware\n"
+            "transcoding may silently fall back to CPU.\n"
+            "After reboot, verify with: vainfo"
         )
 
 
