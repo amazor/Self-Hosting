@@ -21,6 +21,10 @@ Desktop.ini
 *.key
 secrets/
 
+# --- Claude Code local machine details (example is committed; real file is not) ---
+CLAUDE.local.md
+!CLAUDE.local.md.example
+
 # --- Logs & temp ---
 *.log
 logs/

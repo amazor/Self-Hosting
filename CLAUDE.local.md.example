@@ -1,0 +1,29 @@
+# CLAUDE.local.md (template)
+
+Copy this file to `CLAUDE.local.md` (already gitignored — never commit the real one) and fill in
+real values. `CLAUDE.md` refers to this file for actual connection details so they never end up
+in the public repo.
+
+## Proxmox host
+
+- Address (Tailscale IP or LAN IP, whichever this machine can reach): `<fill in>`
+- Web UI: `https://<host>:8006`
+- SSH user: `<fill in>`
+
+## VMs
+
+VMID scheme: `9000s` = templates, `100s` = core infra, `200s` = workloads, `800s` = throwaway.
+
+| VM | VMID | Address (Tailscale/LAN) | SSH user | Auth | Notes |
+|----|------|--------------------------|----------|------|-------|
+| core | 110 | | | | |
+| monitoring | 120 | | | | |
+| apps | 210 | | | | |
+| media | 220 | | | | |
+| accelerated | 230 | | | | |
+
+## Local machine notes
+
+- Tailscale must be up (`tailscale status`) for tailnet-only addresses to route.
+- SSH key in use: `<path, e.g. ~/.ssh/id_ed25519>`
+- Repo lives at `/opt/self-hosting` on each VM (see `DEPLOY.md`); `~/<stack>` symlink after first deploy.
