@@ -15,8 +15,9 @@ Diagnosing remote Plex:
     raw bandwidth looks fine.
 
 Run from the stack directory:
-  python3 scripts/iperf3_test.py            # print commands + local sanity check
-  python3 scripts/iperf3_test.py --no-check # print commands only
+  python3 scripts/iperf3_test.py                # print commands + local sanity check
+  python3 scripts/iperf3_test.py --no-check      # print commands only
+  python3 scripts/iperf3_test.py --no-public-ip  # skip public IP auto-detection
 """
 
 from __future__ import annotations
@@ -24,6 +25,8 @@ from __future__ import annotations
 import argparse
 import subprocess
 import sys
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -42,6 +45,29 @@ PLEX_BANDWIDTH_REFERENCE = [
 ]
 
 PUBLIC_HOST_PLACEHOLDER = "<PUBLIC_DOMAIN_OR_IP>"
+
+# Plain-text "what's my IP" endpoints, tried in order. Any one going down
+# doesn't matter as long as one responds.
+PUBLIC_IP_SERVICES = [
+    "https://api.ipify.org",
+    "https://ifconfig.me/ip",
+    "https://icanhazip.com",
+]
+
+
+def _detect_public_ip() -> str | None:
+    """Best-effort detection of this network's public IP (this VM's home IP,
+    which is what the remote client actually needs to reach). Returns None on
+    any failure so callers can fall back to the placeholder."""
+    for url in PUBLIC_IP_SERVICES:
+        try:
+            with urllib.request.urlopen(url, timeout=3) as resp:
+                ip = resp.read().decode().strip()
+        except (urllib.error.URLError, OSError):
+            continue
+        if ip:
+            return ip
+    return None
 
 
 def _client_presets(host: str, port: str) -> list[tuple[str, str, str]]:
@@ -69,15 +95,22 @@ def _client_presets(host: str, port: str) -> list[tuple[str, str, str]]:
     ]
 
 
-def _print_commands(env: dict[str, str]) -> None:
+def _print_commands(env: dict[str, str], detect_public_ip: bool = True) -> None:
     port = env.get("IPERF3_PORT", "5201").strip() or "5201"
 
+    public_ip = _detect_public_ip() if detect_public_ip else None
+    host = public_ip or PUBLIC_HOST_PLACEHOLDER
+
     print("\n=== Run these from the REMOTE location (where Plex stutters) ===")
-    print(
-        f"    Replace {PUBLIC_HOST_PLACEHOLDER} with your home's public domain or "
-        "public IP.\n"
-    )
-    for label, cmd, why in _client_presets(PUBLIC_HOST_PLACEHOLDER, port):
+    if public_ip:
+        print(f"    Detected this network's public IP: {public_ip}")
+        print("    Commands below are ready to copy-paste as-is.\n")
+    else:
+        print(
+            f"    Could not auto-detect a public IP; replace {PUBLIC_HOST_PLACEHOLDER} "
+            "with your home's public domain or public IP.\n"
+        )
+    for label, cmd, why in _client_presets(host, port):
         print(f"{label}")
         print(f"    {cmd}")
         print(f"    -> {why}\n")
@@ -144,6 +177,10 @@ def main() -> int:
         "--no-check", action="store_true",
         help="Skip the local container sanity check.",
     )
+    parser.add_argument(
+        "--no-public-ip", action="store_true",
+        help="Skip public IP auto-detection; print the placeholder instead.",
+    )
     args = parser.parse_args()
 
     setup_logging()
@@ -153,7 +190,7 @@ def main() -> int:
         return 1
 
     env = load_env(env_file)
-    _print_commands(env)
+    _print_commands(env, detect_public_ip=not args.no_public_ip)
     if not args.no_check:
         _sanity_check(env)
     return 0
