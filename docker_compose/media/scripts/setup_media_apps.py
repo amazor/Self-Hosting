@@ -679,29 +679,15 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         "anonymous_mode": False,    # worse speeds; issues with private trackers
         # --- Seeding ---
         # No private trackers in use (checked tracker list: opentrackr, dler.org,
-        # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public),
-        # so a global ratio/time cap is safe.
-        #
-        # act MUST be 0 (pause), not 3 (remove torrent + files). Sonarr/Radarr
-        # validate the download client on every save and reject it outright
-        # when qBittorrent is set to remove at the ratio limit:
-        #   HTTP 400 "qBittorrent is configured to remove torrents when they
-        #   reach their Share Ratio Limit" / "unable to perform Completed
-        #   Download Handling as configured"
-        # That 400 blocked EVERY download-client write — priority,
-        # removeCompletedDownloads, and the SABnzbd API-key rotation refresh
-        # (a stale key makes every grab fail auth, with nothing in the logs).
-        #
-        # Disk reclaim after pausing is NOT fully covered by this repo yet.
-        # Sonarr/Radarr remove completed downloads once their seeding goal is
-        # met, which handles the common case. Cleanuparr is the backstop, but
-        # its live seeding rule is scoped to the tv-imported/movies-imported
-        # categories and nothing here sets them — the create path explicitly
-        # skips imported fields. On a fresh rebuild that rule therefore matches
-        # nothing. PR #28 closes this by setting the imported categories; until
-        # it lands, the backstop only exists on hosts where it was applied by
-        # hand. Evidence it matters: a torrent left in plain "tv" was still
-        # seeding 26 days later, outside the rule's scope.
+        # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public).
+        # act=0 pauses (not act=3/remove+files): qBittorrent deleting on its own
+        # ratio/time timer races with *arr imports (files can vanish before an
+        # import runs), which is exactly what Radarr's "removes completed
+        # downloads" health warning flags. Radarr/Sonarr already remove the
+        # torrent + files themselves post-import (removeCompletedDownloads=True
+        # on the download client), and Cleanuparr's Download Cleaner (optional,
+        # see ENABLE_CLEANUPARR) is import-aware for anything they miss - actual
+        # disk reclaim happens there instead.
         "max_ratio_enabled": True,
         "max_ratio": 1,
         "max_ratio_act": 0,
@@ -1727,6 +1713,17 @@ def _print_cleanuparr_instructions(config_base: Path,
     step += 1
     log.info("  %d. Enable Queue Cleaner (strikes for stalled downloads).", step)
     log.info("     Recommended: start with defaults, tune thresholds later.")
+    log.info("")
+    step += 1
+    log.info("  %d. Enable Download Cleaner (Settings > Download Cleaner)"
+              " with seeding rules,", step)
+    log.info("     e.g. ratio 1.0 / seeding time 24h - qBittorrent's own"
+              " limits now only pause")
+    log.info("     (never delete) so Radarr's import isn't racing a client-side"
+              " auto-delete.")
+    log.info("     Cleanuparr checks hardlinks before removing, so it only"
+              " reclaims disk space")
+    log.info("     once a file is confirmed imported into the library.")
     log.info("")
     step += 1
     log.info("  %d. Enable Malware Blocker (Settings > Malware Blocker).", step)
