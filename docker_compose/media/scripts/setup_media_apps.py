@@ -503,7 +503,7 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
 
     # Wait for qBittorrent to be reachable
     deadline = time.monotonic() + HEALTH_TIMEOUT_S
-    sid = None
+    session_cookie = None
     while time.monotonic() < deadline:
         try:
             login_data = urllib.parse.urlencode(
@@ -517,20 +517,22 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
             )
             with urllib.request.urlopen(req, timeout=10) as resp:
                 body = resp.read().decode()
-                if "Ok" in body or resp.status == 200:
+                if "Ok" in body or resp.status in (200, 204):
                     for cookie in resp.headers.get_all("Set-Cookie") or []:
-                        if "SID=" in cookie:
-                            sid = cookie.split("SID=")[1].split(";")[0]
+                        name, _, rest = cookie.partition("=")
+                        # Cookie name varies by version/port, e.g. QBT_SID_8080.
+                        if "SID" in name.upper():
+                            session_cookie = f"{name}={rest.split(';')[0]}"
                     break
         except (urllib.error.URLError, OSError):
             pass
         time.sleep(HEALTH_POLL_S)
 
-    if sid is None:
+    if session_cookie is None:
         log.warning("Could not authenticate to qBittorrent. Skipping config.")
         return
 
-    headers = {"Cookie": f"SID={sid}"}
+    headers = {"Cookie": session_cookie}
 
     # Set preferences per TRaSH guide:
     # https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/
