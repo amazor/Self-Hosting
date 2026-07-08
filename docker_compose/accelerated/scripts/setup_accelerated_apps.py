@@ -51,7 +51,7 @@ PLEX_PREFS: dict[str, object] = {
     "FSEventLibraryPartialScanEnabled": 1,   # partial scan on change (fast)
     "autoEmptyTrash": 0,                     # TRaSH: do NOT auto-empty trash
     # Media analysis: needed for accurate duration, bitrate, and chapter info.
-    "ButlerScanForMetadata": 1,
+    "ButlerTaskRefreshLocalMedia": 1,
     # Transcoding: keep original quality wherever possible.
     "TranscoderQuality": 3,                  # 3 = "Make my CPU hurt" (max quality; 0=Auto, 1=Speed, 2=Quality, 3=CPU hurt)
     "TranscoderH264Preset": "veryfast",
@@ -61,8 +61,6 @@ PLEX_PREFS: dict[str, object] = {
     "allowMediaDeletion": 0,
     # Metadata language and agent defaults.
     "LanguageInCloud": 1,
-    # Online media sources: disable Plex's own noise in the library.
-    "OnlineMediaSources": 0,                 # 0 = disabled
     # DLNA: off unless explicitly needed.
     "DlnaEnabled": 0,
 }
