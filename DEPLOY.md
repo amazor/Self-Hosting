@@ -62,24 +62,24 @@ Bootstrap (invoked by deploy) handles VM-specific setup: optional NFS mounts, co
 
 ## First-time setup (after a fresh clone)
 
-After cloning the repo on a new machine or VM, an optional setup script can pre-fill auto-detectable values in the `.env.example` files (e.g. generate `AUTHENTIK_SECRET_KEY`, detect `DNS_BIND_IP`, set `PUID`/`PGID`). This saves manual work while keeping "verify config before use" as the default flow.
+After cloning the repo on a new machine or VM, an optional setup script can stage auto-detectable values (e.g. generate `AUTHENTIK_SECRET_KEY`, detect `DNS_BIND_IP`, set `PUID`/`PGID`) into a `docker_compose/<stack>/.env.staged` file per stack. `.env.example` itself is never modified — it stays a plain, secret-free template. This saves manual work while keeping "verify config before use" as the default flow.
 
 ```bash
-# 1. Pre-fill .env.example files with auto-detected values
+# 1. Stage auto-detected values into .env.staged for each stack
 python3 scripts/setup_env.py
+# If .env doesn't exist yet, this offers to copy .env.staged to .env for you
+# (interactively only). Otherwise, copy it yourself once you've reviewed it:
+cp docker_compose/core/.env.staged docker_compose/core/.env
+cp docker_compose/media/.env.staged docker_compose/media/.env
 
-# 2. Copy .env.example to .env for each stack you want to deploy
-cp docker_compose/core/.env.example docker_compose/core/.env
-cp docker_compose/media/.env.example docker_compose/media/.env
-
-# 3. Review and fill remaining required vars (secrets, domain, etc.)
+# 2. Review and fill remaining required vars (secrets, domain, etc.)
 #    See .env.example comments and chapter docs for what each variable does.
 
-# 4. Deploy
+# 3. Deploy
 python3 deploy.py core          # or: python3 deploy.py all
 ```
 
-**Convenience:** Pass `--init-env` to have deploy copy `.env.example` to `.env` automatically when `.env` is missing. Required vars must still be filled — validation is unchanged even with `--force`.
+**Convenience:** Pass `--init-env` to have deploy copy to `.env` automatically when `.env` is missing — it prefers `.env.staged` (if `setup_env.py` was run) and falls back to the bare `.env.example` template otherwise. Required vars must still be filled — validation is unchanged even with `--force`.
 
 ---
 

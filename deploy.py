@@ -511,8 +511,17 @@ def main(argv: list[str] | None = None) -> None:
         for stack in stacks:
             sdir = _stack_dir(stack)
             env_file = sdir / ".env"
+            if env_file.is_file():
+                continue
+            # Prefer .env.staged (auto-detected values from setup_env.py,
+            # e.g. AUTHENTIK_SECRET_KEY, detected LAN IP) over the bare
+            # .env.example template, if setup_env.py has been run.
+            env_staged = sdir / ".env.staged"
             env_example = sdir / ".env.example"
-            if not env_file.is_file() and env_example.is_file():
+            if env_staged.is_file():
+                shutil.copy2(env_staged, env_file)
+                log.info(f"Copied .env.staged to .env for {stack}.")
+            elif env_example.is_file():
                 shutil.copy2(env_example, env_file)
                 log.info(f"Copied .env.example to .env for {stack}.")
 

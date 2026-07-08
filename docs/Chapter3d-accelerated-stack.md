@@ -81,7 +81,7 @@ cp .env.example .env
 | **PUID / PGID** | Linux UID/GID used by LinuxServer and Immich containers for volume permissions. Run `id your_user` on the VM and copy the values. |
 | **TZ** | Timezone for all services (e.g. `Etc/UTC`). |
 
-> **Tip:** Run `python3 scripts/setup_env.py` from the repo root to pre-fill `PUID`, `PGID`, and `DOCKER_GID` based on the current host.
+> **Tip:** Run `python3 scripts/setup_env.py` from the repo root to stage `PUID`, `PGID`, and `DOCKER_GID` (based on the current host) into `.env.staged`, then copy it to `.env`.
 
 ### Plex-specific
 

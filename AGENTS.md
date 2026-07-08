@@ -18,7 +18,7 @@ The codebase is structured as importable Python packages (`__init__.py` files th
   - `homelab_common.py` — env loading, placeholder checks, Docker checks, observability config, VM identity helpers
   - `homelab_bootstrap.py` — `BootstrapRunner` class (unified bootstrap flow), common compose/NFS/validation helpers
   - `homelab_logging.py` — `StepTracker` class (step-based progress output with verbose mode)
-  - `setup_env.py` — post-clone helper that pre-fills `.env.example` with auto-detected values
+  - `setup_env.py` — post-clone helper that stages auto-detected values into `.env.staged` and offers to copy them to `.env` (never touches `.env.example`)
 - **`docker_compose/<stack>/`** — per-stack modules:
   - `stack_config.py` — stack identity, `REQUIRED_VARS`, `COMPOSE_OVERLAYS`, `bootstrap_steps()`, optional `post_deploy()`. This is the contract consumed by `BootstrapRunner` and `deploy.py`.
   - `bootstrap.py` — thin wrapper (~20 lines): adds repo root to `sys.path`, imports `stack_config`, runs `BootstrapRunner(stack_config).run()`.
@@ -29,7 +29,7 @@ The codebase is structured as importable Python packages (`__init__.py` files th
 
 | Task | Command |
 |------|---------|
-| Pre-fill `.env.example` | `python3 scripts/setup_env.py` |
+| Stage auto-detected `.env` values | `python3 scripts/setup_env.py` |
 | Deploy a stack | `python3 deploy.py <stack> --force --init-env -y` |
 | Deploy all stacks | `python3 deploy.py all --force --init-env -y` |
 | Validate compose | `docker compose -f docker_compose/<stack>/compose.yml config` |
@@ -45,10 +45,10 @@ The codebase is structured as importable Python packages (`__init__.py` files th
 
 ### Stack deploy workflow
 
-1. `python3 scripts/setup_env.py` (pre-fills auto-detectable values)
-2. `python3 deploy.py <stack> --force --init-env -y` (copies `.env.example` to `.env`, skips validation, runs bootstrap + compose up)
+1. `python3 scripts/setup_env.py` (stages auto-detectable values into `.env.staged`; non-interactive runs skip the copy prompt automatically)
+2. `python3 deploy.py <stack> --force --init-env -y` (copies `.env.staged` to `.env` when missing — falling back to `.env.example` if `setup_env.py` wasn't run — skips validation, runs bootstrap + compose up)
 
-The `--init-env` flag auto-copies `.env.example` to `.env` when missing; `--force` skips placeholder guardrails; `-y` is non-interactive mode.
+The `--init-env` flag auto-copies to `.env` when missing (preferring `.env.staged` over `.env.example`); `--force` skips placeholder guardrails; `-y` is non-interactive mode.
 
 ### Stacks available for testing
 

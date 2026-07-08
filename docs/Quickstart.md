@@ -165,7 +165,7 @@ ls /dev/dri   # should show card0 and renderD128
 
 ## Phase 3: Fill out .env files
 
-Each stack has a `.env.example` at `docker_compose/<stack>/.env.example`. Cloud-Init runs `setup_env.py` on first boot, which pre-fills auto-detectable values (hostname, PUID/PGID, Docker GID, LAN IP). You still need to fill in secrets, IPs, and domain names.
+Each stack has a `.env.example` at `docker_compose/<stack>/.env.example`. Cloud-Init runs `setup_env.py` on first boot, which stages auto-detectable values (hostname, PUID/PGID, Docker GID, LAN IP) into `docker_compose/<stack>/.env.staged` — `.env.example` itself is never modified. You still need to fill in secrets, IPs, and domain names.
 
 **Timezone:** Every stack has `TZ=Etc/UTC` by default. Set it to your local timezone (e.g. `America/New_York`, `Europe/London`) in each `.env` so container logs and schedules use the right time.
 
@@ -178,7 +178,7 @@ cd ~/self-hosting
 python3 scripts/setup_env.py
 ```
 
-This pre-fills: `VM_HOSTNAME`, `PUID`, `PGID`, `DOCKER_GID`, `DNS_BIND_IP` (core), `AUTHENTIK_SECRET_KEY` (core), `EXPRESSVPN_LAN_CIDR` (media).
+This stages: `VM_HOSTNAME`, `PUID`, `PGID`, `DOCKER_GID`, `DNS_BIND_IP` (core), `AUTHENTIK_SECRET_KEY` (core), `EXPRESSVPN_LAN_CIDR` (media) into each stack's `.env.staged`. If `.env` doesn't exist yet, running it directly over SSH (interactively) offers to copy `.env.staged` to `.env` for you — review the values it flags (secrets, detected IPs) before accepting. Otherwise copy it yourself: `cp docker_compose/<stack>/.env.staged docker_compose/<stack>/.env`.
 
 ### Core .env
 

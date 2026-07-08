@@ -21,6 +21,9 @@ Desktop.ini
 *.key
 secrets/
 
+# --- Per-stack runtime state (container config/data volumes) ---
+docker_compose/*/config/
+
 # --- Claude Code local machine details (example is committed; real file is not) ---
 CLAUDE.local.md
 !CLAUDE.local.md.example

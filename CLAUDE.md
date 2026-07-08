@@ -53,7 +53,7 @@ This is **production** — it serves the user's home and (via `core`) is reachab
 
 | Task | Command |
 |------|---------|
-| Pre-fill `.env.example` | `python3 scripts/setup_env.py` |
+| Stage auto-detected `.env` values | `python3 scripts/setup_env.py` |
 | Deploy a stack | `python3 deploy.py <stack> --init-env -y` |
 | Deploy all stacks (single-host mode) | `python3 deploy.py all --init-env -y` |
 | Validate compose | `docker compose -f docker_compose/<stack>/compose.yml config` |
