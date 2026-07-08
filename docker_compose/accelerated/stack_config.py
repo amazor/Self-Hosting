@@ -63,6 +63,11 @@ POST_DEPLOY_ACTIONS = [
     "  'Transcode (hw)'. If it shows 'Transcode' WITHOUT the (hw) tag, Plex is\n"
     "  using the CPU — expect high CPU load and stuttering. Recheck that\n"
     "  hardware transcoding is enabled and the GPU firmware/driver is loaded.",
+    "Test network bandwidth (e.g. if remote Plex buffers over the internet):\n"
+    "  The iperf3 server runs 24/7 on this VM. Print ready-to-paste client\n"
+    "  commands: cd docker_compose/accelerated && python3 scripts/iperf3_test.py\n"
+    "  For internet tests, TEMPORARILY forward TCP+UDP 5201 on your router to\n"
+    "  this VM, then REMOVE it afterward (iperf3 has no authentication).",
 ]
 
 

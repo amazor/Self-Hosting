@@ -53,7 +53,7 @@ Build a robust, scalable, and automated home server environment that can host:
 | `monitoring` | Grafana, Prometheus, Loki, Uptime Kuma | node_exporter + Alloy (per-VM sidecars) |
 | `apps` | Homepage / Homarr / Dashy, Mealie | — |
 | `media` | Sonarr, Radarr, Prowlarr, qBittorrent, VPN container, FlareSolverr | Recyclarr, Cleanuparr, SABnzbd, Bazarr, ntfy |
-| `accelerated` | Plex, Immich | — |
+| `accelerated` | Plex, Immich | iperf3 (network test server) |
 
 Full list, tiers, and reasoning: [Chapter 2 — What runs where](docs/Chapter2-vms.md#apps-at-a-glance).
 

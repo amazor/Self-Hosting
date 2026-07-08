@@ -17,7 +17,7 @@
 #
 # Network:
 #   - Single internal bridge: accelerated_internal
-#   - Host ports: Plex (32400), Immich web/API (2283)
+#   - Host ports: Plex (32400), Immich web/API (2283), iperf3 (5201 tcp+udp)
 
 services:
   # --- Plex — Media server (library-only view) ---
@@ -128,6 +128,39 @@ services:
     volumes:
       # Persistent cache for ML models (CLIP, face recognition). Avoids re-download on recreation.
       - ${CONFIG_ROOT:-./config}/immich-ml-cache:/cache
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
+  # --- iperf3: network bandwidth test server ---
+  # Image: mm404/iperf3 — Alpine-based, multi-arch, runs as non-root, pinned tags.
+  # Lives on this VM (not core) because Plex runs here: an iperf3 test against
+  # accelerated traverses the exact router -> VM path that real remote-Plex
+  # streaming uses, so it measures the upload bottleneck most representatively.
+  #
+  # Diagnose remote-Plex throughput: run an iperf3 CLIENT from the remote internet
+  # location with -R (reverse) to measure this VM's UPLOAD path (the usual
+  # remote-streaming bottleneck), and -u for jitter/packet-loss.
+  #
+  # NOT HTTP: cannot sit behind Caddy. It needs its own raw TCP+UDP port (5201).
+  # The container runs 24/7 but is only reachable from the internet when you
+  # MANUALLY enable a router port-forward of TCP+UDP ${IPERF3_PORT} to this VM.
+  # iperf3 has NO AUTH — never leave the port-forward open after testing.
+  iperf3:
+    image: mm404/iperf3:${IPERF3_TAG:-latest}
+    container_name: iperf3
+    # mm404/iperf3 entrypoint is `iperf3`; these args run it in server mode.
+    command: ["-s", "-p", "${IPERF3_PORT:-5201}"]
+    ports:
+      # Bind to host. Default 0.0.0.0 so the router forward works out of the box;
+      # set IPERF3_BIND_IP to the VM LAN IP to restrict which interface listens.
+      - "${IPERF3_BIND_IP:-0.0.0.0}:${IPERF3_PORT:-5201}:${IPERF3_PORT:-5201}/tcp"
+      - "${IPERF3_BIND_IP:-0.0.0.0}:${IPERF3_PORT:-5201}:${IPERF3_PORT:-5201}/udp"
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
     restart: unless-stopped
     networks:
       - accelerated_internal
