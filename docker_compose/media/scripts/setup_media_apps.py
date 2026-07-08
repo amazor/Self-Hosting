@@ -560,12 +560,18 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
         "anonymous_mode": False,    # worse speeds; issues with private trackers
         # --- Seeding ---
         # No private trackers in use (checked tracker list: opentrackr, dler.org,
-        # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public),
-        # so a global ratio/time cap is safe. act=3 removes torrent + files, so
-        # disk space is actually reclaimed instead of just pausing indefinitely.
+        # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public).
+        # act=0 pauses (not act=3/remove+files): qBittorrent deleting on its own
+        # ratio/time timer races with *arr imports (files can vanish before an
+        # import runs), which is exactly what Radarr's "removes completed
+        # downloads" health warning flags. Radarr/Sonarr already remove the
+        # torrent + files themselves post-import (removeCompletedDownloads=True
+        # on the download client), and Cleanuparr's Download Cleaner (optional,
+        # see ENABLE_CLEANUPARR) is import-aware for anything they miss - actual
+        # disk reclaim happens there instead.
         "max_ratio_enabled": True,
         "max_ratio": 1,
-        "max_ratio_act": 3,
+        "max_ratio_act": 0,
         "max_seeding_time_enabled": True,
         "max_seeding_time": 1440,
         "max_inactive_seeding_time_enabled": True,
@@ -1290,6 +1296,17 @@ def _print_cleanuparr_instructions(config_base: Path,
     step += 1
     log.info("  %d. Enable Queue Cleaner (strikes for stalled downloads).", step)
     log.info("     Recommended: start with defaults, tune thresholds later.")
+    log.info("")
+    step += 1
+    log.info("  %d. Enable Download Cleaner (Settings > Download Cleaner)"
+              " with seeding rules,", step)
+    log.info("     e.g. ratio 1.0 / seeding time 24h - qBittorrent's own"
+              " limits now only pause")
+    log.info("     (never delete) so Radarr's import isn't racing a client-side"
+              " auto-delete.")
+    log.info("     Cleanuparr checks hardlinks before removing, so it only"
+              " reclaims disk space")
+    log.info("     once a file is confirmed imported into the library.")
     log.info("")
     step += 1
     log.info("  %d. Enable Malware Blocker (Settings > Malware Blocker).", step)
