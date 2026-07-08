@@ -556,9 +556,18 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
         # --- BitTorrent / Privacy ---
         "encryption": 0,            # 0 = allow (prefer), not force
         "anonymous_mode": False,    # worse speeds; issues with private trackers
-        # --- Seeding (let *arr indexer settings handle this instead) ---
-        "max_ratio_enabled": False,
-        "max_seeding_time_enabled": False,
+        # --- Seeding ---
+        # No private trackers in use (checked tracker list: opentrackr, dler.org,
+        # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public),
+        # so a global ratio/time cap is safe. act=3 removes torrent + files, so
+        # disk space is actually reclaimed instead of just pausing indefinitely.
+        "max_ratio_enabled": True,
+        "max_ratio": 1,
+        "max_ratio_act": 3,
+        "max_seeding_time_enabled": True,
+        "max_seeding_time": 1440,
+        "max_inactive_seeding_time_enabled": True,
+        "max_inactive_seeding_time": 1440,
         "add_trackers_enabled": False,
         # --- Web UI ---
         "web_ui_csrf_protection_enabled": False,  # can cause issues behind reverse proxy
