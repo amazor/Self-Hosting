@@ -27,6 +27,7 @@ This chapter is the **operational guide**:
   - [Paths and identity](#paths-and-identity)
   - [Plex-specific](#plex-specific)
   - [Immich-specific](#immich-specific)
+  - [iperf3](#iperf3)
   - [VM identity and observability](#vm-identity-and-observability)
 - [Compose file: Notable details](#compose-file-notable-details)
 - [Bootstrap script: What it does](#bootstrap-script-what-it-does)
@@ -35,6 +36,7 @@ This chapter is the **operational guide**:
   - [Path 1: Manual (on the Accelerated VM)](#path-1-manual-on-the-accelerated-vm)
   - [Path 2: Repo deploy script (`deploy.py`)](#path-2-repo-deploy-script-deploypy)
 - [After first run](#after-first-run)
+- [iperf3 (network testing)](#iperf3-network-testing)
 - [Verification and troubleshooting](#verification-and-troubleshooting)
 - [See also](#see-also)
 
@@ -50,6 +52,7 @@ The Accelerated stack follows the same “one stack, one directory” pattern as
 | **.env.example** | Template for required and optional env vars (no secrets; copy to `.env` and fill). Defines paths, IDs, Plex tokens, image tags, GPU and observability toggles. |
 | **bootstrap.py** | Idempotent first-run: optional NFS mount setup, validates `.env`, PLEX_CLAIM guardrail, GPU guardrail, creates config directories, wires observability, validates compose. |
 | **setup_accelerated_apps.py** | Post-deploy automation: waits for Plex to be ready, applies TRaSH-recommended server settings, and creates library sections (Movies, TV Shows, Anime). Called automatically by `deploy.py`. |
+| **scripts/iperf3_test.py** | Print ready-to-paste iperf3 **client** commands (run from the remote end) and run a local sanity check that the iperf3 server is up. See [iperf3 (network testing)](#iperf3-network-testing). |
 | **compose.observability.yml** | Symlink to `docker_compose/common/compose.observability.yml`. Adds node_exporter, cAdvisor, Alloy sidecars, and the Plex metrics exporter when `ENABLE_OBSERVABILITY=1`. |
 
 All paths in the stack are relative to the directory where you run `docker compose`
@@ -109,6 +112,16 @@ These values are derived from Immich’s official `example.env`, trimmed to what
 
 Other Immich settings (e.g. advanced ML tuning, job concurrency) can use their built-in defaults and be added to `.env` later as needed.
 
+### iperf3
+
+| Variable | Purpose |
+|----------|---------|
+| **IPERF3_TAG** | Image tag for `mm404/iperf3`. Pin a release after validating (e.g. `3.20.0-alpine3.23.4`). |
+| **IPERF3_PORT** | Port the iperf3 server listens on and clients connect to. Default `5201`. |
+| **IPERF3_BIND_IP** | Host interface to bind. Default `0.0.0.0` so a router port-forward works out of the box; set to the VM LAN IP to restrict which NIC listens. |
+
+The iperf3 server runs 24/7 but is only reachable from the internet while you manually enable a router port-forward of TCP+UDP `IPERF3_PORT`. See [iperf3 (network testing)](#iperf3-network-testing).
+
 ### VM identity and observability
 
 | Variable | Purpose |
@@ -140,6 +153,7 @@ The full stack lives in `docker_compose/accelerated/compose.yml`. Below are the 
 | **immich-machine-learning** | Optional machine learning workloads (face recognition, smart search). Can be wired to GPU later via OpenVINO; defaults to CPU. |
 | **immich-postgres** | Postgres database for Immich. Data lives on local disk (`IMMICH_DB_ROOT`). |
 | **immich-redis** | Redis instance used by Immich for caching and queues. |
+| **iperf3** | Network bandwidth test server (`mm404/iperf3`); always on; publishes TCP+UDP **5201** (bound via **IPERF3_BIND_IP**). Not HTTP, so not behind Caddy. Hardened (`read_only`, `no-new-privileges`, `cap_drop: ALL`). |
 
 All services share a single internal bridge network (e.g. `accelerated_internal`) and are not exposed directly to the internet.
 Plex and Immich publish ports on the VM’s LAN IP; `core` reverse‑proxies those ports based on hostnames.
@@ -226,7 +240,7 @@ These ports are reachable:
 - From the Core VM’s reverse proxy, which then exposes them under hostnames like
   `plex.domain` and `photos.domain` with TLS and (optionally) SSO  
 
-No router port-forwarding is configured directly to `accelerated`; only `core` is public.
+The stack also publishes **iperf3 on TCP+UDP `5201`** for network testing. Like Plex and Immich, it is only reachable on the LAN by default. **The one exception to "only `core` is public"** is a *temporary, manually-added* router port-forward of 5201 used only while running an internet bandwidth test — see [iperf3 (network testing)](#iperf3-network-testing). Otherwise, no router port-forwarding is configured directly to `accelerated`; only `core` is public.
 
 ---
 
@@ -493,6 +507,38 @@ Once the stack is up, most Plex configuration is handled automatically by `setup
 
 ---
 
+## iperf3 (network testing)
+
+iperf3 measures raw TCP/UDP throughput between two endpoints. It is the tool to use when remote Plex playback buffers over the internet and you want to confirm or rule out a **network bandwidth** problem. It lives on this VM because Plex does, so a test travels the same path Plex streaming uses. See [Chapter 2D — Network testing: iperf3](Chapter2d-accelerated.md#network-testing-iperf3) for the "why".
+
+The iperf3 **server** runs 24/7 and needs no configuration. The test is **two-sided**: you run an iperf3 **client** from the remote location where playback is poor.
+
+> ### 🧠 Why reverse mode (`-R`) matters
+> Plex remote streaming sends data *from* your server *to* the viewer — i.e. it uses your home **upload** bandwidth, which is usually the bottleneck. By default an iperf3 client tests the *download* direction. Add **`-R`** so the server sends to the client, measuring the upload path that Plex actually uses.
+
+### Running a test
+
+1. **Enable the port-forward (temporarily).** iperf3 is not HTTP, so it cannot go behind Caddy. To test over the internet, add a router port-forward of **TCP and UDP `IPERF3_PORT` (default 5201)** to this VM's LAN IP. iperf3 has **no authentication**, so **remove the forward as soon as you finish**.
+2. **Print the client commands.** From the stack directory:
+   ```bash
+   cd docker_compose/accelerated
+   python3 scripts/iperf3_test.py
+   ```
+   This prints ready-to-paste commands, a Plex bandwidth reference, and runs a quick local sanity check that the server container is up. (If another LAN machine has `iperf3`, the helper also prints a LAN test against `PLEX_HOST` that needs no port-forward.)
+3. **Run the client from the remote location.** Typical tests:
+   ```bash
+   # Bandwidth (TCP, Plex-like): reverse = server uploads to you
+   iperf3 -c <public-domain-or-ip> -p 5201 -R -t 30 -O 5
+   # Quality (UDP): jitter and packet loss near your target stream bitrate
+   iperf3 -c <public-domain-or-ip> -p 5201 -u -R -b 25M -t 30
+   ```
+4. **Interpret.** Compare the TCP `-R` result to what Plex needs (roughly: 720p ≈ 5 Mbps, 1080p ≈ 15 Mbps, 4K HDR ≈ 60 Mbps per stream). If the UDP run shows high jitter or non-trivial packet loss, link quality (not just raw bandwidth) is likely causing the stutter. If bandwidth is comfortably above what the stream needs, the problem is probably **not** the network — look at transcoding (is it `Transcode (hw)`?), disk, or the client next.
+5. **Remove the port-forward.**
+
+The single `iperf3 -s` server handles every client variation (TCP/UDP, direction, bitrate, parallel streams) — there is no need for multiple server configs.
+
+---
+
 ## Verification and troubleshooting
 
 ### Quick checks
@@ -526,6 +572,15 @@ Once the stack is up, most Plex configuration is handled automatically by `setup
   accelerated exec plex ls /dev/dri
   accelerated exec immich-server ls /dev/dri
   ```
+
+- **iperf3 server**:
+
+  ```bash
+  docker exec iperf3 iperf3 -c 127.0.0.1 -p 5201 -t 1
+  # or: cd docker_compose/accelerated && python3 scripts/iperf3_test.py
+  ```
+
+  A loopback test should report a throughput result, confirming the server is listening.
 
 ### If something fails
 

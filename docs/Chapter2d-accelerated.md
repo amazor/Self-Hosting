@@ -44,6 +44,7 @@ This chapter assumes:
   - [VM-Side GPU Prerequisites](#vm-side-gpu-prerequisites)
   - [Boundary Rules for the GPU](#boundary-rules-for-the-gpu)
 - [Access Model](#access-model)
+- [Network testing: iperf3](#network-testing-iperf3)
 - [Backup and Rebuild](#backup-and-rebuild)
 - [FAQ](#faq)
 
@@ -89,6 +90,7 @@ From [Chapter 2 – VM Overview](Chapter2-vms.md#-what-runs-where-quick-referenc
 |--------|------|---------------------------------------------------------|
 | Plex   | Core | Media server: playback + optional hardware transcoding |
 | Immich | Core | Photo/video platform with acceleration support         |
+| iperf3 | Utility | On-demand network bandwidth/jitter test server; co-located with Plex to diagnose remote-playback throughput. See [Network testing: iperf3](#network-testing-iperf3). |
 
 This VM is intentionally narrow in scope:
 
@@ -380,6 +382,39 @@ On `core`:
 > ### 🧠 Design Intent: Playback Is Still Behind the Front Door
 > Even though Plex and Immich sit on a separate VM, the **only** way in from the internet
 > remains the Core VM’s reverse proxy. No extra ports are punched through the router.
+
+> ### ⚠️ Temporary Exception: iperf3 (TCP+UDP 5201)
+> The one deliberate exception to "no extra ports" is **on-demand network testing**. iperf3
+> is not HTTP and cannot be reverse-proxied through Caddy, so an internet bandwidth test
+> requires forwarding TCP+UDP 5201 directly to `accelerated`. This is **manually toggled and
+> short-lived**: enable the forward only while running a test, then remove it. iperf3 has
+> **no authentication**, so it must never be left exposed. See [Network testing: iperf3](#network-testing-iperf3).
+
+---
+
+## Network testing: iperf3
+
+**Why this belongs in `accelerated`**  
+When remote Plex playback buffers over the internet, the first question is whether the **network** is the bottleneck or whether the problem is elsewhere (transcoding, disk, the client). iperf3 answers the network question directly: it measures the maximum achievable throughput between your home and a remote location. It lives on `accelerated` — not `core` — precisely **because Plex runs here**. A test against this VM traverses the exact same `router → accelerated` path (and the same forward target as Plex's own `32400`) that real remote streaming uses, so it also catches VM- or LAN-specific issues, not just the shared ISP uplink.
+
+**What iperf3 does**  
+iperf3 runs a tiny server on one end and a client on the other, then pushes TCP or UDP traffic for a fixed time and reports throughput (and, for UDP, jitter and packet loss). The server here is generic and always on; the **client** is run from the remote location during a test. Reverse mode (`-R`) makes the server send to the client, which measures your home **upload** path — the direction that matters for remote streaming.
+
+**Why here and not on `core`**
+- **Representative path:** measures the real `router → VM` route Plex uses; a test from `core` would only reflect the shared uplink and miss anything specific to this VM.
+- **Keeps `core` boring:** `core` is the security-critical front door (only 80/443). Adding an unauthenticated, non-HTTP port there widens its attack surface; `accelerated` is a flexible workload VM where a diagnostic fits naturally.
+- **`apps`/`media` don't fit:** `apps` is not a deployed stack yet, and `media` sits behind the VPN container (an unrepresentative path).
+
+**Alternatives considered**
+- **speedtest-cli / Ookla:** measures your link against a *third-party* server, not the actual path to the viewer having trouble. Fine for a rough ISP sanity check, useless for "can this remote client pull a stream from me."
+- **Raw `nc`/`scp` timing:** crude and noisy; no jitter/loss metrics, no UDP, no structured output.
+- **Building our own iperf3 image** (e.g. from the [tangentsoft static build](https://tangentsoft.com/mikrotik/dir/iperf3)): unnecessary — the well-maintained `mm404/iperf3` image already exists.
+
+**Tradeoffs accepted**
+- iperf3 is **not HTTP**, so it cannot hide behind Caddy; internet testing needs a temporary direct port-forward of TCP+UDP 5201, and iperf3 has **no authentication** (see the exception note above).
+- It measures the **network only** — it will not reveal a transcoding or disk bottleneck. That is by design: it isolates the network so you can rule it in or out.
+
+The hands-on test procedure (client commands, port-forward steps, reading results) is in [Chapter 3D — iperf3 (network testing)](Chapter3d-accelerated-stack.md#iperf3-network-testing).
 
 ---
 
