@@ -389,6 +389,25 @@ def _generate_scrape_targets(env: dict[str, str], config_base: Path, tracker: St
             })
         return entries
 
+    def _parse_named(raw: str) -> list[tuple[str, str]]:
+        """Split 'name:rest' pairs on the first colon, preserving any colons in `rest`."""
+        pairs: list[tuple[str, str]] = []
+        for pair in raw.split(","):
+            pair = pair.strip()
+            if ":" not in pair:
+                continue
+            name, rest = pair.split(":", 1)
+            name, rest = name.strip(), rest.strip()
+            if name and rest:
+                pairs.append((name, rest))
+        return pairs
+
+    def _blackbox_entries(raw: str, module: str) -> list[dict]:
+        return [
+            {"targets": [target], "labels": {"module": module, "probe_name": name}}
+            for name, target in _parse_named(raw)
+        ]
+
     raw = env.get("SCRAPE_TARGETS", "").strip()
     ne_entries = _parse_targets(raw, 9100, "node-exporter") if raw else []
     ca_entries = _parse_targets(raw, 8081, "cadvisor") if raw else []
@@ -408,16 +427,24 @@ def _generate_scrape_targets(env: dict[str, str], config_base: Path, tracker: St
     for fname, entries in file_map.items():
         (targets_dir / fname).write_text(json.dumps(entries, indent=2) + "\n")
 
+    # Blackbox probe targets: HTTP(S) (module http_2xx), TCP (tcp_connect),
+    # ICMP (icmp), and DNS resolver (dns_udp) checks — feeds D03/D00 connectivity
+    # panels. Always regenerated from env, same as the exporter target files above.
+    bb_entries = (
+        _blackbox_entries(env.get("BLACKBOX_HTTP_TARGETS", ""), "http_2xx")
+        + _blackbox_entries(env.get("BLACKBOX_TCP_TARGETS", ""), "tcp_connect")
+        + _blackbox_entries(env.get("BLACKBOX_ICMP_TARGETS", ""), "icmp")
+        + _blackbox_entries(env.get("BLACKBOX_DNS_TARGETS", ""), "dns_udp")
+    )
     bb_file = targets_dir / "blackbox-targets.json"
-    if not bb_file.is_file():
-        bb_file.write_text(json.dumps([], indent=2) + "\n")
+    bb_file.write_text(json.dumps(bb_entries, indent=2) + "\n")
 
     legacy = targets_dir / "scrape-targets.json"
     if legacy.is_file():
         legacy.unlink()
 
     total_remote = len(ne_entries)
-    tracker.success(f"Scrape targets generated ({total_remote} remote VMs)")
+    tracker.success(f"Scrape targets generated ({total_remote} remote VMs, {len(bb_entries)} blackbox probes)")
 
 
 def _ensure_grafana_provisioning(config_base: Path, tracker: StepTracker) -> None:

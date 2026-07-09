@@ -150,6 +150,17 @@ These labels flow into both Prometheus scrape configs and Alloy log labels, ensu
 |----------|---------|
 | **SCRAPE_TARGETS** | Comma-separated `hostname:ip` pairs for remote VMs running sidecars. Bootstrap writes a file_sd JSON that Prometheus auto-discovers. Leave empty for single-VM setups. Example: `core:192.168.1.110,media:192.168.1.111`. |
 
+### Blackbox Exporter probe targets (optional, feeds D03/D00)
+
+Bootstrap regenerates `prometheus/targets/blackbox-targets.json` from these on every run. Each is a comma-separated `name:target` list; `name` becomes the `probe_name` label shown in the D03 probe table. Leave any empty to skip that probe category — see [Chapter 2B](Chapter2b-monitoring.md) for what D03 does with them.
+
+| Variable | Module | Format | Purpose |
+|----------|--------|--------|---------|
+| **BLACKBOX_HTTP_TARGETS** | `http_2xx` | `name:url` | HTTP(S) reachability. Also validates DNS + TLS in one probe; blackbox exposes `probe_ssl_earliest_cert_expiry` for `https://` targets. |
+| **BLACKBOX_TCP_TARGETS** | `tcp_connect` | `name:host:port` | Raw TCP reachability (e.g. proxy port, NFS port `2049`). |
+| **BLACKBOX_ICMP_TARGETS** | `icmp` | `name:host` | Ping reachability (e.g. the NAS). |
+| **BLACKBOX_DNS_TARGETS** | `dns_udp` | `name:host:port` | Queries a resolver for the `google.com` A record (module hardcoded in `blackbox.yml`) — validates the resolver forwards upstream. |
+
 ### Image tags (reproducibility)
 
 Optional overrides (e.g. **GRAFANA_TAG**, **PROMETHEUS_TAG**, **LOKI_TAG**, **UPTIME_KUMA_TAG**, **NODE_EXPORTER_TAG**, **CADVISOR_TAG**, **ALLOY_TAG**). Leave unset to use compose defaults; pin after validating for predictable redeploys.
