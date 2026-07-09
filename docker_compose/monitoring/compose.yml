@@ -56,6 +56,11 @@ services:
       - GF_ANALYTICS_CHECK_FOR_UPDATES=false
       - GF_USERS_ALLOW_SIGN_UP=false
       - TZ=${TZ:-Etc/UTC}
+      # DEV ONLY (dev/grafana-mcp-tooling branch): wires the grafana-image-renderer
+      # sidecar below so grafana-mcp's rendering tools produce real PNGs. Not
+      # meant to reach main — remove both vars if this branch's sidecars are cut.
+      - GF_RENDERING_SERVER_URL=http://grafana-image-renderer:8081/render
+      - GF_RENDERING_CALLBACK_URL=http://grafana:3000/
     volumes:
       - ${CONFIG_ROOT:-./config}/grafana/data:/var/lib/grafana
       - ${CONFIG_ROOT:-./config}/grafana/provisioning:/etc/grafana/provisioning:ro
@@ -173,6 +178,59 @@ services:
       - ${CONFIG_ROOT:-./config}/uptime-kuma:/app/data
     ports:
       - "3001:3001"
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - monitoring_internal
+
+  # ============================================================
+  # DEV ONLY — dev/grafana-mcp-tooling branch.
+  # Dashboard-design tooling: Grafana MCP server + the image-renderer
+  # it needs for PNG rendering. Not meant to reach `main` — this whole
+  # block goes away when the branch is discarded/not merged.
+  # ============================================================
+
+  # --- Grafana Image Renderer: headless Chromium PNG rendering ---
+  # Required for grafana-mcp's rendering tools (and Grafana's own image
+  # rendering) to produce actual panel/dashboard PNGs instead of erroring.
+  # Docs: https://github.com/grafana/grafana-image-renderer
+  grafana-image-renderer:
+    image: grafana/grafana-image-renderer:${GRAFANA_RENDERER_TAG:-latest}
+    container_name: grafana-image-renderer
+    logging: *default-logging
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+    networks:
+      - monitoring_internal
+
+  # --- Grafana MCP server ---
+  # Lets an MCP client (Claude Code) create/update dashboards and validate
+  # PromQL/LogQL queries against this Grafana instance directly, instead of
+  # hand-editing dashboard JSON and hoping it's correct.
+  # GRAFANA_MCP_API_KEY is a service-account token (Admin role) — see
+  # `docs/Chapter3b-monitoring-stack.md` for how it was generated.
+  # allowed-hosts/-origins are wide open ("*"/default-reject) since this is a
+  # temporary LAN-only dev sidecar behind no reverse proxy — do not expose
+  # this port publicly or carry it into `main`.
+  # Docs: https://github.com/grafana/mcp-grafana
+  grafana-mcp:
+    image: mcp/grafana:${GRAFANA_MCP_TAG:-latest}
+    container_name: grafana-mcp
+    logging: *default-logging
+    command:
+      - "-t"
+      - "streamable-http"
+      - "-address"
+      - "0.0.0.0:8000"
+      - "-allowed-hosts"
+      - "*"
+    environment:
+      - GRAFANA_URL=http://grafana:3000
+      - GRAFANA_API_KEY=${GRAFANA_MCP_API_KEY}
+    ports:
+      - "8000:8000"
     security_opt:
       - no-new-privileges:true
     restart: unless-stopped
