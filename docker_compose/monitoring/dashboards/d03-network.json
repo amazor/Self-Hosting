@@ -410,7 +410,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_success",
+          "expr": "max by (instance, probe_name) (probe_success)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -422,7 +422,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_duration_seconds",
+          "expr": "max by (instance, probe_name) (probe_duration_seconds)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -434,7 +434,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_http_status_code",
+          "expr": "max by (instance, probe_name) (probe_http_status_code)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -459,14 +459,14 @@
               "job": true
             },
             "indexByName": {
-              "name": 0,
+              "probe_name": 0,
               "instance": 1,
               "Value #A": 2,
               "Value #C": 3,
               "Value #B": 4
             },
             "renameByName": {
-              "name": "Probe",
+              "probe_name": "Probe",
               "instance": "Target",
               "Value #A": "Status",
               "Value #C": "HTTP Code",
@@ -572,6 +572,10 @@
               {
                 "id": "custom.width",
                 "value": 90
+              },
+              {
+                "id": "noValue",
+                "value": "—"
               },
               {
                 "id": "mappings",
