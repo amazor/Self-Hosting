@@ -28,6 +28,9 @@ docker_compose/*/config/
 CLAUDE.local.md
 !CLAUDE.local.md.example
 
+# --- Claude Code MCP server config (can contain real LAN IPs/hosts) ---
+.mcp.json
+
 # --- Claude Code local state (permissions/settings can contain real IPs/usernames; also worktrees, locks) ---
 .claude/
 
