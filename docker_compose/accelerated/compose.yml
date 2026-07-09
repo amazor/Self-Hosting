@@ -157,6 +157,11 @@ services:
       - "${IPERF3_BIND_IP:-0.0.0.0}:${IPERF3_PORT:-5201}:${IPERF3_PORT:-5201}/tcp"
       - "${IPERF3_BIND_IP:-0.0.0.0}:${IPERF3_PORT:-5201}:${IPERF3_PORT:-5201}/udp"
     read_only: true
+    # iperf3 needs a writable /tmp to create test stream file descriptors;
+    # without it every stream (including remote client connections, not just
+    # local checks) fails with "unable to create a new stream: Read-only file system".
+    tmpfs:
+      - /tmp
     security_opt:
       - no-new-privileges:true
     cap_drop:
