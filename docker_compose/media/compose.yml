@@ -37,6 +37,23 @@ services:
       - METRICS_PROMETHEUS=on
       - METRICS_PORT=9797
       - METRICS_PATH=/metrics.cgi
+    # Override the image's baked-in healthcheck: it's a DNS-leak test that requires DDNS/IP
+    # to be set to do anything, and no-ops to "healthy" otherwise. It does NOT check whether
+    # the tunnel is actually up, so it never caught a real multi-week outage where the
+    # container's own supervision loop got stuck retrying without ever succeeding (a bug in
+    # the image's start.sh: it resets its internal failure counter after every attempt,
+    # whether or not the reconnect actually worked, so its own give-up threshold never fires).
+    # This checks the one thing that actually matters: does tun0 exist.
+    healthcheck:
+      test: ["CMD-SHELL", "test -d /sys/class/net/tun0"]
+      interval: 30s
+      timeout: 5s
+      retries: 4
+      start_period: 60s
+    # autoheal (below) restarts this container if the healthcheck above fails for
+    # ~2 minutes straight, so a wedged reconnect loop no longer requires a manual restart.
+    labels:
+      - "autoheal=true"
     restart: unless-stopped
 
   # --- qBittorrent — Torrent client (all traffic via VPN) ---
@@ -61,6 +78,39 @@ services:
       # Single-root mapping: all media apps see /data so no remote path mapping is needed.
       # qBittorrent UI paths should be under /data/downloads/qbittorrent.
       - ${MEDIA_ROOT:-/mnt/media}:/data
+    # network_mode: service:vpn means this container's network namespace is only valid for
+    # as long as the *same* vpn container instance is running. If vpn ever restarts (manually,
+    # or via autoheal below), this container keeps running but is left attached to a dead
+    # namespace — no interfaces, no connectivity, WebUI included — until it is itself
+    # restarted. This healthcheck catches exactly that: if the WebUI stops responding,
+    # autoheal restarts qbittorrent, which re-attaches to vpn's current namespace.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS --max-time 5 http://localhost:8080/ >/dev/null"]
+      interval: 30s
+      timeout: 10s
+      retries: 4
+      start_period: 30s
+    labels:
+      - "autoheal=true"
+    restart: unless-stopped
+
+  # --- Autoheal — restarts vpn/qbittorrent automatically on healthcheck failure ---
+  # Docker's restart policies only trigger when a container's main process exits; a
+  # container that stays "up" but fails its healthcheck (a wedged VPN reconnect loop, a
+  # qBittorrent left on a stale network namespace after vpn restarts) is not restarted by
+  # Docker on its own. Autoheal watches for that and restarts the affected container.
+  # Scoped to only the two labeled services above (AUTOHEAL_CONTAINER_LABEL=autoheal) —
+  # it does not touch sonarr/radarr/prowlarr/etc.
+  # Image: https://github.com/willfarrell/docker-autoheal
+  autoheal:
+    image: willfarrell/autoheal:${AUTOHEAL_TAG:-latest}
+    container_name: autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=30
+      - AUTOHEAL_START_PERIOD=60
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped
 
   # --- Sonarr — TV automation ---
