@@ -43,11 +43,15 @@ services:
     # container's own supervision loop got stuck retrying without ever succeeding (a bug in
     # the image's start.sh: it resets its internal failure counter after every attempt,
     # whether or not the reconnect actually worked, so its own give-up threshold never fires).
-    # This checks the one thing that actually matters: does tun0 exist.
+    # Ask the daemon directly rather than guessing an interface name: verified two different
+    # tunnel interfaces in testing (tun0 for Lightway/OpenVPN, wgexpressvpn0 for WireGuard,
+    # depending on what "smart" negotiates) — a fixed interface-name check false-positived
+    # on a genuinely healthy WireGuard connection. connectionstate tracked real connectivity
+    # correctly across both, so it's the protocol-agnostic source of truth.
     healthcheck:
-      test: ["CMD-SHELL", "test -d /sys/class/net/tun0"]
+      test: ["CMD-SHELL", "expressvpnctl --timeout 5 get connectionstate | grep -qx Connected"]
       interval: 30s
-      timeout: 5s
+      timeout: 8s
       retries: 4
       start_period: 60s
     # autoheal (below) restarts this container if the healthcheck above fails for
