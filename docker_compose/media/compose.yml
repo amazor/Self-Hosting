@@ -81,13 +81,17 @@ services:
     # network_mode: service:vpn means this container's network namespace is only valid for
     # as long as the *same* vpn container instance is running. If vpn ever restarts (manually,
     # or via autoheal below), this container keeps running but is left attached to a dead
-    # namespace — no interfaces, no connectivity, WebUI included — until it is itself
-    # restarted. This healthcheck catches exactly that: if the WebUI stops responding,
-    # autoheal restarts qbittorrent, which re-attaches to vpn's current namespace.
+    # namespace — no interfaces, no connectivity — until it is itself restarted.
+    # IMPORTANT: this cannot be checked via "curl localhost:8080" — qBittorrent's own process
+    # never notices the namespace died, because loopback keeps working regardless of whether
+    # the shared eth0/tun0 interfaces are still attached (verified: curl-based check reported
+    # "healthy" for 3+ minutes on a namespace that had already lost every interface but lo).
+    # Checking for eth0 directly is the actual signal: it exists in any live namespace this
+    # container is genuinely attached to, and is absent once orphaned.
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS --max-time 5 http://localhost:8080/ >/dev/null"]
+      test: ["CMD-SHELL", "test -d /sys/class/net/eth0"]
       interval: 30s
-      timeout: 10s
+      timeout: 5s
       retries: 4
       start_period: 30s
     labels:
