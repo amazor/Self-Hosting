@@ -690,7 +690,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "Response Latency",
-      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (e.g. grafana, core-dnsmasq) vs external ones to isolate whether slowness is inside your network or outside. Add a dedicated outbound-internet probe via BLACKBOX_ICMP_TARGETS/BLACKBOX_DNS_TARGETS in .env if you want a direct \"can I reach the internet\" signal.",
+      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (grafana, core-dnsmasq, nas) against the external reference probes (internet, dns — both target 1.1.1.1) to isolate whether slowness is inside your network or outside. Probes are defined by BLACKBOX_*_TARGETS in .env; every configured probe appears here automatically.",
       "gridPos": {
         "x": 0,
         "y": 11,
