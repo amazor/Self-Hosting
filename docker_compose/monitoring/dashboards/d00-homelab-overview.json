@@ -94,7 +94,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Node"
@@ -108,7 +108,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "VM Role"
@@ -122,7 +122,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Host"
@@ -649,6 +649,12 @@
             ]
           },
           {
+            "matcher": { "id": "byName", "options": "Host" },
+            "properties": [
+              { "id": "custom.width", "value": 80 }
+            ]
+          },
+          {
             "matcher": { "id": "byName", "options": "Up" },
             "properties": [
               { "id": "custom.width", "value": 35 }
@@ -830,7 +836,7 @@
           "editorMode": "code",
           "expr": "sum by (node, host, service) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", level=~\"error|fatal\"}[$__range]))",
           "queryType": "instant",
-          "legendFormat": "",
+          "legendFormat": "Errors",
           "refId": "A"
         },
         {
@@ -839,7 +845,7 @@
           "expr": "count by (node, host, service) (container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service!=\"\", name!=\"\", image!=\"\"} > (time() - $__range_s))",
           "instant": true,
           "range": false,
-          "legendFormat": "",
+          "legendFormat": "Restarts",
           "refId": "B"
         }
       ],
@@ -847,20 +853,6 @@
         {
           "id": "merge",
           "options": {}
-        },
-        {
-          "id": "renameByRegex",
-          "options": {
-            "regex": ".*count_over_time.*",
-            "renamePattern": "Errors"
-          }
-        },
-        {
-          "id": "renameByRegex",
-          "options": {
-            "regex": ".*container_start_time.*",
-            "renamePattern": "Restarts"
-          }
         },
         {
           "id": "organize",

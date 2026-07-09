@@ -104,7 +104,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Node"
@@ -121,7 +121,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "VM Role"
@@ -138,7 +138,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Host"
@@ -690,7 +690,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "Response Latency",
-      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (grafana, loki) vs external (internet) to isolate whether slowness is inside your network or outside.",
+      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (e.g. grafana, core-dnsmasq) vs external ones to isolate whether slowness is inside your network or outside. Add a dedicated outbound-internet probe via BLACKBOX_ICMP_TARGETS/BLACKBOX_DNS_TARGETS in .env if you want a direct \"can I reach the internet\" signal.",
       "gridPos": {
         "x": 0,
         "y": 11,
@@ -708,8 +708,8 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_duration_seconds{job=\"blackbox\", name=~\"internet|dns|grafana|prometheus|loki\"}",
-          "legendFormat": "{{name}}",
+          "expr": "probe_duration_seconds{job=\"blackbox\", probe_name=~\".+\"}",
+          "legendFormat": "{{probe_name}}",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -745,7 +745,7 @@
           "links": [
             {
               "title": "View Logs →",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.name}",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.probe_name}",
               "targetBlank": true
             }
           ]
@@ -989,8 +989,8 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_success{job=\"blackbox\", name=~\"internet|dns|grafana|prometheus|loki\"}",
-          "legendFormat": "{{name}}",
+          "expr": "probe_success{job=\"blackbox\", probe_name=~\".+\"}",
+          "legendFormat": "{{probe_name}}",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -1394,6 +1394,7 @@
           },
           "editorMode": "code",
           "expr": "expressvpn_connection_uptime_seconds{host=~\"$host\"}",
+          "legendFormat": "{{host}}",
           "range": true,
           "instant": false,
           "refId": "A"

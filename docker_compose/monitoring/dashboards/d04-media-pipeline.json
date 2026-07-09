@@ -114,7 +114,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Node"
@@ -131,7 +131,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "VM Role"
@@ -148,7 +148,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Host"
@@ -865,7 +865,7 @@
       "id": 21,
       "type": "stat",
       "title": "Indexer Health",
-      "description": "Prowlarr indexer status. Green = healthy, red = unhealthy. Unhealthy indexers silently stop Sonarr/Radarr from finding content. Click to check Prowlarr logs.",
+      "description": "Ratio of enabled to configured Prowlarr indexers, as reported by scraparr. Prowlarr auto-disables indexers that fail repeatedly, so a ratio below 100% usually means an indexer needs attention. Note: scraparr exports counts per indexer type, not a boolean healthy/unhealthy per indexer — this ratio is the closest available proxy. Click to check Prowlarr logs.",
       "gridPos": {
         "x": 12,
         "y": 12,
@@ -883,8 +883,8 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "prowlarr_indexer_healthy{host=~\"$host\"}",
-          "legendFormat": "{{indexer}}",
+          "expr": "sum(prowlarr_indexer_enabled{host=~\"$host\"}) / sum(prowlarr_indexer_count{host=~\"$host\"})",
+          "legendFormat": "Enabled / Total",
           "instant": true,
           "range": false,
           "refId": "A"
@@ -892,24 +892,11 @@
       ],
       "fieldConfig": {
         "defaults": {
+          "unit": "percentunit",
+          "min": 0,
+          "max": 1,
+          "decimals": 0,
           "noValue": "No indexers configured",
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "color": "red",
-                  "index": 0
-                },
-                "1": {
-                  "text": "OK",
-                  "color": "green",
-                  "index": 1
-                }
-              }
-            }
-          ],
           "color": {
             "mode": "thresholds"
           },
@@ -919,6 +906,10 @@
               {
                 "color": "red",
                 "value": null
+              },
+              {
+                "color": "orange",
+                "value": 0.01
               },
               {
                 "color": "green",
@@ -945,7 +936,7 @@
           "fields": ""
         },
         "orientation": "horizontal",
-        "textMode": "value_and_name",
+        "textMode": "value",
         "wideLayout": true,
         "colorMode": "background",
         "graphMode": "none",
