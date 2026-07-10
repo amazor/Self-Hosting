@@ -235,6 +235,10 @@ def ensure_nfs_mount(
 ) -> bool:
     """Ensure an NFS fstab entry exists and the mount is active.
 
+    Also orders docker.service after the mount (see
+    ``_ensure_docker_waits_for_mount``) so containers with bind mounts into
+    mount_point don't race the NFS mount on VM/docker restart.
+
     Returns True if the mount is now active, False on failure.
     Idempotent: updates existing fstab entries if options differ.
     """

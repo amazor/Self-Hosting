@@ -167,6 +167,14 @@ scrape_configs:
         refresh_interval: 5m
 
   - job_name: "cadvisor"
+    # cadvisor embeds its own internal timestamps (from its ~10s housekeeping
+    # cycle) in /metrics, which don't align with our scrape_interval — that
+    # beat-frequency mismatch periodically yields a timestamp older than the
+    # last stored sample, which Prometheus then drops as "out-of-order".
+    # honor_timestamps: false makes Prometheus stamp samples with actual
+    # scrape wall-clock time instead of trusting cadvisor's clock — the
+    # standard fix for this well-known cadvisor/Prometheus interaction.
+    honor_timestamps: false
     static_configs:
       - targets: ["host.docker.internal:8081"]
         labels:
