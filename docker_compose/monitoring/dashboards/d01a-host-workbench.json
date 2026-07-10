@@ -1019,14 +1019,14 @@
           "id": 35,
           "type": "table",
           "title": "Top Directories by Size",
-          "description": "Largest directories on this VM's local disk, from the node-exporter textfile collector (du -x, single filesystem, refreshed hourly). NFS / other mounts (e.g. the media library on the NAS) are intentionally excluded. '/' is the whole root filesystem; '/var/lib/docker/*' breaks down the Docker data root. Empty until the node-exporter-textfile sidecar has run at least once.",
+          "description": "Largest distinct directories on this VM's local disk, from the node-exporter textfile collector (du -x, single filesystem, refreshed hourly). Roll-up parents (/, /var, /var/lib, /opt, per-stack config roots) are filtered out so each row is a distinct consumer — e.g. /var/lib/containerd is the Docker image store, and /opt/self-hosting/docker_compose/<stack>/config/<service> are per-service bind mounts. NFS / other mounts (e.g. the media library on the NAS) are intentionally excluded. Empty until the node-exporter-textfile sidecar has run at least once.",
           "gridPos": { "x": 0, "y": 47, "w": 24, "h": 9 },
           "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
           "targets": [
             {
               "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
               "editorMode": "code",
-              "expr": "topk(20, node_directory_size_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
+              "expr": "topk(20, node_directory_size_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", path!~\"/|/var|/var/lib|/opt|/var/lib/docker|/opt/self-hosting/docker_compose/[^/]+/config\"})",
               "format": "table",
               "instant": true,
               "range": false,
