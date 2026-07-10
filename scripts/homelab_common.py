@@ -503,7 +503,7 @@ discovery.relabel "docker_contract" {{
   // (2) Compose service label (preferred; stable) — fill only if service is empty
   rule {{
     source_labels = ["service", "__meta_docker_container_label_com_docker_compose_service"]
-    regex         = "^$;(.+)"
+    regex         = "^;(.+)$"
     replacement   = "$1"
     target_label  = "service"
   }}
@@ -512,7 +512,7 @@ discovery.relabel "docker_contract" {{
   // Matches: project-service-1 OR project_service_1 (conservative on purpose)
   rule {{
     source_labels = ["service", "container"]
-    regex         = "^$;(.+?)[-_]([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)[-_](\\\\d+)$"
+    regex         = "^;(.+?)[-_]([A-Za-z0-9]+(?:[-_][A-Za-z0-9]+)*)[-_](\\\\d+)$"
     replacement   = "$2"
     target_label  = "service"
   }}
@@ -520,7 +520,7 @@ discovery.relabel "docker_contract" {{
   // (4) Final fallback: service = container (guarantee non-empty)
   rule {{
     source_labels = ["service", "container"]
-    regex         = "^$;(.+)"
+    regex         = "^;(.+)$"
     replacement   = "$1"
     target_label  = "service"
   }}
