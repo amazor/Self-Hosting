@@ -1522,8 +1522,8 @@
     {
       "id": 23,
       "type": "timeseries",
-      "title": "VPN Tunnel Traffic",
-      "description": "Actual traffic through the VPN tunnel interface (tun*), as reported by the ExpressVPN container. More accurate than cAdvisor container-level traffic for measuring true VPN egress.",
+      "title": "VPN Traffic",
+      "description": "Traffic through the vpn container's network namespace, as reported by cAdvisor. qBittorrent shares this namespace (network_mode: service:vpn), so this is effectively torrent traffic plus WebUI/scrape chatter. The ExpressVPN exporter's per-interface counters (expressvpn_network_*) died when the tunnel moved from tun0 to wgexpressvpn0 (Lightway/WireGuard) — the image's exporter only recognises tun* interfaces.",
       "gridPos": {
         "x": 0,
         "y": 39,
@@ -1541,7 +1541,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "rate(expressvpn_network_rx_bytes_total{host=~\"$host\", interface=~\".*tun.*\"}[$__rate_interval])",
+          "expr": "sum(rate(container_network_receive_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
           "legendFormat": "RX (download)",
           "range": true,
           "instant": false,
@@ -1553,7 +1553,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "rate(expressvpn_network_tx_bytes_total{host=~\"$host\", interface=~\".*tun.*\"}[$__rate_interval])",
+          "expr": "sum(rate(container_network_transmit_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
           "legendFormat": "TX (upload)",
           "range": true,
           "instant": false,

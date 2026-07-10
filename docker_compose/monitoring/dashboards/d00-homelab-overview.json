@@ -529,7 +529,7 @@
           "unit": "percent",
           "min": 0,
           "max": 100,
-          "decimals": 1,
+          "decimals": 0,
           "noValue": "N/A",
           "links": [
             {
@@ -546,9 +546,11 @@
         "orientation": "horizontal",
         "displayMode": "gradient",
         "showUnfilled": true,
-        "sizing": "auto",
+        "sizing": "manual",
         "minVizWidth": 8,
-        "minVizHeight": 25
+        "minVizHeight": 16,
+        "maxVizHeight": 24,
+        "text": { "titleSize": 12, "valueSize": 12 }
       }
     },
 
