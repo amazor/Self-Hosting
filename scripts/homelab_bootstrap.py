@@ -225,6 +225,46 @@ def bring_up_stack(
 # NFS helper (env-driven, replaces interactive prompts)
 # ---------------------------------------------------------------------------
 
+def _ensure_docker_waits_for_mount(
+    mount_point: str, tracker: StepTracker | None = None,
+) -> None:
+    """Order docker.service after the NFS mount unit for mount_point.
+
+    fstab's ``nofail`` means boot won't hang if the NAS is unreachable, but
+    without this, docker.service has no ordering relationship to the mount
+    at all — it can start (and start containers with bind mounts into
+    mount_point) before the NFS mount completes. Docker then silently binds
+    an empty local directory instead of the NFS export, and that binding is
+    stuck until the container is recreated. Using Wants+After (not
+    Requires+After) keeps the "boot won't hang" property: docker still
+    starts even if the mount ultimately fails.
+    """
+    result = subprocess.run(
+        ["systemd-escape", "--path", "--suffix=mount", mount_point],
+        capture_output=True, text=True, check=False,
+    )
+    if result.returncode != 0:
+        if tracker:
+            tracker.warn(f"Could not resolve mount unit name for {mount_point}")
+        return
+    unit_name = result.stdout.strip()
+
+    drop_in_dir = Path("/etc/systemd/system/docker.service.d")
+    drop_in_dir.mkdir(parents=True, exist_ok=True)
+    drop_in = drop_in_dir / f"nfs-mount-{unit_name}.conf"
+    content = f"[Unit]\nWants={unit_name}\nAfter={unit_name}\n"
+
+    if drop_in.is_file() and drop_in.read_text() == content:
+        if tracker:
+            tracker.detail(f"docker.service already ordered after {unit_name}")
+        return
+
+    drop_in.write_text(content)
+    subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+    if tracker:
+        tracker.detail(f"docker.service now waits for {unit_name} before starting")
+
+
 def ensure_nfs_mount(
     host: str,
     export: str,
@@ -234,6 +274,10 @@ def ensure_nfs_mount(
     tracker: StepTracker | None = None,
 ) -> bool:
     """Ensure an NFS fstab entry exists and the mount is active.
+
+    Also orders docker.service after the mount (see
+    ``_ensure_docker_waits_for_mount``) so containers with bind mounts into
+    mount_point don't race the NFS mount on VM/docker restart.
 
     Returns True if the mount is now active, False on failure.
     Idempotent: updates existing fstab entries if options differ.
@@ -279,6 +323,8 @@ def ensure_nfs_mount(
 
     mp = Path(mount_point)
     mp.mkdir(parents=True, exist_ok=True)
+
+    _ensure_docker_waits_for_mount(mount_point, tracker=tracker)
 
     subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
     result = subprocess.run(["mount", "-a"], capture_output=True)
