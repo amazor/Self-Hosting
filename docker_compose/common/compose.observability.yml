@@ -29,10 +29,53 @@ services:
     command:
       - "--path.rootfs=/host"
       - "--collector.filesystem.mount-points-exclude=^/(sys|proc|dev|host|etc)($$|/)"
+      - "--collector.textfile.directory=/textfile"
     volumes:
       - /:/host:ro,rslave
+      - node_exporter_textfile:/textfile:ro
     network_mode: host
     pid: host
+    read_only: true
+    security_opt:
+      - no-new-privileges:true
+    restart: unless-stopped
+
+  # --- node-exporter-textfile: per-directory disk usage for the textfile collector ---
+  # node-exporter reports usage per *filesystem*, not per folder. This sidecar
+  # periodically `du`s the host root filesystem (single fs, top-level dirs) plus
+  # the Docker data root, and writes node_directory_size_bytes{path=...} to a
+  # shared volume that node-exporter exposes via --collector.textfile.directory.
+  # Answers "what is filling this VM's disk?" without a new exporter or host cron.
+  # `du -x` stays on one filesystem, so NFS/other mounts (e.g. the media library
+  # on the NAS) are deliberately NOT walked here.
+  node-exporter-textfile:
+    image: debian:stable-slim
+    container_name: node-exporter-textfile
+    command:
+      - bash
+      - -c
+      - |
+        set -eu
+        INTERVAL=3600
+        OUT=/textfile/directory_size.prom
+        while true; do
+          TMP="$$(mktemp /textfile/.dirsize.XXXXXX)"
+          {
+            echo '# HELP node_directory_size_bytes Disk usage of watched directories in bytes (du -x, single filesystem).'
+            echo '# TYPE node_directory_size_bytes gauge'
+            for base in /host /host/var/lib/docker; do
+              [ -d "$$base" ] || continue
+              nice -n 19 du -x --block-size=1 --max-depth=1 "$$base" 2>/dev/null | while read -r size path; do
+                rel="$${path#/host}"; [ -z "$$rel" ] && rel=/
+                printf 'node_directory_size_bytes{path="%s"} %s\n' "$$rel" "$$size"
+              done
+            done
+          } > "$$TMP" && chmod 0644 "$$TMP" && mv "$$TMP" "$$OUT"
+          sleep "$$INTERVAL"
+        done
+    volumes:
+      - /:/host:ro,rslave
+      - node_exporter_textfile:/textfile
     read_only: true
     security_opt:
       - no-new-privileges:true
@@ -89,3 +132,8 @@ services:
     cap_drop:
       - ALL
     restart: unless-stopped
+
+volumes:
+  # Shared between node-exporter-textfile (writes du output) and node-exporter
+  # (reads it via --collector.textfile.directory). Small; holds one .prom file.
+  node_exporter_textfile:
