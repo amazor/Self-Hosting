@@ -257,7 +257,7 @@ and enforces a few guardrails so mistakes show up early.
    - Asks for NAS host, export paths, and local mount points (defaults from `.env`).  
    - Writes `nofail,_netdev,x-systemd.automount` entries so boot does not hang if the NAS is unreachable.  
    - Runs `mount -a` to apply immediately.  
-   - Adds a `docker.service.d` drop-in ordering `docker.service` after each NFS mount unit, so a reboot can't race dockerd against the NFS mount — without it, containers with `restart: always` (e.g. Plex) can start bind-mounted to the pre-mount empty directory and need a manual restart to pick up the real content.
+   - Installs a bounded (5 min) ping-retry wait for the NAS host (`wait-for-nas@<host>.service`, a systemd template unit), ordered before both the NFS mount unit and `docker.service`. This closes two gaps: a reboot racing dockerd against a slow-but-already-up NAS (containers with `restart: unless-stopped` — e.g. Plex — can start bind-mounted to the pre-mount empty directory), and a full power-outage recovery where the NAS itself is still booting (NFS's own soft-mount retry window is only ~15-20s, far shorter than a Synology's boot time). The wait always gives up and lets boot continue after the timeout — it never hangs indefinitely.
 
 2. **Env file**  
    - Requires `.env` to exist next to `compose.yml`.  
