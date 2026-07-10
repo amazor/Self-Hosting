@@ -58,17 +58,24 @@ services:
         set -eu
         INTERVAL=3600
         OUT=/textfile/directory_size.prom
+        # emit <hostpath> <max-depth>: du one path and print node_directory_size_bytes
+        # per subdir, stripping the /host prefix from the reported path label.
+        emit() {
+          nice -n 19 du -x --block-size=1 --max-depth="$$2" "$$1" 2>/dev/null | while read -r size path; do
+            rel="$${path#/host}"; [ -z "$$rel" ] && rel=/
+            printf 'node_directory_size_bytes{path="%s"} %s\n' "$$rel" "$$size"
+          done
+        }
         while true; do
           TMP="$$(mktemp /textfile/.dirsize.XXXXXX)"
           {
             echo '# HELP node_directory_size_bytes Disk usage of watched directories in bytes (du -x, single filesystem).'
             echo '# TYPE node_directory_size_bytes gauge'
-            for base in /host /host/var/lib/docker; do
-              [ -d "$$base" ] || continue
-              nice -n 19 du -x --block-size=1 --max-depth=1 "$$base" 2>/dev/null | while read -r size path; do
-                rel="$${path#/host}"; [ -z "$$rel" ] && rel=/
-                printf 'node_directory_size_bytes{path="%s"} %s\n' "$$rel" "$$size"
-              done
+            emit /host 1                                        # root filesystem, top level
+            [ -d /host/var/lib ] && emit /host/var/lib 1 || true   # exposes containerd/docker/postgres/etc.
+            [ -d /host/var/lib/docker/volumes ] && emit /host/var/lib/docker/volumes 1 || true
+            for cfg in /host/opt/self-hosting/docker_compose/*/config; do  # per-service bind-mounted configs
+              [ -d "$$cfg" ] && emit "$$cfg" 1 || true
             done
           } > "$$TMP" && chmod 0644 "$$TMP" && mv "$$TMP" "$$OUT"
           sleep "$$INTERVAL"
