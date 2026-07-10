@@ -150,7 +150,7 @@
         "links": [
           {
             "title": "Focus on ${__field.labels.service}",
-            "url": "/d/${__dashboard.uid}?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}&var-service=${__field.labels.service}&var-level=${level}&var-search=${search:percentencode}",
+            "url": "/d/${__dashboard.uid}?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&var-service=${__field.labels.service}&${level:queryparam}&var-search=${search:percentencode}",
             "targetBlank": false
           }
         ]
@@ -207,7 +207,7 @@
         "links": [
           {
             "title": "Filter to ${__field.displayName}",
-            "url": "/d/${__dashboard.uid}?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}&var-service=${service}&var-level=${__field.displayName}&var-search=${search:percentencode}",
+            "url": "/d/${__dashboard.uid}?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&${service:queryparam}&var-level=${__field.displayName}&var-search=${search:percentencode}",
             "targetBlank": false
           }
         ]

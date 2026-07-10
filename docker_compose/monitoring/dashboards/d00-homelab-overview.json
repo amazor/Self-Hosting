@@ -183,7 +183,7 @@
           "links": [
             {
               "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}",
               "targetBlank": false
             }
           ]
@@ -236,7 +236,7 @@
           "links": [
             {
               "title": "\u2192 Log Workbench",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}&var-level=error&var-search=",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&var-level=error&var-search=",
               "targetBlank": false
             }
           ]
@@ -296,7 +296,7 @@
           "links": [
             {
               "title": "\u2192 Container Workbench",
-              "url": "/d/homelab-container-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
+              "url": "/d/homelab-container-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}",
               "targetBlank": false
             }
           ]
@@ -904,7 +904,7 @@
           "links": [
             {
               "title": "\u2192 Log Workbench",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${__data.fields.node}&var-vm_role=${vm_role}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error&var-search=",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${__data.fields.node}&${vm_role:queryparam}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error&var-search=",
               "targetBlank": false
             }
           ]
