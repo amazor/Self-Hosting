@@ -27,6 +27,11 @@ services:
       - "6881:6881/tcp"   # BitTorrent
       - "6881:6881/udp"   # BitTorrent
       - "9797:9797/tcp"   # ExpressVPN Prometheus metrics
+    # Patches the image's own start.sh to drop a hardcoded tun0 interface
+    # check that false-positives under Lightway/WireGuard. See scripts/vpn-entrypoint.sh.
+    entrypoint: ["/bin/bash", "/vpn-entrypoint.sh"]
+    volumes:
+      - ./scripts/vpn-entrypoint.sh:/vpn-entrypoint.sh:ro
     environment:
       - TZ=${TZ:-Etc/UTC}
       - CODE=${EXPRESSVPN_CODE}
