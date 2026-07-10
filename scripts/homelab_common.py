@@ -563,11 +563,13 @@ loki.process "normalize" {{
   // --- (2) Try logfmt parsing (skip JSON / bare-equals lines to suppress parser noise) ---
   // Lines starting with {{ " [ or = are not logfmt — guard prevents noisy decode errors.
   // Lines containing " anywhere often break logfmt (e.g. JSON fragments, quoted messages).
-  // Lines containing " = " (space-padded equals) are free text, not logfmt — real logfmt
-  // tokens are always key=value with no surrounding whitespace (e.g. a crash-looping
-  // container repeating a plain-English/SQL error line with "key = 'value'" syntax).
+  // Lines with whitespace immediately adjacent to a bare = (" =" or "= ") are free text,
+  // not logfmt — real logfmt tokens are always key=value with no surrounding whitespace
+  // (e.g. a crash-looping container repeating a plain-English/SQL error line with
+  // "key = 'value'" syntax, or flaresolverr's "Incoming request => POST ..." — the space
+  // before "=>" alone is enough to break stage.logfmt, so both sides must be checked).
   stage.match {{
-    selector = `{{container=~".+"}} !~ "^[{{\\\"=\\\\[]" !~ \"\\\"\" !~ " = "
+    selector = `{{container=~".+"}} !~ "^[{{\\\"=\\\\[]" !~ \"\\\"\" !~ " =|= "
 `
     stage.logfmt {{
       mapping = {{
