@@ -256,7 +256,8 @@ and enforces a few guardrails so mistakes show up early.
    - Offers to configure fstab entries for `MEDIA_LIBRARY_ROOT` and `IMMICH_UPLOAD_ROOT`.  
    - Asks for NAS host, export paths, and local mount points (defaults from `.env`).  
    - Writes `nofail,_netdev,x-systemd.automount` entries so boot does not hang if the NAS is unreachable.  
-   - Runs `mount -a` to apply immediately.
+   - Runs `mount -a` to apply immediately.  
+   - Adds a `docker.service.d` drop-in ordering `docker.service` after each NFS mount unit, so a reboot can't race dockerd against the NFS mount — without it, containers with `restart: always` (e.g. Plex) can start bind-mounted to the pre-mount empty directory and need a manual restart to pick up the real content.
 
 2. **Env file**  
    - Requires `.env` to exist next to `compose.yml`.  

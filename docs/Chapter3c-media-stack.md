@@ -191,7 +191,7 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 
 1. Re-exec as root if needed (for fstab and ownership tasks).
 2. Parse `--force` and `--non-interactive`.
-3. Optionally configure NFS mount (interactive runs only).
+3. Optionally configure NFS mount (interactive runs only) — also adds a `docker.service.d` drop-in ordering `docker.service` after the mount unit, so a reboot can't race dockerd against the NFS mount and leave a `restart: always` container bind-mounted to an empty pre-mount directory.
 4. Require existing `.env` and load variables.
 5. Validate required VPN credentials.
 6. Validate media root and expected subdirectories.

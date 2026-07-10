@@ -290,9 +290,51 @@ def ensure_nfs_mount(
             )
         return False
 
+    _ensure_docker_waits_for_mount(mount_point, tracker)
+
     if tracker:
         tracker.detail(f"Mounted {mount_point}")
     return True
+
+
+def _ensure_docker_waits_for_mount(
+    mount_point: str, tracker: StepTracker | None = None
+) -> None:
+    """Order docker.service after this mount's systemd unit.
+
+    Without this, a VM reboot races docker.service against the NFS mount: containers
+    with restart:always start as soon as dockerd comes up, bind-mounting whatever is
+    at mount_point at that instant. If the NFS mount (which can take tens of seconds)
+    finishes after that, the container is stuck looking at the empty pre-mount
+    directory until someone notices and restarts it manually.
+    """
+    escape = subprocess.run(
+        ["systemd-escape", "--path", "--suffix=mount", mount_point],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if escape.returncode != 0:
+        if tracker:
+            tracker.warn(
+                f"Could not resolve systemd mount unit for {mount_point}; "
+                "docker.service ordering not configured"
+            )
+        return
+    mount_unit = escape.stdout.strip()
+
+    drop_in_dir = Path("/etc/systemd/system/docker.service.d")
+    drop_in_dir.mkdir(parents=True, exist_ok=True)
+    drop_in = drop_in_dir / f"nfs-mount-{mount_unit}.conf"
+    content = f"[Unit]\nWants={mount_unit}\nAfter={mount_unit}\n"
+
+    if drop_in.is_file() and drop_in.read_text() == content:
+        return
+
+    drop_in.write_text(content)
+    subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+    if tracker:
+        tracker.detail(f"docker.service now waits for {mount_unit}")
 
 
 # ---------------------------------------------------------------------------
