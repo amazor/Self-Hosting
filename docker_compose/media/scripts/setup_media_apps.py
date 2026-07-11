@@ -185,8 +185,15 @@ PROWLARR_SYNC_WAIT_S = 30
 # Ref: https://trash-guides.info/Bazarr/  https://wiki.bazarr.media/
 # ---------------------------------------------------------------------------
 
+BAZARR_PROFILE_ID = 1
 BAZARR_PROFILE_NAME = "English + Hebrew"
 BAZARR_LANGUAGES = ["en", "he"]
+
+# Anime gets its own English-only profile — see _bazarr_wanted_profile().
+BAZARR_ANIME_PROFILE_ID = 2
+BAZARR_ANIME_PROFILE_NAME = "English (Anime)"
+BAZARR_ANIME_LANGUAGES = ["en"]
+
 BAZARR_PROVIDERS = ["gestdown", "wizdom", "podnapisi", "yifysubtitles", "animetosho"]
 
 
@@ -1401,21 +1408,38 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
     # 6. Enable subtitle languages
     form["languages-enabled"] = BAZARR_LANGUAGES
 
-    # 7. Language profile
-    profile = [{
-        "profileId": 1,
-        "name": BAZARR_PROFILE_NAME,
-        "items": [
-            {"id": i + 1, "language": lang,
-             "hi": False, "forced": False, "audio_exclude": False}
-            for i, lang in enumerate(BAZARR_LANGUAGES)
-        ],
-        "cutoff": None,
-        "mustContain": [],
-        "mustNotContain": [],
-        "originalFormat": None,
-    }]
-    form["languages-profiles"] = json.dumps(profile)
+    # 7. Language profiles
+    def _profile(profile_id: int, name: str, languages: list[str]) -> dict:
+        return {
+            "profileId": profile_id,
+            "name": name,
+            "items": [
+                {"id": i + 1, "language": lang,
+                 "hi": False, "forced": False, "audio_exclude": False}
+                for i, lang in enumerate(languages)
+            ],
+            "cutoff": None,
+            "mustContain": [],
+            "mustNotContain": [],
+            "originalFormat": None,
+        }
+
+    form["languages-profiles"] = json.dumps([
+        _profile(BAZARR_PROFILE_ID, BAZARR_PROFILE_NAME, BAZARR_LANGUAGES),
+        _profile(BAZARR_ANIME_PROFILE_ID, BAZARR_ANIME_PROFILE_NAME,
+                 BAZARR_ANIME_LANGUAGES),
+    ])
+
+    # 7b. Apply a profile to series/movies added *after* this deploy.
+    # The assignment in step 9 is a one-shot over the library as it exists right
+    # now; without these, anything added later lands with profileId=None and Bazarr
+    # never searches subtitles for it (it reports 0 missing rather than an error).
+    # New anime still lands on the shared profile here — step 9 moves it to the
+    # anime profile on the next deploy, since Bazarr has no per-seriesType default.
+    form["settings-general-serie_default_enabled"] = "true"
+    form["settings-general-serie_default_profile"] = BAZARR_PROFILE_ID
+    form["settings-general-movie_default_enabled"] = "true"
+    form["settings-general-movie_default_profile"] = BAZARR_PROFILE_ID
 
     # 8. POST all settings in one call
     status = _bazarr_form_post(settings_url, apikey, form)
@@ -1425,9 +1449,8 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         log.warning("Bazarr settings POST returned %s; check config manually.", status)
         return
 
-    # 9. Mass-assign language profile to all existing series/movies
-    profile_id = 1
-    _bazarr_assign_profiles(bazarr_url, apikey, profile_id)
+    # 9. Put every existing series/movie on the right language profile
+    _bazarr_assign_profiles(bazarr_url, apikey)
 
 
 def _bazarr_list(bazarr_url: str, apikey: str, kind: str) -> list[dict]:
@@ -1437,9 +1460,23 @@ def _bazarr_list(bazarr_url: str, apikey: str, kind: str) -> list[dict]:
     return items.get("data", []) if isinstance(items, dict) else items
 
 
-def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
-                            profile_id: int) -> None:
-    """Assign a language profile to all series and movies missing one.
+def _bazarr_wanted_profile(item: dict, kind: str) -> int:
+    """Which language profile an item should be on.
+
+    Anime gets an English-only profile.  The shared profile has no cutoff, so
+    Bazarr wants *every* language on it and re-searches the missing ones forever
+    — and Hebrew anime subtitles essentially do not exist, so putting anime on it
+    means a permanent wanted-queue entry that hammers the providers and never
+    succeeds.  seriesType is Sonarr's own Standard/Daily/Anime field, which Bazarr
+    mirrors on its series objects.
+    """
+    if kind == "series" and item.get("seriesType") == "anime":
+        return BAZARR_ANIME_PROFILE_ID
+    return BAZARR_PROFILE_ID
+
+
+def _bazarr_assign_profiles(bazarr_url: str, apikey: str) -> None:
+    """Assign the right language profile to every series and movie.
 
     Bazarr populates its series/movies list from Sonarr/Radarr asynchronously
     after the connection is saved, so poll briefly instead of acting on a
@@ -1459,12 +1496,16 @@ def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
                         "skipping profile assignment.", kind)
             continue
 
-        needs_update = [
-            item[id_field] for item in data
-            if item.get("profileId") != profile_id and id_field in item
-        ]
+        wanted = {
+            item[id_field]: _bazarr_wanted_profile(item, kind)
+            for item in data if id_field in item
+        }
+        needs_update = {
+            item[id_field]: wanted[item[id_field]] for item in data
+            if id_field in item and item.get("profileId") != wanted[item[id_field]]
+        }
         if not needs_update:
-            log.info("Bazarr: all %s already have profile assigned.", kind)
+            log.info("Bazarr: all %s already on the right profile.", kind)
             continue
 
         # Bazarr's bulk-assign endpoint only honors the first id when given
@@ -1472,19 +1513,20 @@ def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
         # time. It also returns HTTP 500 on success in some versions, so
         # verify the result via GET rather than trusting the status code.
         post_key = "seriesid" if kind == "series" else "radarrid"
-        for item_id in needs_update:
+        for item_id, profile_id in needs_update.items():
             _bazarr_form_post(
                 f"{bazarr_url}/api/{kind}", apikey,
                 {post_key: str(item_id), "profileid": str(profile_id)},
             )
 
-        still_missing = sum(
+        still_wrong = sum(
             1 for item in _bazarr_list(bazarr_url, apikey, kind)
-            if item.get("profileId") != profile_id
+            if id_field in item
+            and item.get("profileId") != _bazarr_wanted_profile(item, kind)
         )
-        if still_missing:
-            log.warning("Bazarr: %d %s still missing a profile after "
-                        "assignment.", still_missing, kind)
+        if still_wrong:
+            log.warning("Bazarr: %d %s still on the wrong profile after "
+                        "assignment.", still_wrong, kind)
         else:
             log.info("Bazarr: assigned profile to %d %s.", len(needs_update), kind)
 

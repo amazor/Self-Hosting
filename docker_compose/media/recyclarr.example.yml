@@ -48,10 +48,9 @@ sonarr:
     custom_format_groups:
       add:
         # Golden Rule UHD: blocks x265 encodes with no HDR/DV (SDR 4K is not an upgrade).
-        # x265 (HD) is NOT selected here — 1080p x265 is also blocked per TRaSH Golden Rule.
+        # x265 (no HDR/DV) is a default member of the group, so no explicit select is
+        # needed — Recyclarr warns that selecting it is redundant.
         - trash_id: e3f37512790f00d0e89e54fe5e790d1c  # [Required] Golden Rule UHD
-          select:
-            - 9b64dff695c2115facf1b6ea59c9bd07  # x265 (no HDR/DV)
         - trash_id: 35fb4585dcd9e2a5ac732e4309f5a45a  # [Streaming Services] Asian
 
 radarr:
@@ -90,5 +89,3 @@ radarr:
       add:
         # Golden Rule UHD: blocks x265 encodes with no HDR/DV (SDR 4K is not an upgrade).
         - trash_id: ff204bbcecdd487d1cefcefdbf0c278d  # [Required] Golden Rule UHD
-          select:
-            - 839bea857ed2c0a8e084f3cbdbd65ecb  # x265 (no HDR/DV)
