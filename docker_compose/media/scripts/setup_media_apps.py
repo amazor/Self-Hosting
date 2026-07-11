@@ -1430,16 +1430,9 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
                  BAZARR_ANIME_LANGUAGES),
     ])
 
-    # 7b. Apply a profile to series/movies added *after* this deploy.
-    # The assignment in step 9 is a one-shot over the library as it exists right
-    # now; without these, anything added later lands with profileId=None and Bazarr
-    # never searches subtitles for it (it reports 0 missing rather than an error).
-    # New anime still lands on the shared profile here — step 9 moves it to the
-    # anime profile on the next deploy, since Bazarr has no per-seriesType default.
-    form["settings-general-serie_default_enabled"] = "true"
-    form["settings-general-serie_default_profile"] = BAZARR_PROFILE_ID
-    form["settings-general-movie_default_enabled"] = "true"
-    form["settings-general-movie_default_profile"] = BAZARR_PROFILE_ID
+    # NOTE: the default-profile settings are deliberately NOT part of this form —
+    # posting them together with languages-profiles makes Bazarr return HTTP 500 and
+    # silently drop them.  They go in their own call below (step 8b).
 
     # 8. POST all settings in one call
     status = _bazarr_form_post(settings_url, apikey, form)
@@ -1448,6 +1441,26 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
     else:
         log.warning("Bazarr settings POST returned %s; check config manually.", status)
         return
+
+    # 8b. Apply a profile to series/movies added *after* this deploy.
+    # Step 9 is a one-shot over the library as it exists right now; without these,
+    # anything added later lands with profileId=None and Bazarr never searches
+    # subtitles for it (it reports 0 missing rather than an error).  New anime still
+    # lands on the shared profile here — step 9 moves it to the anime profile on the
+    # next deploy, since Bazarr has no per-seriesType default.
+    # Must be its own POST: bundled with languages-profiles, Bazarr 500s and drops it.
+    defaults_status = _bazarr_form_post(settings_url, apikey, {
+        "settings-general-serie_default_enabled": "true",
+        "settings-general-serie_default_profile": str(BAZARR_PROFILE_ID),
+        "settings-general-movie_default_enabled": "true",
+        "settings-general-movie_default_profile": str(BAZARR_PROFILE_ID),
+    })
+    general = (_bazarr_get(settings_url, apikey) or {}).get("general", {})
+    if general.get("serie_default_enabled") and general.get("movie_default_enabled"):
+        log.info("Bazarr: default language profile enabled for new series/movies.")
+    else:
+        log.warning("Bazarr: could not enable the default language profile "
+                    "(HTTP %s); series added later will be skipped.", defaults_status)
 
     # 9. Put every existing series/movie on the right language profile
     _bazarr_assign_profiles(bazarr_url, apikey)
