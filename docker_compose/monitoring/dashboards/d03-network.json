@@ -104,7 +104,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Node"
@@ -121,7 +121,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "VM Role"
@@ -138,7 +138,7 @@
         "hide": 0,
         "includeAll": true,
         "multi": true,
-        "allValue": ".*",
+        "allValue": ".+",
         "refresh": 1,
         "sort": 1,
         "label": "Host"
@@ -410,7 +410,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_success",
+          "expr": "max by (instance, probe_name) (probe_success)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -422,7 +422,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_duration_seconds",
+          "expr": "max by (instance, probe_name) (probe_duration_seconds)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -434,7 +434,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_http_status_code",
+          "expr": "max by (instance, probe_name) (probe_http_status_code)",
           "format": "table",
           "instant": true,
           "range": false,
@@ -459,14 +459,14 @@
               "job": true
             },
             "indexByName": {
-              "name": 0,
+              "probe_name": 0,
               "instance": 1,
               "Value #A": 2,
               "Value #C": 3,
               "Value #B": 4
             },
             "renameByName": {
-              "name": "Probe",
+              "probe_name": "Probe",
               "instance": "Target",
               "Value #A": "Status",
               "Value #C": "HTTP Code",
@@ -572,6 +572,10 @@
               {
                 "id": "custom.width",
                 "value": 90
+              },
+              {
+                "id": "noValue",
+                "value": "—"
               },
               {
                 "id": "mappings",
@@ -690,7 +694,7 @@
       "id": 11,
       "type": "timeseries",
       "title": "Response Latency",
-      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (grafana, loki) vs external (internet) to isolate whether slowness is inside your network or outside.",
+      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (grafana, core-dnsmasq, nas) against the external reference probes (internet, dns — both target 1.1.1.1) to isolate whether slowness is inside your network or outside. Probes are defined by BLACKBOX_*_TARGETS in .env; every configured probe appears here automatically.",
       "gridPos": {
         "x": 0,
         "y": 11,
@@ -708,8 +712,8 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_duration_seconds{job=\"blackbox\", name=~\"internet|dns|grafana|prometheus|loki\"}",
-          "legendFormat": "{{name}}",
+          "expr": "probe_duration_seconds{job=\"blackbox\", probe_name=~\".+\"}",
+          "legendFormat": "{{probe_name}}",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -989,8 +993,8 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "probe_success{job=\"blackbox\", name=~\"internet|dns|grafana|prometheus|loki\"}",
-          "legendFormat": "{{name}}",
+          "expr": "probe_success{job=\"blackbox\", probe_name=~\".+\"}",
+          "legendFormat": "{{probe_name}}",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -1394,6 +1398,7 @@
           },
           "editorMode": "code",
           "expr": "expressvpn_connection_uptime_seconds{host=~\"$host\"}",
+          "legendFormat": "{{host}}",
           "range": true,
           "instant": false,
           "refId": "A"
@@ -1517,8 +1522,8 @@
     {
       "id": 23,
       "type": "timeseries",
-      "title": "VPN Tunnel Traffic",
-      "description": "Actual traffic through the VPN tunnel interface (tun*), as reported by the ExpressVPN container. More accurate than cAdvisor container-level traffic for measuring true VPN egress.",
+      "title": "VPN Traffic",
+      "description": "Traffic through the vpn container's network namespace, as reported by cAdvisor. qBittorrent shares this namespace (network_mode: service:vpn), so this is effectively torrent traffic plus WebUI/scrape chatter. The ExpressVPN exporter's per-interface counters (expressvpn_network_*) died when the tunnel moved from tun0 to wgexpressvpn0 (Lightway/WireGuard) — the image's exporter only recognises tun* interfaces.",
       "gridPos": {
         "x": 0,
         "y": 39,
@@ -1536,7 +1541,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "rate(expressvpn_network_rx_bytes_total{host=~\"$host\", interface=~\".*tun.*\"}[$__rate_interval])",
+          "expr": "sum(rate(container_network_receive_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
           "legendFormat": "RX (download)",
           "range": true,
           "instant": false,
@@ -1548,7 +1553,7 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "rate(expressvpn_network_tx_bytes_total{host=~\"$host\", interface=~\".*tun.*\"}[$__rate_interval])",
+          "expr": "sum(rate(container_network_transmit_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
           "legendFormat": "TX (upload)",
           "range": true,
           "instant": false,

@@ -235,6 +235,10 @@ def ensure_nfs_mount(
 ) -> bool:
     """Ensure an NFS fstab entry exists and the mount is active.
 
+    Also orders docker.service after the mount (see
+    ``_ensure_docker_waits_for_mount``) so containers with bind mounts into
+    mount_point don't race the NFS mount on VM/docker restart.
+
     Returns True if the mount is now active, False on failure.
     Idempotent: updates existing fstab entries if options differ.
     """
@@ -280,7 +284,8 @@ def ensure_nfs_mount(
     mp = Path(mount_point)
     mp.mkdir(parents=True, exist_ok=True)
 
-    subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+    _ensure_docker_waits_for_mount(host, mount_point, tracker)
+
     result = subprocess.run(["mount", "-a"], capture_output=True)
     if result.returncode != 0:
         if tracker:
@@ -293,6 +298,127 @@ def ensure_nfs_mount(
     if tracker:
         tracker.detail(f"Mounted {mount_point}")
     return True
+
+
+_WAIT_FOR_NAS_SCRIPT = "/usr/local/bin/wait-for-nas.sh"
+_WAIT_FOR_NAS_SCRIPT_CONTENT = """\
+#!/bin/sh
+# Bounded wait for a host to answer ping before an NFS mount / docker start.
+# Always exits 0 so it never blocks boot indefinitely if the NAS stays down
+# (mirrors the nofail philosophy of the fstab entries this supports).
+HOST="$1"
+TIMEOUT="${2:-300}"
+INTERVAL=5
+elapsed=0
+while [ "$elapsed" -lt "$TIMEOUT" ]; do
+    if ping -c1 -W2 "$HOST" >/dev/null 2>&1; then
+        exit 0
+    fi
+    elapsed=$((elapsed + INTERVAL))
+    sleep "$INTERVAL"
+done
+exit 0
+"""
+_WAIT_FOR_NAS_TEMPLATE_CONTENT = """\
+[Unit]
+Description=Wait (bounded) for NAS %i to become reachable
+After=network-online.target
+Wants=network-online.target
+DefaultDependencies=no
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/bin/wait-for-nas.sh %I
+"""
+
+
+def _write_if_changed(path: Path, content: str, *, executable: bool = False) -> bool:
+    if path.is_file() and path.read_text() == content:
+        return False
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(content)
+    if executable:
+        path.chmod(0o755)
+    return True
+
+
+def _ensure_docker_waits_for_mount(
+    host: str, mount_point: str, tracker: StepTracker | None = None
+) -> None:
+    """Make the NFS mount, and docker.service, wait for the NAS to be reachable.
+
+    Two failure modes this guards against:
+      1. VM reboot alone, NAS already up: the NFS mount can take tens of
+         seconds, but Docker's restart:unless-stopped containers start the
+         instant dockerd comes up, bind-mounting whatever is at mount_point
+         right then (2026-07-10 Plex empty-library incident).
+      2. Whole-house power outage: the NAS is the slowest thing to boot
+         (RAID/DSM init can take minutes), and NFS's own soft-mount retry
+         window (~15-20s) gives up long before that. Without an explicit
+         wait, the mount fails, Docker starts anyway, and containers are
+         stuck on an empty mount point until someone notices and restarts
+         them by hand.
+
+    Installs a bounded (5 min) ping-retry wait, instantiated per NAS host via
+    a systemd template unit, ordered before both the mount unit itself and
+    docker.service. Never blocks boot indefinitely: the wait always gives up
+    and proceeds after the timeout (matching the fstab entries' `nofail`).
+    """
+    escape = subprocess.run(
+        ["systemd-escape", "--path", "--suffix=mount", mount_point],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if escape.returncode != 0:
+        if tracker:
+            tracker.warn(
+                f"Could not resolve systemd mount unit for {mount_point}; "
+                "docker.service ordering not configured"
+            )
+        return
+    mount_unit = escape.stdout.strip()
+
+    wait_escape = subprocess.run(
+        ["systemd-escape", "--template=wait-for-nas@.service", host],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if wait_escape.returncode != 0:
+        if tracker:
+            tracker.warn(
+                f"Could not resolve systemd instance name for NAS host {host}; "
+                "docker.service ordering not configured"
+            )
+        return
+    wait_unit = wait_escape.stdout.strip()
+
+    changed = False
+    changed |= _write_if_changed(
+        Path(_WAIT_FOR_NAS_SCRIPT), _WAIT_FOR_NAS_SCRIPT_CONTENT, executable=True
+    )
+    changed |= _write_if_changed(
+        Path("/etc/systemd/system/wait-for-nas@.service"),
+        _WAIT_FOR_NAS_TEMPLATE_CONTENT,
+    )
+    changed |= _write_if_changed(
+        Path(f"/etc/systemd/system/{mount_unit}.d/wait-for-nas.conf"),
+        f"[Unit]\nWants={wait_unit}\nAfter={wait_unit}\n",
+    )
+    changed |= _write_if_changed(
+        Path(f"/etc/systemd/system/docker.service.d/nfs-mount-{mount_unit}.conf"),
+        f"[Unit]\nWants={mount_unit} {wait_unit}\nAfter={mount_unit} {wait_unit}\n",
+    )
+
+    if changed:
+        subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
+    if tracker:
+        tracker.detail(
+            f"docker.service + {mount_unit} now wait for NAS {host} "
+            f"(bounded, {wait_unit})"
+        )
 
 
 # ---------------------------------------------------------------------------

@@ -191,7 +191,7 @@ This stack intentionally keeps host `ports:` for direct UI access during setup a
 
 1. Re-exec as root if needed (for fstab and ownership tasks).
 2. Parse `--force` and `--non-interactive`.
-3. Optionally configure NFS mount (interactive runs only).
+3. Optionally configure NFS mount (interactive runs only) — also installs a bounded (5 min) ping-retry wait for the NAS host (`wait-for-nas@<host>.service`), ordered before both the mount unit and `docker.service`. Protects against a reboot racing dockerd against a slow NFS mount *and* a full power-outage recovery where the NAS itself is still booting — either way, a `restart: unless-stopped` container no longer gets stuck bind-mounted to an empty pre-mount directory. Never hangs boot indefinitely: it gives up and proceeds after the timeout.
 4. Require existing `.env` and load variables.
 5. Validate required VPN credentials.
 6. Validate media root and expected subdirectories.

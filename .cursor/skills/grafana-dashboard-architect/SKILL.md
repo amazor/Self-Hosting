@@ -124,7 +124,7 @@ If in doubt, add a row to a workbench first.
 
 ## Source of Truth
 
-Read before building: **`docker_compose/monitoring/bootstrap.py`** — Alloy label contract (`ensure_alloy_config()`), Prometheus targets (`ensure_prometheus_config()`), Grafana provisioning. **`docker_compose/monitoring/compose.yml`** — containers, ports. Canonical labels: bootstrap.py wins over tables below.
+Read before building: **`scripts/homelab_common.py`** — Alloy label contract (`setup_observability_config()` / `_ALLOY_CONFIG_TEMPLATE`), shared across all stacks. **`docker_compose/monitoring/stack_config.py`** — Prometheus targets (`_ensure_prometheus_config()`), Blackbox/Loki config, Grafana provisioning. **`docker_compose/monitoring/compose.yml`** — containers, ports. Canonical labels: the Alloy template wins over tables below.
 
 ### Planned Signal Sources (not yet in stack)
 
@@ -145,7 +145,7 @@ Do not design panels for these until the source is running and scraped.
 
 ## Label Contract (Quick Reference)
 
-Authoritative: `ensure_alloy_config()` in `bootstrap.py`. `M` = on Prometheus metrics.
+Authoritative: `_ALLOY_CONFIG_TEMPLATE` in `scripts/homelab_common.py` (rendered by `setup_observability_config()`). `M` = on Prometheus metrics.
 
 | Label | Meaning | Example | On Metrics |
 |-------|---------|---------|------------|
@@ -473,7 +473,7 @@ Design first; verify with MCP + render (do not assume). Layout: overview → bre
 | D00 — Homelab Overview | [dashboard-00-overview.md](dashboard-00-overview.md) | Built |
 | D01a — Host Workbench | [dashboard-01a-host-workbench.md](dashboard-01a-host-workbench.md) | Built |
 | D01b — Container Workbench | [dashboard-01b-container-workbench.md](dashboard-01b-container-workbench.md) | Built |
-| D02 — Log Workbench | [dashboard-02-log-workbench.md](dashboard-02-log-workbench.md) | Planning |
-| D03 — Network/Connectivity | [dashboard-03-network.md](dashboard-03-network.md) | Planning |
-| D04 — Media Pipeline | [dashboard-04-media-pipeline.md](dashboard-04-media-pipeline.md) | Planning — requires exportarr, qbittorrent-exporter, Jellyfin metrics |
+| D02 — Log Workbench | [dashboard-02-log-workbench.md](dashboard-02-log-workbench.md) | Built |
+| D03 — Network/Connectivity | [dashboard-03-network.md](dashboard-03-network.md) | Built |
+| D04 — Media Pipeline | [dashboard-04-media-pipeline.md](dashboard-04-media-pipeline.md) | Built |
 | D05 — Hardware/Host | [dashboard-05-hardware-host.md](dashboard-05-hardware-host.md) | Planning — requires node_exporter on pve1, SMART collector |

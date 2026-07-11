@@ -60,8 +60,11 @@ services:
   # Connects to qBittorrent's Web API to export torrent stats.
   # qBittorrent uses network_mode: service:vpn, so reach it at vpn:8080.
   # Docs: https://github.com/martabal/qbittorrent-exporter
+  # ghcr.io, not Docker Hub: the Hub repo stopped receiving releases at
+  # v1.2.3 (May 2024), which can't parse qBittorrent >= 5.2's 204 login
+  # response and therefore exports nothing. Releases continue on ghcr.io.
   qbittorrent-exporter:
-    image: martabal/qbittorrent-exporter:${QBITTORRENT_EXPORTER_TAG:-latest}
+    image: ghcr.io/martabal/qbittorrent-exporter:${QBITTORRENT_EXPORTER_TAG:-latest}
     container_name: qbittorrent-exporter
     depends_on:
       vpn:
@@ -70,6 +73,10 @@ services:
       - QBITTORRENT_BASE_URL=http://vpn:8080
       - QBITTORRENT_USERNAME=${QBITTORRENT_USERNAME:-admin}
       - QBITTORRENT_PASSWORD=${QBITTORRENT_PASSWORD:-adminadmin}
+      # qBittorrent >= 5.2 renamed its session cookie from SID to
+      # QBT_SID_<webui_port>; without this the exporter re-authenticates in a
+      # tight loop and never serves metrics. WEBUI_PORT is fixed at 8080 above.
+      - QBITTORRENT_COOKIE_NAME=${QBITTORRENT_COOKIE_NAME:-QBT_SID_8080}
       - EXPORTER_PORT=17871
     ports:
       - "17871:17871"

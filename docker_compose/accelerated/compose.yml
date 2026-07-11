@@ -120,6 +120,13 @@ services:
   # For hardware-accelerated ML inference, append an accel suffix to the image tag
   # (e.g. ${IMMICH_VERSION:-release}-openvino for Intel). See:
   # https://immich.app/docs/features/ml-hardware-acceleration
+  #
+  # The image ships its own healthcheck (python3 healthcheck.py) but nothing acts on
+  # a failure short of the main process actually exiting. After an ungraceful host
+  # reboot (2026-07-10 power loss) this container came up with gunicorn bound to its
+  # port but the worker never finished startup — Docker correctly reported it
+  # "unhealthy" for 10+ hours until a manual restart fixed it. autoheal (below) closes
+  # that gap by restarting labeled containers on sustained healthcheck failure.
   immich-machine-learning:
     image: ghcr.io/immich-app/immich-machine-learning:${IMMICH_VERSION:-v2}
     container_name: immich-machine-learning
@@ -128,9 +135,29 @@ services:
     volumes:
       # Persistent cache for ML models (CLIP, face recognition). Avoids re-download on recreation.
       - ${CONFIG_ROOT:-./config}/immich-ml-cache:/cache
+    labels:
+      - "autoheal=true"
     restart: unless-stopped
     networks:
       - accelerated_internal
+
+  # --- Autoheal — restarts immich-machine-learning automatically on healthcheck failure ---
+  # Docker's restart policy only triggers when a container's main process exits; a
+  # container that stays "up" but fails its healthcheck (e.g. a wedged startup after a
+  # host reboot) is not restarted by Docker on its own. Autoheal watches for that and
+  # restarts the affected container. Scoped to AUTOHEAL_CONTAINER_LABEL=autoheal —
+  # only touches services explicitly labeled above.
+  # Image: https://github.com/willfarrell/docker-autoheal
+  autoheal:
+    image: willfarrell/autoheal:${AUTOHEAL_TAG:-latest}
+    container_name: autoheal
+    environment:
+      - AUTOHEAL_CONTAINER_LABEL=autoheal
+      - AUTOHEAL_INTERVAL=30
+      - AUTOHEAL_START_PERIOD=60
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
 
   # --- iperf3: network bandwidth test server ---
   # Image: mm404/iperf3 — Alpine-based, multi-arch, runs as non-root, pinned tags.
