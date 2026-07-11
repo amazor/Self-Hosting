@@ -340,6 +340,30 @@ def _seed_sabnzbd_config(
     tracker.detail(f"Pre-seeded sabnzbd.ini (server={server_host})")
 
 
+# A quoted "!secret foo" is a plain YAML string, not a tag, so base_url never resolves
+# to a URL.  Recyclarr rejects every instance for it and still exits 0, so the sync is a
+# silent no-op forever.  Configs seeded from the old example carry this and must be
+# re-seeded — leaving them alone means the fix never reaches an existing deployment.
+_QUOTED_SECRET_TAG = re.compile(r':\s*"!secret\s')
+
+
+def _repair_recyclarr_config(config_base: Path, tracker: StepTracker) -> None:
+    conf = config_base / "recyclarr" / "recyclarr.yml"
+    example = SCRIPT_DIR / "recyclarr.example.yml"
+    if not conf.is_file() or not example.is_file():
+        return
+    if not _QUOTED_SECRET_TAG.search(conf.read_text(encoding="utf-8")):
+        return
+
+    backup = conf.with_name("recyclarr.yml.broken")
+    shutil.copy2(conf, backup)
+    shutil.copy2(example, conf)
+    tracker.warn(
+        f"recyclarr.yml had quoted !secret tags (sync was a silent no-op); "
+        f"re-seeded from example, previous file kept as {backup.name}",
+    )
+
+
 def _copy_example_configs(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
@@ -355,6 +379,8 @@ def _copy_example_configs(
             if not dst.is_file() and src.is_file():
                 shutil.copy2(src, dst)
                 tracker.detail(f"Created {dst.name} from example")
+
+        _repair_recyclarr_config(config_base, tracker)
 
     if (config_base / "recyclarr").is_dir():
         try:
@@ -522,7 +548,15 @@ def post_deploy(
             + ["exec", "recyclarr", "recyclarr", "sync"],
             cwd=SCRIPT_DIR, capture_output=True, text=True,
         )
-        if result.returncode == 0:
-            tracker.detail("Recyclarr sync completed")
-        else:
+        # Recyclarr exits 0 even when it rejects every instance, so the exit code alone
+        # will happily report success on a sync that changed nothing.
+        output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode != 0:
             tracker.warn("Recyclarr sync failed (may need manual config)")
+        elif "Configuration Errors" in output or "Invalid instances" in output:
+            tracker.warn(
+                "Recyclarr rejected its config and synced nothing — check "
+                "config/recyclarr/recyclarr.yml (see 'Configuration Errors' in the sync log)",
+            )
+        else:
+            tracker.detail("Recyclarr sync completed")

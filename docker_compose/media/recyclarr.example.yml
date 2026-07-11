@@ -17,16 +17,32 @@
 # yaml-language-server: $schema=https://schemas.recyclarr.dev/v8/config-schema.json
 
 sonarr:
-  # --- TV (WEB-2160p Combined) — grab 1080p now, upgrade to 4K when available ---
-  # TRaSH-native combined profile: WEB-1080p as fallback, WEB-2160p as cutoff/target.
-  # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-2160p
-  tv:
-    base_url: "!secret sonarr_url"
-    api_key: "!secret sonarr_apikey"
+  # TV and anime share ONE Sonarr instance, so they must live in ONE config block.
+  # Recyclarr rejects two blocks pointing at the same base_url ("Split Instances"
+  # configuration error) and then syncs neither — a single block with both quality
+  # profiles is the supported way to cover both libraries.
+  #
+  # quality_definition is instance-global in Sonarr, so a shared instance can only
+  # have one. "series" wins over "anime" here because the TV library is the bulk of
+  # it; the anime *quality profile* below is what actually governs anime grabs.
+  main:
+    base_url: !secret sonarr_url
+    api_key: !secret sonarr_apikey
     quality_definition:
       type: series
     quality_profiles:
+      # --- TV (WEB-2160p Combined) — grab 1080p now, upgrade to 4K when available ---
+      # TRaSH-native combined profile: WEB-1080p as fallback, WEB-2160p as cutoff/target.
+      # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles/#web-2160p
       - trash_id: c4cadd6b35b95f62c3d47a408e53e2f7  # WEB-2160p (Combined)
+        reset_unmatched_scores:
+          enabled: true
+
+      # --- Anime — TRaSH Anime quality profile ---
+      # Carries minFormatScore 100 plus VOSTFR / Anime LQ Groups at -10000, which is
+      # what keeps non-English fansub releases from being grabbed.
+      # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles-anime/#quality-profile
+      - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
         reset_unmatched_scores:
           enabled: true
     custom_format_groups:
@@ -36,20 +52,6 @@ sonarr:
         - trash_id: e3f37512790f00d0e89e54fe5e790d1c  # [Required] Golden Rule UHD
           select:
             - 9b64dff695c2115facf1b6ea59c9bd07  # x265 (no HDR/DV)
-
-  # --- Anime — TRaSH Anime quality profile ---
-  # https://trash-guides.info/Sonarr/sonarr-setup-quality-profiles-anime/#quality-profile
-  anime:
-    base_url: "!secret sonarr_url"
-    api_key: "!secret sonarr_apikey"
-    quality_definition:
-      type: anime
-    quality_profiles:
-      - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
-        reset_unmatched_scores:
-          enabled: true
-    custom_format_groups:
-      add:
         - trash_id: 35fb4585dcd9e2a5ac732e4309f5a45a  # [Streaming Services] Asian
 
 radarr:
@@ -59,8 +61,8 @@ radarr:
   # Radarr grabs the highest available; upgrades to Bluray-2160p when it appears.
   # https://trash-guides.info/Radarr/radarr-setup-quality-profiles/#uhd-bluray-web
   movies:
-    base_url: "!secret radarr_url"
-    api_key: "!secret radarr_apikey"
+    base_url: !secret radarr_url
+    api_key: !secret radarr_apikey
     quality_definition:
       type: movie
     quality_profiles:
