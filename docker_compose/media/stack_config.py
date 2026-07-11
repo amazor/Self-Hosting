@@ -302,10 +302,28 @@ def _seed_sabnzbd_config(
     (config_base / "sabnzbd").mkdir(parents=True, exist_ok=True)
     (config_base / "sabnzbd" / "nzb-backup").mkdir(parents=True, exist_ok=True)
 
+    # SABnzbd's check_hostname() is a DNS-rebinding guard: it rejects any request
+    # whose Host header is not an IP literal, "localhost", *.local, or an EXACT
+    # entry in host_whitelist (no wildcards, no suffix matching). Everything else
+    # gets "Access denied - Hostname verification failed".
+    #
+    # "sabnzbd" (the compose service name) is therefore mandatory, not cosmetic:
+    # Sonarr, Radarr and sabnzbd-exporter all reach it as http://sabnzbd:8080.
+    # Drop it and the *arrs silently stop grabbing and the exporter 403s.
+    #
+    # Add any reverse-proxy FQDN (e.g. sabnzbd.example.com) via SABNZBD_HOST_WHITELIST —
+    # Caddy forwards the original Host header, so the public name must be listed too.
+    whitelist = ["sabnzbd"]
+    for extra in env.get("SABNZBD_HOST_WHITELIST", "").split(","):
+        extra = extra.strip().lower()
+        if extra and extra not in whitelist:
+            whitelist.append(extra)
+    host_whitelist = ",".join(whitelist)
+
     conf_file.write_text(
         f"__version__ = 19\n__encoding__ = utf-8\n[misc]\n"
         f"api_key = {secrets.token_hex(16)}\nnzb_key = {secrets.token_hex(16)}\n"
-        f"host = 0.0.0.0\nport = 8080\nhost_whitelist = sabnzbd,\n"
+        f"host = 0.0.0.0\nport = 8080\nhost_whitelist = {host_whitelist},\n"
         f"complete_dir = /data/downloads/sabnzbd/completed\n"
         f"download_dir = /data/downloads/sabnzbd/tmp\n"
         f"nzb_backup_dir = /config/nzb-backup\nadmin_dir = admin\nlog_dir = logs\n"
@@ -410,20 +428,47 @@ def _populate_api_keys(
         tracker.detail("Populated API keys in Recyclarr secrets.yml")
 
 
+def _read_sabnzbd_api_key(config_base: Path) -> str | None:
+    """Read api_key from the bootstrap-seeded sabnzbd.ini."""
+    ini_file = config_base / "sabnzbd" / "sabnzbd.ini"
+    if not ini_file.is_file():
+        return None
+    try:
+        for line in ini_file.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("api_key") and "=" in stripped:
+                return stripped.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
 def _populate_env_api_keys(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
-    if env.get("ENABLE_EXPORTERS", "0") != "1":
-        return
+    """Sync generated API keys back into .env so exporters can read them.
 
-    keys = {app: _read_api_key(config_base, app) for app in ("sonarr", "radarr", "prowlarr")}
-    if not any(keys.values()):
-        return
-
+    Runs during bootstrap, i.e. before `docker compose up`, so the values are in
+    place by the time Compose interpolates them into the exporter containers.
+    """
     env_vars: dict[str, str] = {}
-    for app, key in keys.items():
-        if key:
-            env_vars[f"{app.upper()}_API_KEY"] = key
+
+    # *arr keys feed scraparr (compose.exporters.yml).
+    if env.get("ENABLE_EXPORTERS", "0") == "1":
+        for app in ("sonarr", "radarr", "prowlarr"):
+            key = _read_api_key(config_base, app)
+            if key:
+                env_vars[f"{app.upper()}_API_KEY"] = key
+
+    # SABnzbd's key feeds sabnzbd-exporter (compose.sabnzbd.yml). The key is random
+    # per-install, so without this the exporter would need manual copy-paste from the UI.
+    if env.get("ENABLE_SABNZBD", "0") == "1":
+        sab_key = _read_sabnzbd_api_key(config_base)
+        if sab_key:
+            env_vars["SABNZBD_API_KEY"] = sab_key
+
+    if not env_vars:
+        return
 
     env_file = SCRIPT_DIR / ".env"
     lines = env_file.read_text().splitlines()

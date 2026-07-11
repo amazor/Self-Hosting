@@ -159,6 +159,43 @@ Two panels:
 
 ---
 
+### Section 4b — Usenet (SABnzbd)
+
+**Question:** "Is the Usenet half of the pipeline flowing, and is my provider actually delivering?"
+
+Only populated when the media stack has `ENABLE_SABNZBD=1`. Metrics come from `sabnzbd-exporter` (onedr0p/exportarr, port 9707), which ships inside `compose.sabnzbd.yml` — **not** the exporters overlay, since Scraparr is *arr-only and never exports download clients.
+
+Three panels:
+
+1. **Usenet Download Speed** — Usenet is not peer-limited, so this should sit near line rate whenever the queue is non-empty.
+   ```promql
+   sabnzbd_speed_bps{host=~"$host"}
+   sabnzbd_speed_limit_bps{host=~"$host"} > 0
+   ```
+
+2. **Usenet Queue** — queue length + warnings + remaining bytes (own axis, `bytes` unit).
+   ```promql
+   sabnzbd_queue_length{host=~"$host"}
+   sabnzbd_queue_warnings{host=~"$host"}
+   sabnzbd_remaining_bytes{host=~"$host"}
+   ```
+
+3. **Article Success Rate per Server** — the one that matters.
+   ```promql
+   clamp_max(
+     increase(sabnzbd_server_articles_success{host=~"$host"}[$__rate_interval])
+     /
+     clamp_min(increase(sabnzbd_server_articles_total{host=~"$host"}[$__rate_interval]), 1),
+     1
+   )
+   ```
+
+**Why article success rate is the key Usenet signal (and has no torrent equivalent):** a torrent stalls because nobody is seeding — an availability problem you can see in the swarm. Usenet stalls because *articles are missing* (DMCA takedowns, incomplete posts), which is invisible from the queue alone: speed just quietly drops while par2 repair grinds. A primary server drifting below ~100% is the signal to add a fill/block provider on a different backbone (`USENET_SERVER2_*`), which by design is only asked for what the primary could not deliver. `clamp_min(..., 1)` guards the divide-by-zero when no articles were requested in the window; `clamp_max(..., 1)` keeps counter-reset artifacts from spiking above 100%.
+
+**Diagnostic pairing:** zero speed + non-empty queue + falling article success = provider problem, *not* a "no seeders" problem. That distinction is the whole reason to run both protocols.
+
+---
+
 ### Section 5 — Jellyfin/Plex Streaming Sessions
 
 **Question:** "Who is watching, and is the server handling it?"

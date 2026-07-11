@@ -76,6 +76,15 @@ PROWLARR_USENET_INDEXERS = [
         "env_key": "NZBGEEK_API_KEY",
         "fields": {"apiKey": None},  # filled from env at runtime
     },
+    # Different index source from NZBgeek, so it genuinely adds coverage rather than
+    # duplicating hits. Both have open registration. Two usenet indexers is the
+    # practical sweet spot — usenet indexers meter API hits, so more is not free.
+    {
+        "name": "NZBFinder",
+        "definitionName": "NZBFinder",
+        "env_key": "NZBFINDER_API_KEY",
+        "fields": {"apiKey": None},
+    },
 ]
 
 # SABnzbd download categories per TRaSH guide (same structure as qBittorrent).
@@ -296,12 +305,27 @@ def _wait_for_service(name: str, url: str, headers: dict) -> bool:
 
 
 def _get_indexer_schema(prowlarr_url: str, headers: dict, definition_name: str) -> dict | None:
-    """Fetch the schema for a specific indexer from Prowlarr."""
+    """Fetch the schema for a specific indexer from Prowlarr.
+
+    Matches definitionName exactly first, then falls back to a case-insensitive
+    match on definitionName or name. Prowlarr's preset names are inconsistently
+    cased (e.g. "NZBgeek" vs "NZBGeek"), and an exact-only match fails silently —
+    the indexer just never gets added, with no error anywhere.
+    """
     schemas = _api(f"{prowlarr_url}/api/v1/indexer/schema", headers)
     if not schemas:
         return None
+
     for s in schemas:
         if s.get("definitionName") == definition_name:
+            return s
+
+    wanted = definition_name.casefold()
+    for s in schemas:
+        if s.get("definitionName", "").casefold() == wanted:
+            return s
+    for s in schemas:
+        if s.get("name", "").casefold() == wanted:
             return s
     return None
 
@@ -950,6 +974,69 @@ def _setup_download_client_sabnzbd(
         log.warning("Failed to add SABnzbd download client to %s.", app_name)
 
 
+def _setup_delay_profile(
+    app_name: str, base_url: str, headers: dict, env: dict[str, str],
+) -> None:
+    """Make Sonarr/Radarr actually prefer Usenet releases over torrents.
+
+    Download-client priority does NOT do this. In Sonarr's DownloadDecisionComparer,
+    client priority only breaks ties between clients of the *same* protocol; protocol
+    preference comes solely from the delay profile's `preferredProtocol`. So setting
+    SABnzbd to priority 1 and qBittorrent to 2 (which we also do, for tie-breaking
+    among usenet clients) has zero effect on usenet-vs-torrent on its own.
+
+    Delays are in minutes and are compared against the release's *age*, not against
+    how long the *arr has known about it. They gate RSS sync only — interactive
+    searches ignore them entirely, so a manual search still returns torrents at once.
+
+    Ref: https://wiki.servarr.com/sonarr/settings#delay-profiles
+    """
+    url = f"{base_url}/api/v3/delayprofile"
+    profiles = _api(url, headers)
+    if not profiles:
+        log.warning("Could not read %s delay profiles; skipping protocol preference.", app_name)
+        return
+
+    # The default catch-all profile is the untagged one — it always exists and
+    # applies to everything not matched by a more specific tagged profile.
+    default = next((p for p in profiles if not p.get("tags")), None)
+    if default is None:
+        log.warning("%s has no default (untagged) delay profile; skipping.", app_name)
+        return
+
+    def _minutes(var: str, fallback: int) -> int:
+        try:
+            return int(env.get(var, "").strip() or fallback)
+        except ValueError:
+            log.warning("%s is not an integer; using %d.", var, fallback)
+            return fallback
+
+    usenet_delay = _minutes("USENET_DELAY_MINUTES", 0)
+    torrent_delay = _minutes("TORRENT_DELAY_MINUTES", 60)
+
+    desired = {
+        "enableUsenet": True,
+        "enableTorrent": True,
+        "preferredProtocol": "usenet",
+        "usenetDelay": usenet_delay,
+        "torrentDelay": torrent_delay,
+    }
+    if all(default.get(key) == val for key, val in desired.items()):
+        log.info("%s delay profile already prefers Usenet.", app_name)
+        return
+
+    default.update(desired)
+    result = _api(f"{url}/{default['id']}", headers, method="PUT", data=default)
+    if result is not None:
+        log.info(
+            "%s delay profile updated: prefer Usenet "
+            "(usenet delay %dm, torrent delay %dm).",
+            app_name, usenet_delay, torrent_delay,
+        )
+    else:
+        log.warning("Failed to update %s delay profile.", app_name)
+
+
 def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
                  sabnzbd_api_key: str | None = None) -> None:
     """Configure Sonarr: TRaSH naming, media management, root folders, download clients."""
@@ -963,6 +1050,9 @@ def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
     _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env, qbit_priority)
     if sabnzbd_api_key:
         _setup_download_client_sabnzbd("Sonarr", sonarr_url, headers, "tv", sabnzbd_api_key, 1)
+        # Only touch the delay profile when Usenet is actually available — otherwise
+        # we would tell a torrent-only stack to prefer a protocol it cannot use.
+        _setup_delay_profile("Sonarr", sonarr_url, headers, env)
 
 
 def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
@@ -978,6 +1068,8 @@ def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
     _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env, qbit_priority)
     if sabnzbd_api_key:
         _setup_download_client_sabnzbd("Radarr", radarr_url, headers, "movies", sabnzbd_api_key, 1)
+        # See Sonarr above: delay profile is what makes Usenet actually win over torrents.
+        _setup_delay_profile("Radarr", radarr_url, headers, env)
 
 
 # ---------------------------------------------------------------------------
