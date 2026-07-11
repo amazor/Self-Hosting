@@ -1430,18 +1430,35 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
     _bazarr_assign_profiles(bazarr_url, apikey, profile_id)
 
 
+def _bazarr_list(bazarr_url: str, apikey: str, kind: str) -> list[dict]:
+    items = _bazarr_get(f"{bazarr_url}/api/{kind}?start=0&length=-1", apikey)
+    if not items:
+        return []
+    return items.get("data", []) if isinstance(items, dict) else items
+
+
 def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
                             profile_id: int) -> None:
-    """Assign a language profile to all series and movies missing one."""
+    """Assign a language profile to all series and movies missing one.
+
+    Bazarr populates its series/movies list from Sonarr/Radarr asynchronously
+    after the connection is saved, so poll briefly instead of acting on a
+    possibly-empty list immediately after configuring the connection.
+    """
     for kind, id_field in [("series", "sonarrSeriesId"),
                            ("movies", "radarrId")]:
-        items = _bazarr_get(
-            f"{bazarr_url}/api/{kind}?start=0&length=-1", apikey,
-        )
-        if not items:
+        data: list[dict] = []
+        deadline = time.monotonic() + HEALTH_TIMEOUT_S
+        while time.monotonic() < deadline:
+            data = _bazarr_list(bazarr_url, apikey, kind)
+            if data:
+                break
+            time.sleep(HEALTH_POLL_S)
+        if not data:
+            log.warning("Bazarr: no %s synced from Sonarr/Radarr yet; "
+                        "skipping profile assignment.", kind)
             continue
 
-        data = items.get("data", []) if isinstance(items, dict) else items
         needs_update = [
             item[id_field] for item in data
             if item.get("profileId") != profile_id and id_field in item
@@ -1450,18 +1467,26 @@ def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
             log.info("Bazarr: all %s already have profile assigned.", kind)
             continue
 
+        # Bazarr's bulk-assign endpoint only honors the first id when given
+        # repeated form keys (e.g. seriesid=1&seriesid=2), so assign one at a
+        # time. It also returns HTTP 500 on success in some versions, so
+        # verify the result via GET rather than trusting the status code.
         post_key = "seriesid" if kind == "series" else "radarrid"
-        form: dict[str, list[str]] = {
-            post_key: [str(i) for i in needs_update],
-            "profileid": [str(profile_id)] * len(needs_update),
-        }
-        status = _bazarr_form_post(
-            f"{bazarr_url}/api/{kind}", apikey, form,
+        for item_id in needs_update:
+            _bazarr_form_post(
+                f"{bazarr_url}/api/{kind}", apikey,
+                {post_key: str(item_id), "profileid": str(profile_id)},
+            )
+
+        still_missing = sum(
+            1 for item in _bazarr_list(bazarr_url, apikey, kind)
+            if item.get("profileId") != profile_id
         )
-        if status == 204:
-            log.info("Bazarr: assigned profile to %d %s.", len(needs_update), kind)
+        if still_missing:
+            log.warning("Bazarr: %d %s still missing a profile after "
+                        "assignment.", still_missing, kind)
         else:
-            log.warning("Bazarr: profile assign for %s returned %s.", kind, status)
+            log.info("Bazarr: assigned profile to %d %s.", len(needs_update), kind)
 
 
 # ---------------------------------------------------------------------------
