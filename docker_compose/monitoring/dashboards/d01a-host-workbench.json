@@ -362,7 +362,7 @@
           "links": [
             {
               "title": "Investigate OOM in logs \u2192",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}",
               "targetBlank": false
             }
           ]
@@ -756,10 +756,12 @@
     {
       "type": "row",
       "title": "Disk",
-      "collapsed": true,
+      "collapsed": false,
       "gridPos": { "x": 0, "y": 30, "w": 24, "h": 1 },
       "id": 103,
-      "panels": [
+      "panels": []
+    },
+
         {
           "id": 30,
           "type": "bargauge",
@@ -795,7 +797,7 @@
               "links": [
                 {
                   "title": "Investigate NFS / network \u2192",
-                  "url": "/d/homelab-network?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
+                  "url": "/d/homelab-network?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}",
                   "targetBlank": false
                 }
               ]
@@ -1014,15 +1016,232 @@
             "tooltip": { "mode": "multi", "sort": "desc" },
             "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }
           }
-        }
-      ]
-    },
+        },
+        {
+          "id": 35,
+          "type": "table",
+          "title": "Top Directories by Size",
+          "description": "Distinct directories over 1 GiB on this VM's local disk (node-exporter textfile collector; du -x, single filesystem, hourly). Roll-up parents (/, /var, /var/lib, /opt, per-stack config roots) are filtered out so each row is a distinct consumer — typically /var/lib/containerd (the Docker image store) plus any large per-service config bind mount. The '% of Disk' bar is the directory's share of the root filesystem total (see the Root Disk stat). Most app data lives on the NAS (NFS), which du -x does not walk. Empty until the node-exporter-textfile sidecar has run at least once.",
+          "gridPos": {
+            "x": 0,
+            "y": 47,
+            "w": 18,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource_prometheus}"
+              },
+              "editorMode": "code",
+              "expr": "node_directory_size_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", path!~\"/|/var|/var/lib|/opt|/var/lib/docker|/opt/self-hosting/docker_compose/[^/]+/config\"} > 1073741824",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "A"
+            },
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource_prometheus}"
+              },
+              "editorMode": "code",
+              "expr": "(node_directory_size_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", path!~\"/|/var|/var/lib|/opt|/var/lib/docker|/opt/self-hosting/docker_compose/[^/]+/config\"} > 1073741824) / on(host) group_left() node_filesystem_size_bytes{mountpoint=\"/\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}",
+              "format": "table",
+              "instant": true,
+              "range": false,
+              "refId": "B"
+            }
+          ],
+          "transformations": [
+            {
+              "id": "merge",
+              "options": {}
+            },
+            {
+              "id": "organize",
+              "options": {
+                "excludeByName": {
+                  "Time": true,
+                  "__name__": true,
+                  "env": true,
+                  "instance": true,
+                  "job": true,
+                  "node": true,
+                  "vm_role": true,
+                  "service": true,
+                  "container": true
+                },
+                "indexByName": {
+                  "host": 0,
+                  "path": 1,
+                  "Value #A": 2,
+                  "Value #B": 3
+                },
+                "renameByName": {
+                  "host": "Host",
+                  "path": "Directory",
+                  "Value #A": "Size",
+                  "Value #B": "% of Disk"
+                }
+              }
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "custom": {
+                "align": "auto",
+                "cellOptions": {
+                  "type": "auto"
+                }
+              }
+            },
+            "overrides": [
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Size"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "bytes"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "% of Disk"
+                },
+                "properties": [
+                  {
+                    "id": "unit",
+                    "value": "percentunit"
+                  },
+                  {
+                    "id": "decimals",
+                    "value": 1
+                  },
+                  {
+                    "id": "min",
+                    "value": 0
+                  },
+                  {
+                    "id": "max",
+                    "value": 1
+                  },
+                  {
+                    "id": "custom.cellOptions",
+                    "value": {
+                      "type": "gauge",
+                      "mode": "gradient"
+                    }
+                  },
+                  {
+                    "id": "custom.width",
+                    "value": 300
+                  }
+                ]
+              },
+              {
+                "matcher": {
+                  "id": "byName",
+                  "options": "Host"
+                },
+                "properties": [
+                  {
+                    "id": "custom.width",
+                    "value": 110
+                  }
+                ]
+              }
+            ]
+          },
+          "options": {
+            "showHeader": true,
+            "cellHeight": "sm",
+            "sortBy": [
+              {
+                "displayName": "Size",
+                "desc": true
+              }
+            ]
+          }
+        },
+        {
+          "id": 36,
+          "type": "stat",
+          "title": "Root Disk",
+          "description": "Total size of this VM's root filesystem (/). Filesystem Usage shows used vs free; the Top Directories '% of Disk' bars are relative to this total.",
+          "gridPos": {
+            "x": 18,
+            "y": 47,
+            "w": 6,
+            "h": 6
+          },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "targets": [
+            {
+              "datasource": {
+                "type": "prometheus",
+                "uid": "${datasource_prometheus}"
+              },
+              "editorMode": "code",
+              "expr": "node_filesystem_size_bytes{mountpoint=\"/\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}",
+              "instant": true,
+              "range": false,
+              "legendFormat": "{{host}}",
+              "refId": "A"
+            }
+          ],
+          "fieldConfig": {
+            "defaults": {
+              "unit": "bytes",
+              "decimals": 0,
+              "color": {
+                "mode": "fixed",
+                "fixedColor": "text"
+              }
+            },
+            "overrides": []
+          },
+          "options": {
+            "reduceOptions": {
+              "calcs": [
+                "lastNotNull"
+              ],
+              "fields": "",
+              "values": false
+            },
+            "colorMode": "none",
+            "graphMode": "none",
+            "justifyMode": "center",
+            "textMode": "value"
+          }
+        },
 
     {
       "type": "row",
       "title": "Container Summary",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 },
+      "gridPos": { "x": 0, "y": 53, "w": 24, "h": 1 },
       "id": 104,
       "panels": []
     },
@@ -1032,7 +1251,7 @@
       "type": "table",
       "title": "Top Containers by CPU",
       "description": "Compact ranking of containers on selected hosts by CPU usage. Click a service name to investigate in the Container Workbench.",
-      "gridPos": { "x": 0, "y": 32, "w": 24, "h": 8 },
+      "gridPos": { "x": 0, "y": 54, "w": 24, "h": 8 },
       "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
       "targets": [
         {
@@ -1116,7 +1335,7 @@
                 "value": [
                   {
                     "title": "Investigate ${__data.fields.Service} \u2192 Container Workbench",
-                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}",
+                    "url": "/d/homelab-container-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}",
                     "targetBlank": false
                   }
                 ]

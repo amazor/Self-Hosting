@@ -505,7 +505,7 @@
                 "value": [
                   {
                     "title": "View Logs →",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Probe}",
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-search=${__data.fields.Probe}",
                     "targetBlank": true
                   }
                 ]
@@ -745,7 +745,7 @@
           "links": [
             {
               "title": "View Logs →",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.name}",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-search=${__field.labels.name}",
               "targetBlank": true
             }
           ]
