@@ -340,6 +340,8 @@ Usenet is not free and needs two *different* kinds of account — this trips peo
 
 A provider without an indexer gives you nothing to search; an indexer without a provider gives you results you cannot download.
 
+> **The news-server username is often not your website login.** Astraweb, for example, issues a short generated username (a 10-character hex string) that has nothing to do with the email you signed up with. Using the signup email produces `Authentication failed, check username/password.` and no other clue. Take the credentials from the provider's *server details / Usenet access* page, not the account or billing page. If auth fails but the connection is reached at all, this is almost always why.
+
 #### Enable it
 
 Set these in `docker_compose/media/.env`, then run `python3 deploy.py media -y`:
@@ -348,9 +350,9 @@ Set these in `docker_compose/media/.env`, then run `python3 deploy.py media -y`:
 ENABLE_SABNZBD=1
 
 # Provider (the "news server" — where files come from)
-USENET_SERVER_HOST=ssl-eu.astraweb.com
+USENET_SERVER_HOST=eu.astraweb.com
 USENET_SERVER_PORT=563          # 563 = SSL
-USENET_SERVER_USERNAME=<your provider username>
+USENET_SERVER_USERNAME=<news-server username — see note below>
 USENET_SERVER_PASSWORD=<your provider password>
 USENET_SERVER_CONNECTIONS=30
 USENET_SERVER_SSL=1

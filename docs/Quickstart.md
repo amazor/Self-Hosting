@@ -265,9 +265,9 @@ File: `docker_compose/media/.env.example`
 
 | Variable | What to set |
 |----------|-------------|
-| `USENET_SERVER_HOST` | Provider hostname (e.g. `ssl-eu.astraweb.com`) |
+| `USENET_SERVER_HOST` | Provider hostname (e.g. `eu.astraweb.com`) |
 | `USENET_SERVER_PORT` | `563` (SSL) |
-| `USENET_SERVER_USERNAME` | Your Usenet account username |
+| `USENET_SERVER_USERNAME` | **News-server** username — often NOT your website login. Astraweb issues a short generated username; using your signup email fails auth. |
 | `USENET_SERVER_PASSWORD` | Your Usenet account password |
 | `USENET_SERVER_CONNECTIONS` | Max connections (start at `30`, tune up) |
 | `USENET_SERVER_SSL` | `1` (enabled) |
