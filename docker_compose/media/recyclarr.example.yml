@@ -45,6 +45,41 @@ sonarr:
       - trash_id: 20e0fc959f1f1704bed501f23bdae76f  # [Anime] Remux-1080p
         reset_unmatched_scores:
           enabled: true
+
+      # --- HD Bluray + WEB — the everyday default for TV ---
+      # This is what most series should use, and what replaces Sonarr's stock "Any".
+      #
+      # "Any" is not a neutral default, it is a bad one: it allows SDTV, DVD and 480p,
+      # and it scores ZERO custom formats — so none of the TRaSH scoring in this file
+      # applies to it and a 480p DVD rip is a perfectly valid grab. The custom formats
+      # only do their job inside a profile that actually carries their scores.
+      #
+      # Built from TRaSH's WEB-1080p for its custom-format SCORES, but with the quality
+      # list overridden. TRaSH's WEB-1080p is WEB-only (no Bluray, no 720p at all), which
+      # is too strict for a general library and leaves older series unfillable. Sonarr has
+      # no TRaSH-native "HD Bluray + WEB" the way Radarr does, so we assemble the
+      # equivalent here. Floor is 720p — nothing below it is allowed at all.
+      - trash_id: 72dae194fc92bf828f32cde7744e51a1  # WEB-1080p (adopted for its CF scores)
+        name: HD Bluray + WEB
+        reset_unmatched_scores:
+          enabled: true
+        upgrade:
+          allowed: true
+          until_quality: WEB 1080p
+          until_score: 10000
+        qualities:
+          - name: Bluray-1080p
+          - name: WEB 1080p
+            qualities:
+              - WEBDL-1080p
+              - WEBRip-1080p
+          - name: HDTV-1080p
+          - name: Bluray-720p
+          - name: WEB 720p
+            qualities:
+              - WEBDL-720p
+              - WEBRip-720p
+          - name: HDTV-720p
     custom_format_groups:
       add:
         # Golden Rule UHD: blocks x265 encodes with no HDR/DV (SDR 4K is not an upgrade).
@@ -85,6 +120,24 @@ radarr:
             qualities:
               - WEBDL-1080p
               - WEBRip-1080p
+
+      # --- HD Bluray + WEB — the everyday default for movies ---
+      # TRaSH-native, used as-is: Bluray-1080p, WEB 1080p, Bluray-720p. Nothing below
+      # 720p, no 2160p, and no 30-90GB remuxes. This is what most movies should use.
+      #
+      # It replaces Radarr's stock "Any", which is actively dangerous rather than merely
+      # loose: "Any" allows WORKPRINT, CAM, TELESYNC, TELECINE, DVDSCR and BR-DISK, and
+      # scores ZERO custom formats. A cam rip is a legal grab under it, and none of the
+      # TRaSH scoring below applies. The negative scores this profile DOES carry are
+      # precisely what auto-reject cam rips, foreign dubs and bad encoders.
+      # https://trash-guides.info/Radarr/radarr-setup-quality-profiles/#hd-bluray-web
+      - trash_id: d1d67249d3890e49bc12e275d989a7e9  # HD Bluray + WEB
+        reset_unmatched_scores:
+          enabled: true
+        upgrade:
+          allowed: true
+          until_quality: Bluray-1080p
+          until_score: 10000
     custom_format_groups:
       add:
         # Golden Rule UHD: blocks x265 encodes with no HDR/DV (SDR 4K is not an upgrade).
