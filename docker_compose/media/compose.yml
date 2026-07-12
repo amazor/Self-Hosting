@@ -77,7 +77,16 @@ services:
         condition: service_healthy
     environment:
       - PUID=${PUID:-1000}
-      - PGID=${PGID:-1000}
+      # Deliberately NOT the shared $PGID (1000): the vpn image's bundled ExpressVPN daemon
+      # ships a hardcoded Network Lock rule (`--gid-owner 1000 -j ACCEPT`) that lets GID 1000
+      # bypass the kill switch entirely, tun0-restriction and all. qBittorrent shares that
+      # container's network namespace (network_mode: service:vpn below), so at GID 1000 its
+      # traffic — uniquely among everything in that namespace — would NOT be blocked if the
+      # tunnel ever dropped and routing fell back to eth0/the real host IP. The ExpressVPN
+      # image has no documented override for its own GID (checked github.com/Misioslav/expressvpn),
+      # so qBittorrent moves instead. Safe to do: the NFS download/library paths are
+      # world-writable (777) regardless of GID, so this needs no ownership fixup.
+      - PGID=${QBITTORRENT_PGID:-1001}
       - TZ=${TZ:-Etc/UTC}
       # Web UI and torrent ports must match what the vpn service exposes (see vpn.ports).
       - WEBUI_PORT=8080
