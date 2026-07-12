@@ -54,6 +54,9 @@ PROWLARR_INDEXERS = [
     {"name": "YTS", "definitionName": "yts"},
     {"name": "Torrent Downloads", "definitionName": "torrentdownloads"},
     {"name": "Knaben", "definitionName": "Knaben"},
+    {"name": "TorrentProject2", "definitionName": "torrentproject2"},
+    {"name": "TorrentsCSV", "definitionName": "TorrentsCSV"},
+    {"name": "showRSS", "definitionName": "showrss"},
     # Anime
     {"name": "Nyaa.si", "definitionName": "nyaasi",
      "fields": {"animeCategories": [5070]}},  # 5070 = Anime - English-translated
