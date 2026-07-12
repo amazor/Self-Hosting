@@ -265,6 +265,29 @@ def _seed_qbittorrent_config(
     tracker.detail(f"Pre-seeded qBittorrent.conf (user={username})")
 
 
+def _ini_value(value: str) -> str:
+    """Quote a value for SABnzbd's ini so configobj round-trips it intact.
+
+    configobj treats an unquoted '#' as the start of a comment, so a perfectly
+    legal password like 'Q#e6qDMf38L@N*' is silently truncated at the '#' and
+    SABnzbd then fails to authenticate with no error pointing at the cause.
+    Commas are just as bad — configobj reads an unquoted comma as a list separator.
+
+    Quote anything that is not plainly safe, picking a quote character the value
+    does not itself contain.
+    """
+    if value == "":
+        return '""'
+    if not any(c in value for c in '#,;=\'" ') and value == value.strip():
+        return value
+    if '"' not in value:
+        return f'"{value}"'
+    if "'" not in value:
+        return f"'{value}'"
+    # Value contains both quote characters; configobj's triple-quote form handles it.
+    return f'"""{value}"""'
+
+
 def _seed_sabnzbd_config(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
@@ -291,8 +314,8 @@ def _seed_sabnzbd_config(
         second_server = (
             f"[[{s2_name}]]\nname = {s2_name}\ndisplayname = {s2_host}\n"
             f"host = {s2_host}\nport = {env.get('USENET_SERVER2_PORT', '563')}\n"
-            f"username = {env.get('USENET_SERVER2_USERNAME', '')}\n"
-            f"password = {env.get('USENET_SERVER2_PASSWORD', '')}\n"
+            f"username = {_ini_value(env.get('USENET_SERVER2_USERNAME', ''))}\n"
+            f"password = {_ini_value(env.get('USENET_SERVER2_PASSWORD', ''))}\n"
             f"connections = {env.get('USENET_SERVER2_CONNECTIONS', '8')}\n"
             f"ssl = {env.get('USENET_SERVER2_SSL', '1')}\n"
             "ssl_verify = 3\nenable = 1\npriority = 1\noptional = 1\n"
@@ -302,10 +325,28 @@ def _seed_sabnzbd_config(
     (config_base / "sabnzbd").mkdir(parents=True, exist_ok=True)
     (config_base / "sabnzbd" / "nzb-backup").mkdir(parents=True, exist_ok=True)
 
+    # SABnzbd's check_hostname() is a DNS-rebinding guard: it rejects any request
+    # whose Host header is not an IP literal, "localhost", *.local, or an EXACT
+    # entry in host_whitelist (no wildcards, no suffix matching). Everything else
+    # gets "Access denied - Hostname verification failed".
+    #
+    # "sabnzbd" (the compose service name) is therefore mandatory, not cosmetic:
+    # Sonarr, Radarr and sabnzbd-exporter all reach it as http://sabnzbd:8080.
+    # Drop it and the *arrs silently stop grabbing and the exporter 403s.
+    #
+    # Add any reverse-proxy FQDN (e.g. sabnzbd.example.com) via SABNZBD_HOST_WHITELIST —
+    # Caddy forwards the original Host header, so the public name must be listed too.
+    whitelist = ["sabnzbd"]
+    for extra in env.get("SABNZBD_HOST_WHITELIST", "").split(","):
+        extra = extra.strip().lower()
+        if extra and extra not in whitelist:
+            whitelist.append(extra)
+    host_whitelist = ",".join(whitelist)
+
     conf_file.write_text(
         f"__version__ = 19\n__encoding__ = utf-8\n[misc]\n"
         f"api_key = {secrets.token_hex(16)}\nnzb_key = {secrets.token_hex(16)}\n"
-        f"host = 0.0.0.0\nport = 8080\nhost_whitelist = sabnzbd,\n"
+        f"host = 0.0.0.0\nport = 8080\nhost_whitelist = {host_whitelist},\n"
         f"complete_dir = /data/downloads/sabnzbd/completed\n"
         f"download_dir = /data/downloads/sabnzbd/tmp\n"
         f"nzb_backup_dir = /config/nzb-backup\nadmin_dir = admin\nlog_dir = logs\n"
@@ -317,8 +358,8 @@ def _seed_sabnzbd_config(
         f"[servers]\n[[{server_name}]]\nname = {server_name}\n"
         f"displayname = {server_host}\nhost = {server_host}\n"
         f"port = {env.get('USENET_SERVER_PORT', '563')}\n"
-        f"username = {env.get('USENET_SERVER_USERNAME', '')}\n"
-        f"password = {env.get('USENET_SERVER_PASSWORD', '')}\n"
+        f"username = {_ini_value(env.get('USENET_SERVER_USERNAME', ''))}\n"
+        f"password = {_ini_value(env.get('USENET_SERVER_PASSWORD', ''))}\n"
         f"connections = {env.get('USENET_SERVER_CONNECTIONS', '30')}\n"
         f"ssl = {env.get('USENET_SERVER_SSL', '1')}\n"
         f"ssl_verify = 3\nenable = 1\npriority = 0\noptional = 0\n"
@@ -340,6 +381,30 @@ def _seed_sabnzbd_config(
     tracker.detail(f"Pre-seeded sabnzbd.ini (server={server_host})")
 
 
+# A quoted "!secret foo" is a plain YAML string, not a tag, so base_url never resolves
+# to a URL.  Recyclarr rejects every instance for it and still exits 0, so the sync is a
+# silent no-op forever.  Configs seeded from the old example carry this and must be
+# re-seeded — leaving them alone means the fix never reaches an existing deployment.
+_QUOTED_SECRET_TAG = re.compile(r':\s*"!secret\s')
+
+
+def _repair_recyclarr_config(config_base: Path, tracker: StepTracker) -> None:
+    conf = config_base / "recyclarr" / "recyclarr.yml"
+    example = SCRIPT_DIR / "recyclarr.example.yml"
+    if not conf.is_file() or not example.is_file():
+        return
+    if not _QUOTED_SECRET_TAG.search(conf.read_text(encoding="utf-8")):
+        return
+
+    backup = conf.with_name("recyclarr.yml.broken")
+    shutil.copy2(conf, backup)
+    shutil.copy2(example, conf)
+    tracker.warn(
+        f"recyclarr.yml had quoted !secret tags (sync was a silent no-op); "
+        f"re-seeded from example, previous file kept as {backup.name}",
+    )
+
+
 def _copy_example_configs(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
@@ -355,6 +420,8 @@ def _copy_example_configs(
             if not dst.is_file() and src.is_file():
                 shutil.copy2(src, dst)
                 tracker.detail(f"Created {dst.name} from example")
+
+        _repair_recyclarr_config(config_base, tracker)
 
     if (config_base / "recyclarr").is_dir():
         try:
@@ -410,20 +477,47 @@ def _populate_api_keys(
         tracker.detail("Populated API keys in Recyclarr secrets.yml")
 
 
+def _read_sabnzbd_api_key(config_base: Path) -> str | None:
+    """Read api_key from the bootstrap-seeded sabnzbd.ini."""
+    ini_file = config_base / "sabnzbd" / "sabnzbd.ini"
+    if not ini_file.is_file():
+        return None
+    try:
+        for line in ini_file.read_text().splitlines():
+            stripped = line.strip()
+            if stripped.startswith("api_key") and "=" in stripped:
+                return stripped.split("=", 1)[1].strip()
+    except OSError:
+        pass
+    return None
+
+
 def _populate_env_api_keys(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
-    if env.get("ENABLE_EXPORTERS", "0") != "1":
-        return
+    """Sync generated API keys back into .env so exporters can read them.
 
-    keys = {app: _read_api_key(config_base, app) for app in ("sonarr", "radarr", "prowlarr")}
-    if not any(keys.values()):
-        return
-
+    Runs during bootstrap, i.e. before `docker compose up`, so the values are in
+    place by the time Compose interpolates them into the exporter containers.
+    """
     env_vars: dict[str, str] = {}
-    for app, key in keys.items():
-        if key:
-            env_vars[f"{app.upper()}_API_KEY"] = key
+
+    # *arr keys feed scraparr (compose.exporters.yml).
+    if env.get("ENABLE_EXPORTERS", "0") == "1":
+        for app in ("sonarr", "radarr", "prowlarr"):
+            key = _read_api_key(config_base, app)
+            if key:
+                env_vars[f"{app.upper()}_API_KEY"] = key
+
+    # SABnzbd's key feeds sabnzbd-exporter (compose.sabnzbd.yml). The key is random
+    # per-install, so without this the exporter would need manual copy-paste from the UI.
+    if env.get("ENABLE_SABNZBD", "0") == "1":
+        sab_key = _read_sabnzbd_api_key(config_base)
+        if sab_key:
+            env_vars["SABNZBD_API_KEY"] = sab_key
+
+    if not env_vars:
+        return
 
     env_file = SCRIPT_DIR / ".env"
     lines = env_file.read_text().splitlines()
@@ -522,7 +616,15 @@ def post_deploy(
             + ["exec", "recyclarr", "recyclarr", "sync"],
             cwd=SCRIPT_DIR, capture_output=True, text=True,
         )
-        if result.returncode == 0:
-            tracker.detail("Recyclarr sync completed")
-        else:
+        # Recyclarr exits 0 even when it rejects every instance, so the exit code alone
+        # will happily report success on a sync that changed nothing.
+        output = (result.stdout or "") + (result.stderr or "")
+        if result.returncode != 0:
             tracker.warn("Recyclarr sync failed (may need manual config)")
+        elif "Configuration Errors" in output or "Invalid instances" in output:
+            tracker.warn(
+                "Recyclarr rejected its config and synced nothing — check "
+                "config/recyclarr/recyclarr.yml (see 'Configuration Errors' in the sync log)",
+            )
+        else:
+            tracker.detail("Recyclarr sync completed")

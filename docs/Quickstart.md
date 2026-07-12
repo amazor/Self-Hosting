@@ -59,6 +59,7 @@ Gather these **before** you start deploying. Some are time-sensitive (Plex claim
 | Immich DB password | You choose one (**alphanumeric only** — no special chars) | Accelerated (Immich Postgres) | Before accelerated deploy |
 | Usenet provider credentials | Your Usenet service (e.g. Astraweb, Eweka) — optional | Media (SABnzbd, if enabled) | Before media deploy (if using Usenet) |
 | NZBGeek API key | https://nzbgeek.info/ — optional | Media (Prowlarr Usenet indexer) | Before media deploy (if using Usenet) |
+| NZBFinder API key | https://nzbfinder.ws/ — optional | Media (Prowlarr Usenet indexer) | Before media deploy (if using Usenet) |
 
 > **Tip:** Generate strong random values now:
 > - Most passwords: `openssl rand -base64 36`
@@ -264,15 +265,22 @@ File: `docker_compose/media/.env.example`
 
 | Variable | What to set |
 |----------|-------------|
-| `USENET_SERVER_HOST` | Provider hostname (e.g. `ssl-eu.astraweb.com`) |
+| `USENET_SERVER_HOST` | Provider hostname (e.g. `eu.astraweb.com`) |
 | `USENET_SERVER_PORT` | `563` (SSL) |
-| `USENET_SERVER_USERNAME` | Your Usenet account username |
+| `USENET_SERVER_USERNAME` | **News-server** username — often NOT your website login. Astraweb issues a short generated username; using your signup email fails auth. |
 | `USENET_SERVER_PASSWORD` | Your Usenet account password |
 | `USENET_SERVER_CONNECTIONS` | Max connections (start at `30`, tune up) |
 | `USENET_SERVER_SSL` | `1` (enabled) |
 | `NZBGEEK_API_KEY` | NZBGeek indexer API key (from https://nzbgeek.info/) |
+| `NZBFINDER_API_KEY` | NZBFinder indexer API key (from https://nzbfinder.ws/) — optional, adds coverage |
 
-Optional: fill/backup server vars (`USENET_SERVER2_*`) for a second Usenet provider on a different backbone.
+Usenet needs **two different accounts**: a *provider* (where files live — bandwidth + retention, a subscription) and an *indexer* (where search results live — what Prowlarr queries, ~$10–15/yr). One without the other does nothing. Set at least one indexer key; both is better, since they index different sources.
+
+Everything else is automated: bootstrap seeds `sabnzbd.ini` with your provider — which is what suppresses SABnzbd's first-run wizard — and `setup_media_apps.py` registers SABnzbd as a download client in Sonarr/Radarr, adds the indexers to Prowlarr, and sets the delay profile so Usenet is preferred over torrents. There is no UI wizard to click through.
+
+Optional: fill/backup server vars (`USENET_SERVER2_*`) for a second Usenet provider on a different backbone — worth adding later if the D04 dashboard's *Article Success Rate* panel shows your primary missing articles.
+
+To get Usenet metrics on the D04 dashboard, also set `SABNZBD_EXPORTER_TARGETS=media:<media-vm-ip>` in the **monitoring** `.env` and redeploy monitoring.
 
 **NFS mounts (if using NAS):** Set these in the `.env` and bootstrap auto-configures fstab + mount:
 

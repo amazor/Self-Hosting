@@ -34,7 +34,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 - [After first run](#after-first-run)
 - [UI configuration how-tos](#ui-configuration-how-tos)
   - [qBittorrent](#qbittorrent)
-  - [SABnzbd (optional)](#sabnzbd-optional)
+  - [SABnzbd (optional — Usenet)](#sabnzbd-optional--usenet)
   - [Sonarr](#sonarr)
   - [Radarr](#radarr)
   - [Prowlarr and FlareSolverr](#prowlarr-and-flaresolverr)
@@ -300,7 +300,7 @@ Recommended post-deploy checks:
 3. Verify Sonarr/Radarr root folders and download clients are present (should be set by `setup_media_apps.py`).
 4. Verify Prowlarr indexers and app sync (should be configured by `setup_media_apps.py`).
 5. If enabled, configure Cleanuparr connections in its UI (`http://<media-vm-ip>:11011`) — deploy prints the exact values to paste. See [Cleanuparr setup](#cleanuparr-optional).
-6. If enabled, configure SABnzbd in its UI (not yet covered by automation).
+6. If enabled, verify SABnzbd opens on the normal UI rather than the setup wizard, and that your provider is green under **Config → Servers** (automated by bootstrap + `setup_media_apps.py`). See [SABnzbd setup](#sabnzbd-optional--usenet).
 7. If enabled, verify Bazarr shows Sonarr/Radarr connected and the language profile assigned (automated by `setup_media_apps.py`).
 
 ---
@@ -323,22 +323,115 @@ Reference: [TRaSH qBittorrent Basic Setup](https://trash-guides.info/Downloaders
 
 **Not automated (personal preference):** global speed limits — TRaSH recommends 70–80% of your max upload/download if sharing the connection. Set in **Options → Speed**.
 
-### SABnzbd (optional)
+### SABnzbd (optional — Usenet)
 
 Reference: [TRaSH SABnzbd](https://trash-guides.info/Downloaders/SABnzbd/)
 
-**Note:** SABnzbd is not managed by Recyclarr or `setup_media_apps.py`. Configure SABnzbd **paths and categories** in the SABnzbd UI, then add it as a download client in Sonarr/Radarr manually.
+**Fully automated.** There is no setup wizard to click through and nothing to configure by hand. Bootstrap pre-seeds `sabnzbd.ini` (API key, paths, categories, your provider) and `setup_media_apps.py` wires SABnzbd into Sonarr, Radarr and Prowlarr. You only supply credentials in `.env`.
 
-1. Open `http://<media-vm-ip>:8082`.
-2. **Config -> Folders**:
-   - Completed Download Folder: `/data/downloads/sabnzbd/completed`
-   - Temporary Download Folder: `/data/downloads/sabnzbd/tmp`
-3. **Config -> Categories**:
-   - `tv` -> `tv` (relative folder)
-   - `movies` -> `movies` (relative folder)
+#### What you need first
 
-   **Important (TRaSH):** Category folders are specified **relative** to the Completed Download Folder — enter just `tv` or `movies`, not the full path. This is different from qBittorrent, which uses a default save path plus category subdirectories. See [TRaSH SABnzbd — Paths and Categories](https://trash-guides.info/Downloaders/SABnzbd/Paths-and-Categories/).
-4. Verify with one test NZB and confirm destination category path.
+Usenet is not free and needs two *different* kinds of account — this trips people up:
+
+| Thing | What it is | Cost |
+|---|---|---|
+| **Provider** (e.g. Eweka, Astraweb, Newshosting) | Where the *files* live. Provides bandwidth + retention. | Subscription |
+| **Indexer** (NZBGeek, NZBFinder) | Where the *search results* live. Prowlarr queries these. | ~$10–15/yr |
+
+A provider without an indexer gives you nothing to search; an indexer without a provider gives you results you cannot download.
+
+> **The news-server username is often not your website login.** Astraweb, for example, issues a short generated username (a 10-character hex string) that has nothing to do with the email you signed up with. Using the signup email produces `Authentication failed, check username/password.` and no other clue. Take the credentials from the provider's *server details / Usenet access* page, not the account or billing page. If auth fails but the connection is reached at all, this is almost always why.
+
+#### Enable it
+
+Set these in `docker_compose/media/.env`, then run `python3 deploy.py media -y`:
+
+```bash
+ENABLE_SABNZBD=1
+
+# Provider (the "news server" — where files come from)
+USENET_SERVER_HOST=eu.astraweb.com
+USENET_SERVER_PORT=563          # 563 = SSL
+USENET_SERVER_USERNAME=<news-server username — see note below>
+USENET_SERVER_PASSWORD=<your provider password>
+USENET_SERVER_CONNECTIONS=30
+USENET_SERVER_SSL=1
+
+# Indexers (what Prowlarr searches). At least one; both is better.
+NZBGEEK_API_KEY=<key>
+NZBFINDER_API_KEY=<key>
+```
+
+That is the whole manual step. On deploy the automation will:
+
+1. Create `downloads/sabnzbd/{completed/{tv,movies,anime},tmp}` under `MEDIA_ROOT`.
+2. Generate a random SABnzbd API key and pre-seed `sabnzbd.ini` with your provider, TRaSH paths, and the `tv`/`movies`/`anime` categories. **A non-empty `[servers]` section is what suppresses SABnzbd's first-run wizard** — because the provider is seeded, SABnzbd comes up already configured.
+3. Write that API key back into `.env` as `SABNZBD_API_KEY` so `sabnzbd-exporter` can scrape it — no copy-paste from the UI.
+4. Add SABnzbd as a download client in **both** Sonarr and Radarr, with the right category and remove-completed/failed enabled.
+5. Add NZBGeek and/or NZBFinder to Prowlarr (only the ones whose keys are set) and sync them to the *arrs.
+6. Set the Sonarr/Radarr **delay profile** to prefer Usenet (see below).
+
+Verify afterwards: open `http://<media-vm-ip>:8082` — you should land on the normal UI, *not* the wizard, with your provider listed green under **Config → Servers**.
+
+#### Why "prefer Usenet" is a delay profile, not a client priority
+
+This is the single most counter-intuitive part of the setup, and it is easy to get wrong.
+
+The automation sets SABnzbd to download-client priority `1` and qBittorrent to `2`. **That does not make Sonarr prefer Usenet.** Client priority only breaks ties *between clients of the same protocol* — it decides which of two SABnzbd instances gets the NZB, and nothing else. Protocol preference lives exclusively in the **delay profile** (`Settings → Profiles → Delay Profiles`), which is why `setup_media_apps.py` also sets:
+
+| Field | Value | Meaning |
+|---|---|---|
+| `preferredProtocol` | `usenet` | Usenet wins over a torrent of equal quality |
+| `usenetDelay` | `0` (`USENET_DELAY_MINUTES`) | Grab NZBs immediately |
+| `torrentDelay` | `60` (`TORRENT_DELAY_MINUTES`) | A torrent must be 60 min old before it is eligible |
+
+Two behaviours worth knowing, both of which surprise people:
+
+- The delay is measured against the **release's age**, not against how long Sonarr has known about it. A 3-hour-old torrent appearing in RSS for the first time is already past a 60-minute delay.
+- Delays apply to **RSS sync only**. An interactive/manual search ignores them entirely, so a manual search still shows and grabs torrents immediately. This is by design, not a bug.
+
+Ref: [Servarr wiki — Delay Profiles](https://wiki.servarr.com/sonarr/settings#delay-profiles). (TRaSH does not cover delay profiles at all.)
+
+#### Optional: a fill/block server
+
+Usenet providers lose articles over time (DMCA takedowns, incomplete posts). A second provider on a *different backbone* fills the gaps. It is normally a cheap block account (pay-per-GB, no subscription), configured as lower-priority and `optional`, so SABnzbd only asks it for what the primary could not deliver:
+
+```bash
+USENET_SERVER2_HOST=...
+USENET_SERVER2_USERNAME=...
+USENET_SERVER2_PASSWORD=...
+USENET_SERVER2_CONNECTIONS=8
+```
+
+You do not need this on day one. The **Article Success Rate per Server** panel on the [D04 Media Pipeline dashboard](Chapter3b-monitoring-stack.md) is the signal: if your primary sits below ~100%, it is missing articles and a fill server will pay for itself.
+
+#### Reverse proxy caveat (`host_whitelist`)
+
+SABnzbd has a DNS-rebinding guard that rejects any request whose `Host` header is not an IP, `localhost`, `*.local`, or an **exact** entry in its whitelist — no wildcards. Anything else gets:
+
+```
+Access denied - Hostname verification failed
+```
+
+The compose service name `sabnzbd` is always whitelisted automatically, because Sonarr, Radarr and `sabnzbd-exporter` all reach it as `http://sabnzbd:8080` — remove it and the *arrs silently stop grabbing while the exporter 403s. LAN access by IP needs nothing.
+
+If you later put SABnzbd behind Caddy, add the public FQDN too — Caddy forwards the original `Host` header, so the public name must be listed:
+
+```bash
+SABNZBD_HOST_WHITELIST=sabnzbd.example.com
+```
+
+#### Metrics
+
+`compose.sabnzbd.yml` ships its own `sabnzbd-exporter` (onedr0p/exportarr, port 9707). It lives in the SABnzbd overlay rather than `compose.exporters.yml` on purpose: Scraparr is *arr-only and will never export download clients, and the default stack runs exporters *with SABnzbd disabled* — so putting it in the exporters overlay would spawn a permanently-failing container for everyone.
+
+To scrape it, set `SABNZBD_EXPORTER_TARGETS=media:<media-vm-ip>` in the **monitoring** stack's `.env` and redeploy monitoring.
+
+#### Paths (for reference — pre-seeded, not typed by hand)
+
+- Completed Download Folder: `/data/downloads/sabnzbd/completed`
+- Temporary Download Folder: `/data/downloads/sabnzbd/tmp`
+- Categories: `tv`, `movies`, `anime` — **relative** to the completed folder (enter `tv`, not the full path). This differs from qBittorrent, which uses a default save path plus category subdirectories. See [TRaSH — Paths and Categories](https://trash-guides.info/Downloaders/SABnzbd/Paths-and-Categories/).
 
 ### Sonarr
 
@@ -440,7 +533,7 @@ Reference: [TRaSH Guide Sync](https://trash-guides.info/Guide-Sync/)
 - **`setup_media_apps.py`** (always) — Prowlarr indexers + FlareSolverr proxy, qBittorrent preferences + categories, Sonarr/Radarr root folders + qBittorrent download clients + TRaSH naming, Prowlarr app sync to Sonarr/Radarr, Bazarr connections + language profile + providers + scoring (when `ENABLE_BAZARR=1`)
 - **Recyclarr** (when enabled) — TRaSH quality profiles for TV (WEB-1080p) and movies (HD Bluray + WEB), **plus anime** (Remux-1080p with `[Streaming Services] Asian` CF group for Crunchyroll/Funimation/HIDIVE scoring), quality definitions, custom formats, and Golden Rule HD scoring. Initial sync runs on first deploy; subsequent syncs follow the cron schedule.
 
-Because deploy automates root folders, download clients, naming, quality profiles, custom formats, and Bazarr subtitle configuration, you can skip the corresponding manual UI steps in Sonarr, Radarr, Prowlarr, and Bazarr. qBittorrent preferences and categories are also automated. SABnzbd and Cleanuparr still require manual UI configuration (Cleanuparr has no public API; deploy prints the connection details to paste into its UI).
+Because deploy automates root folders, download clients, naming, quality profiles, custom formats, and Bazarr subtitle configuration, you can skip the corresponding manual UI steps in Sonarr, Radarr, Prowlarr, and Bazarr. qBittorrent preferences and categories are also automated. SABnzbd is automated too — bootstrap seeds its config (including your provider, which is what suppresses the first-run wizard) and `setup_media_apps.py` registers it as a download client and sets the delay profile; you only supply credentials in `.env`. **Cleanuparr is the one exception** and still requires manual UI configuration — it has no public API, so deploy prints the connection details to paste into its UI.
 
 **Example configs:** In `docker_compose/media/` you will find `recyclarr.example.yml` and `recyclarr.secrets.example.yml`. Bootstrap copies these into `config/recyclarr/` **only when `ENABLE_RECYCLARR=1`** and only if the target does not already exist. **API keys are auto-populated** from the pre-seeded *arr `config.xml` files — no manual key editing is needed.
 
@@ -511,6 +604,7 @@ Cleanuparr monitors Sonarr/Radarr download queues and automatically handles stal
 ### If imports fail
 
 1. Re-check qBittorrent/SABnzbd paths and categories.
+   For SABnzbd specifically, a 403 `Access denied - Hostname verification failed` means the caller's hostname is not in `host_whitelist` — see [SABnzbd setup](#sabnzbd-optional--usenet).
 2. Re-check Sonarr/Radarr root folders and download client categories.
 3. Confirm all apps use `/data/...` paths (not mixed `/downloads`, `/tv`, `/movies` views).
 4. Check stack logs:
