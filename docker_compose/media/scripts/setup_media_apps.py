@@ -916,6 +916,14 @@ def _setup_download_client_sabnzbd(
                 if dc.get("priority", 1) != priority:
                     dc["priority"] = priority
                     changed = True
+                # Re-seeding sabnzbd.ini mints a NEW random API key. Without this,
+                # the *arr would keep the stale key and every grab would fail auth
+                # against SABnzbd, with nothing in the logs pointing at the cause.
+                for field in dc.get("fields", []):
+                    if field.get("name") == "apiKey" and field.get("value") != sabnzbd_api_key:
+                        field["value"] = sabnzbd_api_key
+                        changed = True
+                        log.info("%s SABnzbd API key refreshed (key had rotated).", app_name)
                 if changed:
                     _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
                     log.info(

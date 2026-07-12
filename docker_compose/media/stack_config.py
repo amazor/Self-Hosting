@@ -265,6 +265,29 @@ def _seed_qbittorrent_config(
     tracker.detail(f"Pre-seeded qBittorrent.conf (user={username})")
 
 
+def _ini_value(value: str) -> str:
+    """Quote a value for SABnzbd's ini so configobj round-trips it intact.
+
+    configobj treats an unquoted '#' as the start of a comment, so a perfectly
+    legal password like 'Q#e6qDMf38L@N*' is silently truncated at the '#' and
+    SABnzbd then fails to authenticate with no error pointing at the cause.
+    Commas are just as bad — configobj reads an unquoted comma as a list separator.
+
+    Quote anything that is not plainly safe, picking a quote character the value
+    does not itself contain.
+    """
+    if value == "":
+        return '""'
+    if not any(c in value for c in '#,;=\'" ') and value == value.strip():
+        return value
+    if '"' not in value:
+        return f'"{value}"'
+    if "'" not in value:
+        return f"'{value}'"
+    # Value contains both quote characters; configobj's triple-quote form handles it.
+    return f'"""{value}"""'
+
+
 def _seed_sabnzbd_config(
     env: dict[str, str], config_base: Path, tracker: StepTracker,
 ) -> None:
@@ -291,8 +314,8 @@ def _seed_sabnzbd_config(
         second_server = (
             f"[[{s2_name}]]\nname = {s2_name}\ndisplayname = {s2_host}\n"
             f"host = {s2_host}\nport = {env.get('USENET_SERVER2_PORT', '563')}\n"
-            f"username = {env.get('USENET_SERVER2_USERNAME', '')}\n"
-            f"password = {env.get('USENET_SERVER2_PASSWORD', '')}\n"
+            f"username = {_ini_value(env.get('USENET_SERVER2_USERNAME', ''))}\n"
+            f"password = {_ini_value(env.get('USENET_SERVER2_PASSWORD', ''))}\n"
             f"connections = {env.get('USENET_SERVER2_CONNECTIONS', '8')}\n"
             f"ssl = {env.get('USENET_SERVER2_SSL', '1')}\n"
             "ssl_verify = 3\nenable = 1\npriority = 1\noptional = 1\n"
@@ -335,8 +358,8 @@ def _seed_sabnzbd_config(
         f"[servers]\n[[{server_name}]]\nname = {server_name}\n"
         f"displayname = {server_host}\nhost = {server_host}\n"
         f"port = {env.get('USENET_SERVER_PORT', '563')}\n"
-        f"username = {env.get('USENET_SERVER_USERNAME', '')}\n"
-        f"password = {env.get('USENET_SERVER_PASSWORD', '')}\n"
+        f"username = {_ini_value(env.get('USENET_SERVER_USERNAME', ''))}\n"
+        f"password = {_ini_value(env.get('USENET_SERVER_PASSWORD', ''))}\n"
         f"connections = {env.get('USENET_SERVER_CONNECTIONS', '30')}\n"
         f"ssl = {env.get('USENET_SERVER_SSL', '1')}\n"
         f"ssl_verify = 3\nenable = 1\npriority = 0\noptional = 0\n"
