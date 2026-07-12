@@ -1141,8 +1141,11 @@ def _configure_arr_indexers(app_name: str, base_url: str, headers: dict,
         if criteria_changed:
             idx["seedCriteria"] = seed_criteria
 
+        # forceSave=true: without it, Sonarr re-tests the indexer's connectivity on every PUT
+        # and rejects the whole update (tags included) if that indexer happens to be
+        # erroring/rate-limited at that moment — unrelated to the field actually being changed.
         result = _api(
-            f"{url}/{idx['id']}", headers, method="PUT", data=idx,
+            f"{url}/{idx['id']}?forceSave=true", headers, method="PUT", data=idx,
         )
         if result is not None:
             updated += 1
@@ -1203,7 +1206,8 @@ def _tag_anime_indexer_scoping(sonarr_url: str, headers: dict) -> None:
     indexers = _api(f"{sonarr_url}/api/v3/indexer", headers) or []
     indexers_updated = 0
     for idx in indexers:
-        name = idx.get("name", "")
+        # Prowlarr-synced indexers land in Sonarr as "<name> (Prowlarr)", not the bare name.
+        name = idx.get("name", "").removesuffix(" (Prowlarr)")
         if name in anime_indexer_names:
             mine, other = anime_tag_id, general_tag_id
         elif name in general_indexer_names:
@@ -1215,7 +1219,8 @@ def _tag_anime_indexer_scoping(sonarr_url: str, headers: dict) -> None:
         if current == target:
             continue
         idx["tags"] = sorted(target)
-        if _api(f"{sonarr_url}/api/v3/indexer/{idx['id']}", headers,
+        # forceSave=true: skip Sonarr's connectivity re-test on PUT (see _configure_arr_indexers).
+        if _api(f"{sonarr_url}/api/v3/indexer/{idx['id']}?forceSave=true", headers,
                 method="PUT", data=idx) is not None:
             indexers_updated += 1
 
