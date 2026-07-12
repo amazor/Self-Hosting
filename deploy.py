@@ -204,8 +204,8 @@ def _build_shell_helper(stack: str, helper_dir: str, config) -> str:  # noqa: AN
             '    local files="-f $dir/compose.yml"',
             '    [[ -f "$dir/.env" ]] && source "$dir/.env" 2>/dev/null',
             '    [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && files="$files -f $dir/compose.recyclarr.yml"',
-            '    (cd "$dir" && python3 scripts/setup_media_apps.py) 2>/dev/null || true',
-            '    [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && (cd "$dir" && docker compose $files exec recyclarr recyclarr sync) 2>/dev/null || true',
+            '    (cd "$dir" && python3 scripts/setup_media_apps.py)',
+            '    [[ "${ENABLE_RECYCLARR:-0}" = "1" ]] && (cd "$dir" && docker compose $files exec recyclarr recyclarr sync)',
             '    return',
             '  fi',
         ]

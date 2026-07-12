@@ -408,7 +408,7 @@ Reference: [TRaSH Bazarr](https://trash-guides.info/Bazarr/), [TRaSH Suggested S
 - **Subtitle sync** — automatic synchronization with thresholds at 96 (series) / 86 (movies)
 - **Adaptive searching** — slows down after 1 week of no results, spaces searches 4 weeks apart
 - **Subtitle upgrades** — enabled with a 7-day upgrade window
-- **Providers** — five zero-credential providers: Gestdown, Wizdom (Hebrew), Podnapisi, YIFY Subtitles, Animetosho
+- **Providers** — four zero-login providers: Gestdown, Wizdom (Hebrew), YIFY Subtitles, Animetosho. (Podnapisi was dropped from the default list — the provider no longer exists upstream, not a rename. Animetosho needs no login of its own, but returns nothing for anime until an AniDB API client is configured — see the deferred anime-subtitles item in project notes.)
 
 After deploy, verify by checking that Bazarr's UI (`http://<media-vm-ip>:6767`) shows Sonarr/Radarr connected and the language profile assigned.
 

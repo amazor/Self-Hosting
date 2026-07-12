@@ -55,14 +55,23 @@ PROWLARR_INDEXERS = [
     {"name": "Torrent Downloads", "definitionName": "torrentdownloads"},
     {"name": "Knaben", "definitionName": "Knaben"},
     # Anime
-    {"name": "Nyaa.si", "definitionName": "nyaasi",
+    {"name": "Nyaa.si", "definitionName": "nyaasi", "anime": True,
      "fields": {"animeCategories": [5070]}},  # 5070 = Anime - English-translated
-    {"name": "SubsPlease", "definitionName": "SubsPlease"},
-    {"name": "Tokyo Toshokan", "definitionName": "tokyotosho"},
-    {"name": "Shana Project", "definitionName": "shanaproject"},
+    {"name": "SubsPlease", "definitionName": "SubsPlease", "anime": True},
+    {"name": "Tokyo Toshokan", "definitionName": "tokyotosho", "anime": True},
+    {"name": "Shana Project", "definitionName": "shanaproject", "anime": True},
 ]
 
 FLARESOLVERR_TAG_NAME = "flaresolverr"
+
+# Sonarr tags used to keep anime episode searches off general torrent trackers (several sit
+# behind FlareSolverr, and none of them carry anime — every search against them is a wasted,
+# slow query). Mirrored onto series by quality profile: matching ANIME_PROFILE_NAME gets
+# ANIME_TAG_NAME, everything else gets NON_ANIME_TAG_NAME. Usenet indexers (e.g. NZBgeek) are
+# left untagged/universal — they're fast and do carry anime, so there's nothing to scope away.
+ANIME_TAG_NAME = "anime"
+NON_ANIME_TAG_NAME = "general"
+ANIME_PROFILE_NAME = "[Anime] Remux-1080p"
 
 # ---------------------------------------------------------------------------
 # Usenet indexers to add to Prowlarr (require API keys from .env).
@@ -187,7 +196,11 @@ PROWLARR_SYNC_WAIT_S = 30
 
 BAZARR_PROFILE_NAME = "English + Hebrew"
 BAZARR_LANGUAGES = ["en", "he"]
-BAZARR_PROVIDERS = ["gestdown", "wizdom", "podnapisi", "yifysubtitles", "animetosho"]
+# podnapisi removed upstream (Bazarr's own config.py: "delete podnapisi section since this
+# provider doesn't exist anymore") — enabling it here is silently dropped with no log line,
+# no error, nothing. Confirmed gone, not renamed: no podnapisi.py anywhere in Bazarr's
+# subliminal/subliminal_patch provider directories.
+BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho"]
 
 
 # ---------------------------------------------------------------------------
@@ -1157,6 +1170,87 @@ def _configure_arr_indexers(app_name: str, base_url: str, headers: dict,
         )
 
 
+def _get_or_create_tag(base_url: str, headers: dict, label: str) -> int | None:
+    """Get or create a Sonarr/Radarr tag (v3 API), returning its ID."""
+    tags = _api(f"{base_url}/api/v3/tag", headers)
+    if tags:
+        for t in tags:
+            if t.get("label", "").lower() == label.lower():
+                return t["id"]
+    result = _api(f"{base_url}/api/v3/tag", headers, method="POST", data={"label": label})
+    return result.get("id") if isinstance(result, dict) else None
+
+
+def _tag_anime_indexer_scoping(sonarr_url: str, headers: dict) -> None:
+    """Restrict anime episode searches to anime-native indexers.
+
+    Sonarr only excludes an indexer for a series when the two share no tags at all — an
+    untagged indexer is used for every series regardless of that series' own tags. So tagging
+    only the anime-native indexers isn't enough: general torrent trackers would stay untagged
+    (universal) and still get queried for anime. This tags both sides of the split — anime-
+    native indexers + anime-profile series get ANIME_TAG_NAME, every other torrent indexer +
+    series gets NON_ANIME_TAG_NAME — so each side only ever matches its own.
+    """
+    anime_tag_id = _get_or_create_tag(sonarr_url, headers, ANIME_TAG_NAME)
+    general_tag_id = _get_or_create_tag(sonarr_url, headers, NON_ANIME_TAG_NAME)
+    if anime_tag_id is None or general_tag_id is None:
+        log.warning("Sonarr: could not create anime/general tags, skipping indexer tag-scoping.")
+        return
+
+    anime_indexer_names = {i["name"] for i in PROWLARR_INDEXERS if i.get("anime")}
+    general_indexer_names = {i["name"] for i in PROWLARR_INDEXERS if not i.get("anime")}
+
+    indexers = _api(f"{sonarr_url}/api/v3/indexer", headers) or []
+    indexers_updated = 0
+    for idx in indexers:
+        name = idx.get("name", "")
+        if name in anime_indexer_names:
+            mine, other = anime_tag_id, general_tag_id
+        elif name in general_indexer_names:
+            mine, other = general_tag_id, anime_tag_id
+        else:
+            continue  # usenet / other indexers stay untagged (universal)
+        current = set(idx.get("tags") or [])
+        target = (current - {other}) | {mine}
+        if current == target:
+            continue
+        idx["tags"] = sorted(target)
+        if _api(f"{sonarr_url}/api/v3/indexer/{idx['id']}", headers,
+                method="PUT", data=idx) is not None:
+            indexers_updated += 1
+
+    profiles = _api(f"{sonarr_url}/api/v3/qualityprofile", headers) or []
+    anime_profile_id = next(
+        (p["id"] for p in profiles if p.get("name") == ANIME_PROFILE_NAME), None,
+    )
+    if anime_profile_id is None:
+        log.info(
+            "Sonarr: no '%s' quality profile found yet, tagged %d indexer(s) but left "
+            "series untouched.", ANIME_PROFILE_NAME, indexers_updated,
+        )
+        return
+
+    series_list = _api(f"{sonarr_url}/api/v3/series", headers) or []
+    series_updated = 0
+    for s in series_list:
+        is_anime = s.get("qualityProfileId") == anime_profile_id
+        wanted_tag = anime_tag_id if is_anime else general_tag_id
+        other_tag = general_tag_id if is_anime else anime_tag_id
+        current = set(s.get("tags") or [])
+        target = (current - {other_tag}) | {wanted_tag}
+        if current == target:
+            continue
+        s["tags"] = sorted(target)
+        if _api(f"{sonarr_url}/api/v3/series/{s['id']}", headers,
+                method="PUT", data=s) is not None:
+            series_updated += 1
+
+    log.info(
+        "Sonarr: anime indexer scoping — %d indexer(s), %d series updated.",
+        indexers_updated, series_updated,
+    )
+
+
 # ---------------------------------------------------------------------------
 # Plex notification connection (Sonarr / Radarr → Plex library refresh)
 # ---------------------------------------------------------------------------
@@ -1544,11 +1638,9 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
         )
 
     if sonarr_key:
-        _configure_arr_indexers(
-            "Sonarr", "http://localhost:8989",
-            {"X-Api-Key": sonarr_key, "Content-Type": "application/json"},
-            env,
-        )
+        sonarr_headers = {"X-Api-Key": sonarr_key, "Content-Type": "application/json"}
+        _configure_arr_indexers("Sonarr", "http://localhost:8989", sonarr_headers, env)
+        _tag_anime_indexer_scoping("http://localhost:8989", sonarr_headers)
     if radarr_key:
         _configure_arr_indexers(
             "Radarr", "http://localhost:7878",
