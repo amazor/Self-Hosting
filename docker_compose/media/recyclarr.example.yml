@@ -67,6 +67,16 @@ sonarr:
           allowed: true
           until_quality: WEB 1080p
           until_score: 10000
+        # Floor for "is this release acceptable at all". Anything scoring below this is
+        # REJECTED OUTRIGHT, not merely ranked lower — TRaSH's default of 0 means every
+        # negative format is a hard block, so a show that only exists as x265 is never
+        # grabbed and sits missing forever.
+        #
+        # -500 splits the difference: it is below the x265/AV1 penalty (-300, set in
+        # custom_formats below) so those become an eligible LAST RESORT, but far above
+        # the -10000 given to LQ, BR-DISK, Upscaled, Bad Dual Groups and
+        # "Language: Not Original", which stay permanently blocked.
+        min_format_score: -500
         qualities:
           - name: Bluray-1080p
           - name: WEB 1080p
@@ -87,6 +97,28 @@ sonarr:
         # needed — Recyclarr warns that selecting it is redundant.
         - trash_id: e3f37512790f00d0e89e54fe5e790d1c  # [Required] Golden Rule UHD
         - trash_id: 35fb4585dcd9e2a5ac732e4309f5a45a  # [Streaming Services] Asian
+    custom_formats:
+      # x265/AV1 as a LAST RESORT on the everyday HD profile only.
+      #
+      # These codecs are not "bad" — they are more efficient than x264. They are
+      # penalised because of what a 1080p x265/AV1 release usually IS: a re-encode of an
+      # existing x264 rip (lossy from lossy), and a codec many Plex clients cannot direct
+      # play, which forces a real-time GPU/CPU transcode on every playback.
+      #
+      # But at TRaSH's default of -10000 they are a HARD BLOCK, so anything that exists
+      # only as x265 is never grabbed at all. -300 (against min_format_score: -500 above)
+      # makes them eligible while guaranteeing they lose to ANY x264 release — they only
+      # ever win when there is genuinely nothing else.
+      #
+      # Scoped to "HD Bluray + WEB" ONLY. The 4K and anime profiles keep the -10000 hard
+      # block: at 2160p, x265 IS the source format, so an SDR x265 4K encode is pure
+      # compatibility cost with no benefit (that is the Golden Rule above).
+      - trash_ids:
+          - 47435ece6b99a0b477caf360e79ba0bb  # x265 (HD)
+          - 15a05bc7c1a36e2b57fd628f8977e2fc  # AV1
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: -300
 
 radarr:
   # --- Movies (UHD Bluray + WEB) — grab 1080p now, upgrade to 4K when available ---
@@ -138,7 +170,24 @@ radarr:
           allowed: true
           until_quality: Bluray-1080p
           until_score: 10000
+        # See the Sonarr profile above for the full reasoning. Short version: TRaSH's
+        # default floor of 0 makes every negative custom format a HARD BLOCK, so a movie
+        # that only exists as x265 is never grabbed at all. -500 sits below the x265/AV1
+        # penalty (-300) so they become a last resort, but well above the -10000 on LQ,
+        # BR-DISK, CAM/TELESYNC, Upscaled and Line/Mic Dubbed, which stay blocked.
+        min_format_score: -500
     custom_format_groups:
       add:
         # Golden Rule UHD: blocks x265 encodes with no HDR/DV (SDR 4K is not an upgrade).
         - trash_id: ff204bbcecdd487d1cefcefdbf0c278d  # [Required] Golden Rule UHD
+    custom_formats:
+      # x265/AV1 as a LAST RESORT — HD profile ONLY. See the Sonarr block above.
+      # "UHD Bluray + WEB" is deliberately NOT listed here: at 2160p, x265 IS the source
+      # format, and an SDR x265 4K encode is all compatibility cost with no benefit, so
+      # the Golden Rule -10000 hard block must stay in force there.
+      - trash_ids:
+          - dc98083864ea246d05a42df0d05f81cc  # x265 (HD)
+          - cae4ca30163749b891686f95532519bd  # AV1
+        assign_scores_to:
+          - name: HD Bluray + WEB
+            score: -300
