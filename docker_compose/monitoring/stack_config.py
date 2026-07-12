@@ -231,6 +231,11 @@ scrape_configs:
       - files: ["/etc/prometheus/targets/scrape-targets-qbittorrent.json"]
         refresh_interval: 5m
 
+  - job_name: "sabnzbd"
+    file_sd_configs:
+      - files: ["/etc/prometheus/targets/scrape-targets-sabnzbd.json"]
+        refresh_interval: 5m
+
   - job_name: "blackbox-exporter"
     static_configs:
       - targets: ["blackbox-exporter:9115"]
@@ -423,6 +428,7 @@ def _generate_scrape_targets(env: dict[str, str], config_base: Path, tracker: St
     evpn_entries = _parse_targets(env.get("EXPRESSVPN_EXPORTER_TARGETS", ""), 9797, "expressvpn")
     scraparr_entries = _parse_targets(env.get("SCRAPARR_EXPORTER_TARGETS", ""), 7100, "scraparr")
     qbt_entries = _parse_targets(env.get("QBITTORRENT_EXPORTER_TARGETS", ""), 17871, "qbittorrent-exporter")
+    sab_entries = _parse_targets(env.get("SABNZBD_EXPORTER_TARGETS", ""), 9707, "sabnzbd-exporter")
 
     file_map = {
         "scrape-targets-node-exporter.json": ne_entries,
@@ -431,6 +437,7 @@ def _generate_scrape_targets(env: dict[str, str], config_base: Path, tracker: St
         "scrape-targets-expressvpn.json": evpn_entries,
         "scrape-targets-scraparr.json": scraparr_entries,
         "scrape-targets-qbittorrent.json": qbt_entries,
+        "scrape-targets-sabnzbd.json": sab_entries,
     }
     for fname, entries in file_map.items():
         (targets_dir / fname).write_text(json.dumps(entries, indent=2) + "\n")

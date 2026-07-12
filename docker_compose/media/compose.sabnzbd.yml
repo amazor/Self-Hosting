@@ -27,4 +27,44 @@ services:
     # Host 8082: 8080 is qBittorrent (via VPN), 8081 is cAdvisor (observability overlay).
     ports:
       - "8082:8080"
+    # mode=version needs no API key and is exempt from the hostname check, so it is
+    # a safe liveness probe. Without a healthcheck, autoheal cannot recover a wedged
+    # SABnzbd and the exporter below has nothing to gate on.
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf 'http://localhost:8080/api?mode=version' || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  # --- sabnzbd-exporter — Prometheus metrics for SABnzbd ---
+  # Lives in THIS overlay rather than compose.exporters.yml on purpose: it is useless
+  # without SABnzbd, and the default stack runs exporters WITH SABnzbd disabled — so
+  # putting it there would spawn a permanently-failing container for every deploy.
+  #
+  # Scraparr (compose.exporters.yml) is *arr-only and does not export download clients,
+  # so SABnzbd needs its own exporter. exportarr is the only actively maintained one.
+  # Docs: https://github.com/onedr0p/exportarr
+  #
+  # API_KEY comes from .env — bootstrap auto-populates SABNZBD_API_KEY after it seeds
+  # sabnzbd.ini, so no manual copying is needed.
+  #
+  # NOTE: this reaches SABnzbd as the hostname "sabnzbd", which SABnzbd's host_whitelist
+  # check gates (exact match, no wildcards). "sabnzbd" must stay in SABNZBD_HOST_WHITELIST
+  # or every scrape 403s with no obvious cause. See stack_config.py:_seed_sabnzbd_config.
+  sabnzbd-exporter:
+    image: ghcr.io/onedr0p/exportarr:${EXPORTARR_TAG:-v2.3.0}
+    container_name: sabnzbd-exporter
+    command: ["sabnzbd"]
+    depends_on:
+      sabnzbd:
+        condition: service_healthy
+    environment:
+      - PORT=9707
+      - URL=http://sabnzbd:8080
+      - API_KEY=${SABNZBD_API_KEY:-}
+      - TZ=${TZ:-Etc/UTC}
+    ports:
+      - "9707:9707"
     restart: unless-stopped
