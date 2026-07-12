@@ -180,19 +180,16 @@ Three panels:
    sabnzbd_remaining_bytes{host=~"$host"}
    ```
 
-3. **Article Success Rate per Server** — the one that matters.
+3. **Per-Server Download Rate** — which provider is actually carrying the load.
    ```promql
-   clamp_max(
-     increase(sabnzbd_server_articles_success{host=~"$host"}[$__rate_interval])
-     /
-     clamp_min(increase(sabnzbd_server_articles_total{host=~"$host"}[$__rate_interval]), 1),
-     1
-   )
+   rate(sabnzbd_server_downloaded_bytes{host=~"$host"}[$__rate_interval])
    ```
 
-**Why article success rate is the key Usenet signal (and has no torrent equivalent):** a torrent stalls because nobody is seeding — an availability problem you can see in the swarm. Usenet stalls because *articles are missing* (DMCA takedowns, incomplete posts), which is invisible from the queue alone: speed just quietly drops while par2 repair grinds. A primary server drifting below ~100% is the signal to add a fill/block provider on a different backbone (`USENET_SERVER2_*`), which by design is only asked for what the primary could not deliver. `clamp_min(..., 1)` guards the divide-by-zero when no articles were requested in the window; `clamp_max(..., 1)` keeps counter-reset artifacts from spiking above 100%.
+**⚠️ Do NOT build an "article success rate" panel.** The exporter exposes `sabnzbd_server_articles_success` and `sabnzbd_server_articles_total`, and dividing them looks like the obvious Usenet health metric. It is a trap. Verified against a live download on the media VM: SABnzbd reported `articles_tried=17612`, `articles_success=0` while pulling 30 MB/s and 13 GB from a single server. The ratio therefore reads a permanently-red **0%** and will send you chasing a provider fault that does not exist. (The counter appears only to be meaningful in multi-server setups, if at all.) **Delivered bytes per server is the signal that actually works.**
 
-**Diagnostic pairing:** zero speed + non-empty queue + falling article success = provider problem, *not* a "no seeders" problem. That distinction is the whole reason to run both protocols.
+**Why per-server bytes is the key Usenet signal (and has no torrent equivalent):** a torrent stalls because nobody is seeding — an availability problem visible in the swarm. Usenet stalls because *articles are missing* (DMCA takedowns, incomplete posts), which is invisible from the queue alone: speed quietly drops while par2 repair grinds. A fill/block provider (`USENET_SERVER2_*`) is only ever asked for articles the primary could not supply — so **any sustained traffic on the fill server means the primary is missing content**, and that is your cue to care.
+
+**Diagnostic pairing:** zero speed + non-empty queue = provider problem, *not* a "no seeders" problem. That distinction is the whole reason to run both protocols.
 
 ---
 

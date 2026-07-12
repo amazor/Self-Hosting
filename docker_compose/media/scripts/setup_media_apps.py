@@ -453,7 +453,17 @@ def setup_prowlarr_usenet_indexers(
     if existing is None:
         log.warning("Could not list Prowlarr indexers for Usenet setup.")
         return
-    existing_defs = {idx.get("definitionName", "").lower() for idx in existing}
+    # Match on BOTH name and definitionName. Prowlarr stores every Newznab-preset
+    # indexer with definitionName="Newznab" (the preset name survives only in
+    # `name`), so a definitionName-only check never recognises NZBgeek as already
+    # present: each run re-POSTs it, Prowlarr rejects the duplicate, and the run
+    # reports a bogus "1 failed" while the indexer sits there working fine.
+    existing_names = {
+        value.casefold()
+        for idx in existing
+        for value in (idx.get("definitionName", ""), idx.get("name", ""))
+        if value
+    }
 
     added = 0
     skipped = 0
@@ -468,7 +478,7 @@ def setup_prowlarr_usenet_indexers(
             )
             continue
 
-        if idx_def["definitionName"].lower() in existing_defs:
+        if {idx_def["definitionName"].casefold(), idx_def["name"].casefold()} & existing_names:
             skipped += 1
             continue
 
