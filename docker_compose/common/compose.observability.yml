@@ -89,13 +89,27 @@ services:
     restart: unless-stopped
 
   # --- cAdvisor: per-container resource metrics ---
-  # CPU, memory, network, disk I/O per container for Prometheus. Requires
-  # privileged + host paths on Debian/Ubuntu for cgroup v2 access.
+  # CPU, memory, network, disk I/O per container for Prometheus.
   # Docs: https://github.com/google/cadvisor
+  #
+  # Deliberately NOT privileged. The upstream docs suggest `--privileged` on
+  # Debian/Ubuntu, but that grants every capability, all host devices, and an
+  # unmasked read-write /sys — i.e. straightforward host takeover from a
+  # container that only ever needs to *read* cgroups. The read-only mounts below
+  # already cover cgroup v2; the only thing privileged actually bought us was
+  # CAP_SYSLOG, which is added back explicitly.
+  #
+  # Why exactly these caps:
+  #   - cadvisor runs as uid 0 and everything it reads (/var/lib/docker 0710
+  #     root:root, /var/run/docker.sock 0660 root:docker, /sys/fs/cgroup) is
+  #     readable via *owner* permissions, so no DAC_OVERRIDE/DAC_READ_SEARCH.
+  #   - SYSLOG is required to open /dev/kmsg while kernel.dmesg_restrict=1
+  #     (the default). That feeds the OOM-event parser behind
+  #     container_oom_events_total. Drop it and cadvisor still starts, but
+  #     silently stops reporting OOM kills.
   cadvisor:
     image: ghcr.io/google/cadvisor:${CADVISOR_TAG:-latest}
     container_name: cadvisor
-    privileged: true
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -104,6 +118,12 @@ services:
       - /dev/disk/:/dev/disk:ro
     devices:
       - /dev/kmsg:/dev/kmsg
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYSLOG
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "8081:8080"    # host 8081 avoids conflict with qBittorrent Web UI (8080)
     restart: unless-stopped
