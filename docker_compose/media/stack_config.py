@@ -602,10 +602,18 @@ def post_deploy(
     """Configure media apps via API after docker compose up."""
     try:
         from docker_compose.media.scripts import setup_media_apps
-        setup_media_apps.setup(env, SCRIPT_DIR)
-        tracker.success("Media apps configured via API")
+        ok = setup_media_apps.setup(env, SCRIPT_DIR)
     except Exception as exc:
-        tracker.warn(f"Media app setup failed: {exc}")
+        tracker.fail(f"Media app setup crashed: {exc}")
+    else:
+        if ok:
+            tracker.success("Media apps configured via API")
+        else:
+            tracker.fail(
+                "Media app setup failed — a core service (Prowlarr/Sonarr/Radarr/"
+                "qBittorrent) or an explicitly-enabled optional one (Bazarr/SABnzbd) "
+                "did not get configured. See the warnings/errors above for which one."
+            )
 
     if env.get("ENABLE_RECYCLARR", "0") == "1":
         from scripts.homelab_bootstrap import build_compose_command

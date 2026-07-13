@@ -415,6 +415,12 @@ def _deploy_one(
             from scripts.homelab_common import resolve_config_base
             config_base = resolve_config_base(config_base_str, sdir)
             config.post_deploy(env, config_base, tracker)
+        # post_deploy() records failures via tracker.fail() rather than raising, so
+        # nothing above this point would otherwise notice a failed post-deploy step —
+        # deploy.py would print its summary and exit 0 even though setup genuinely
+        # failed. Check explicitly and propagate.
+        if tracker.failed:
+            return False, []
 
     # Collect post-deploy actions to surface in the deploy summary
     actions: list[str] = list(getattr(config, "POST_DEPLOY_ACTIONS", []))

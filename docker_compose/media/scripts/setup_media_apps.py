@@ -403,12 +403,19 @@ def _ensure_flaresolverr_proxy(prowlarr_url: str, headers: dict) -> int | None:
     return tag_id
 
 
-def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> None:
-    """Add FlareSolverr proxy and public torrent indexers to Prowlarr."""
+def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> bool:
+    """Add FlareSolverr proxy and public torrent indexers to Prowlarr.
+
+    Returns False only when Prowlarr itself is unreachable/unauthenticated
+    (nothing at all could be configured). Individual indexer add failures
+    (e.g. a tracker that's Cloudflare-banned) are logged but non-fatal —
+    they're expected to happen occasionally and don't indicate a broken
+    deploy.
+    """
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
 
     if not _wait_for_service("Prowlarr", f"{prowlarr_url}/api/v1/health", headers):
-        return
+        return False
 
     # Set up FlareSolverr proxy first — some indexers need it
     fs_tag_id = _ensure_flaresolverr_proxy(prowlarr_url, headers)
@@ -416,7 +423,7 @@ def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> None:
     existing = _api(f"{prowlarr_url}/api/v1/indexer", headers)
     if existing is None:
         log.warning("Could not list Prowlarr indexers.")
-        return
+        return False
     existing_defs = {idx.get("definitionName", "").lower() for idx in existing}
 
     added = 0
@@ -464,6 +471,7 @@ def setup_prowlarr_indexers(prowlarr_url: str, api_key: str) -> None:
         "Prowlarr torrent indexers: %d added, %d already existed, %d failed.",
         added, skipped, failed,
     )
+    return True
 
 
 def setup_prowlarr_usenet_indexers(
@@ -552,8 +560,14 @@ def setup_prowlarr_usenet_indexers(
 # ---------------------------------------------------------------------------
 
 
-def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
-    """Configure qBittorrent categories and settings per TRaSH guide."""
+def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
+    """Configure qBittorrent categories and settings per TRaSH guide.
+
+    Returns False only if we could never authenticate to qBittorrent at all
+    (nothing could be configured). Preference/category write failures after
+    a successful login are logged but non-fatal — qBittorrent auto-creates
+    categories on first torrent add even if the pre-seed here didn't take.
+    """
     username = env.get("QBITTORRENT_USERNAME", "admin")
     password = env.get("QBITTORRENT_PASSWORD", "adminadmin")
     login_headers = {"Content-Type": "application/x-www-form-urlencoded"}
@@ -587,7 +601,7 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
 
     if session_cookie is None:
         log.warning("Could not authenticate to qBittorrent. Skipping config.")
-        return
+        return False
 
     headers = {"Cookie": session_cookie}
 
@@ -667,13 +681,14 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> None:
                 method="POST",
             )
             urllib.request.urlopen(req, timeout=10)
-        except (urllib.error.URLError, OSError):
-            pass
+        except (urllib.error.URLError, OSError) as exc:
+            log.warning("Failed to create qBittorrent category %s: %s", cat_name, exc)
 
     log.info(
         "qBittorrent categories configured: %s.",
         ", ".join(QBIT_CATEGORIES.keys()),
     )
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -702,18 +717,23 @@ def _sabnzbd_api(
         return None
 
 
-def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> None:
+def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> bool:
     """Verify SABnzbd configuration and ensure categories exist via API.
 
     The bootstrap pre-seeds sabnzbd.ini with server + categories + paths.
     This function acts as a post-start verification layer: it confirms the
     server is reachable and creates any missing categories via API (e.g.,
     if SABnzbd was already running before the INI was seeded).
+
+    Returns False if SABnzbd's API key is missing or it never becomes
+    reachable — i.e. this function did no verification at all, which
+    matters because the caller only calls this when the user explicitly
+    turned Usenet on (ENABLE_SABNZBD=1).
     """
     api_key = _read_sabnzbd_api_key(config_base)
     if not api_key:
         log.warning("SABnzbd API key not found; skipping SABnzbd config verification.")
-        return
+        return False
 
     deadline = time.monotonic() + HEALTH_TIMEOUT_S
     config: dict | None = None
@@ -726,7 +746,7 @@ def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> N
 
     if not config:
         log.warning("SABnzbd not ready within %ds; skipping config verification.", HEALTH_TIMEOUT_S)
-        return
+        return False
 
     sab_config = config["config"]
 
@@ -765,6 +785,8 @@ def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> N
         )
         if result:
             added += 1
+        else:
+            log.warning("Failed to add SABnzbd category %s.", cat_name)
 
     if added:
         log.info("SABnzbd: %d categories added via API (%s).",
@@ -772,6 +794,7 @@ def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> N
     else:
         log.info("SABnzbd: categories already configured (%s).",
                  ", ".join(SABNZBD_CATEGORIES.keys()))
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1079,11 +1102,18 @@ def _setup_delay_profile(
 
 
 def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
-                 sabnzbd_api_key: str | None = None) -> None:
-    """Configure Sonarr: TRaSH naming, media management, root folders, download clients."""
+                 sabnzbd_api_key: str | None = None) -> bool:
+    """Configure Sonarr: TRaSH naming, media management, root folders, download clients.
+
+    Returns False only if Sonarr itself never became reachable (nothing was
+    configured at all). Individual settings writes (naming, media
+    management, root folders, download clients, delay profile) log their
+    own warnings on failure but don't fail the whole run — they're
+    independently retryable on the next deploy.
+    """
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Sonarr", f"{sonarr_url}/api/v3/health", headers):
-        return
+        return False
     _setup_naming("Sonarr", sonarr_url, headers, SONARR_NAMING)
     _setup_media_management("Sonarr", sonarr_url, headers)
     _setup_root_folders("Sonarr", sonarr_url, headers, SONARR_ROOT_FOLDERS)
@@ -1094,14 +1124,20 @@ def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
         # Only touch the delay profile when Usenet is actually available — otherwise
         # we would tell a torrent-only stack to prefer a protocol it cannot use.
         _setup_delay_profile("Sonarr", sonarr_url, headers, env)
+    return True
 
 
 def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
-                 sabnzbd_api_key: str | None = None) -> None:
-    """Configure Radarr: TRaSH naming, media management, root folders, download clients."""
+                 sabnzbd_api_key: str | None = None) -> bool:
+    """Configure Radarr: TRaSH naming, media management, root folders, download clients.
+
+    Returns False only if Radarr itself never became reachable (nothing was
+    configured at all). See setup_sonarr for why sub-step failures don't
+    fail the whole run.
+    """
     headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
     if not _wait_for_service("Radarr", f"{radarr_url}/api/v3/health", headers):
-        return
+        return False
     _setup_naming("Radarr", radarr_url, headers, RADARR_NAMING)
     _setup_media_management("Radarr", radarr_url, headers)
     _setup_root_folders("Radarr", radarr_url, headers, RADARR_ROOT_FOLDERS)
@@ -1111,6 +1147,7 @@ def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
         _setup_download_client_sabnzbd("Radarr", radarr_url, headers, "movies", sabnzbd_api_key, 1)
         # See Sonarr above: delay profile is what makes Usenet actually win over torrents.
         _setup_delay_profile("Radarr", radarr_url, headers, env)
+    return True
 
 
 # ---------------------------------------------------------------------------
@@ -1530,12 +1567,22 @@ def _print_cleanuparr_instructions(config_base: Path,
 
 
 def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
-                 radarr_key: str | None, config_base: Path) -> None:
+                 radarr_key: str | None, config_base: Path) -> bool:
     """Configure Bazarr: Sonarr/Radarr connections, language profile,
     providers, subtitle settings, and mass-assign profile.
 
     Uses Bazarr's form-encoded settings API.
     Ref: https://trash-guides.info/Bazarr/  https://wiki.bazarr.media/
+
+    Returns False if Bazarr never became reachable, its API key is
+    missing, the main settings POST didn't take, or the default-language-
+    profile POST didn't take. That last one is deliberately fatal even
+    though the rest of setup already ran: a previous incident had this
+    step silently no-op (a KeyError in the profile payload), which meant
+    every series/movie added *after* that deploy got skipped for subtitles
+    with zero indication anything was wrong. Per-item profile-assignment
+    stragglers (existing library items that didn't get reassigned) stay
+    non-fatal — they're retried on the next deploy.
     """
     # 1. Wait for Bazarr (ping is unauthenticated)
     ping_url = f"{bazarr_url}/api/system/ping"
@@ -1553,13 +1600,13 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         time.sleep(HEALTH_POLL_S)
     if not ready:
         log.warning("Bazarr not ready within %ds; skipping setup.", HEALTH_TIMEOUT_S)
-        return
+        return False
 
     # 2. Read API key
     apikey = _read_bazarr_api_key(config_base)
     if not apikey:
         log.warning("Bazarr API key not found in config.yaml; skipping setup.")
-        return
+        return False
 
     settings_url = f"{bazarr_url}/api/system/settings"
 
@@ -1653,7 +1700,7 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         log.info("Bazarr configured (connections, languages, providers, scoring).")
     else:
         log.warning("Bazarr settings POST returned %s; check config manually.", status)
-        return
+        return False
 
     # 8b. Apply a profile to series/movies added *after* this deploy.
     # Step 9 is a one-shot over the library as it exists right now; without these,
@@ -1669,7 +1716,10 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         "settings-general-movie_default_profile": str(BAZARR_PROFILE_ID),
     })
     general = (_bazarr_get(settings_url, apikey) or {}).get("general", {})
-    if general.get("serie_default_enabled") and general.get("movie_default_enabled"):
+    defaults_ok = bool(
+        general.get("serie_default_enabled") and general.get("movie_default_enabled")
+    )
+    if defaults_ok:
         log.info("Bazarr: default language profile enabled for new series/movies.")
     else:
         log.warning("Bazarr: could not enable the default language profile "
@@ -1677,6 +1727,8 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
 
     # 9. Put every existing series/movie on the right language profile
     _bazarr_assign_profiles(bazarr_url, apikey)
+
+    return defaults_ok
 
 
 def _bazarr_list(bazarr_url: str, apikey: str, kind: str) -> list[dict]:
@@ -1763,10 +1815,27 @@ def _bazarr_assign_profiles(bazarr_url: str, apikey: str) -> None:
 
 
 def setup(env: dict[str, str], script_dir: Path) -> bool:
-    """Run post-deploy media app setup. Returns True on success."""
+    """Run post-deploy media app setup.
+
+    Returns True only if every "core" service (Prowlarr, Sonarr, Radarr,
+    qBittorrent — always deployed, never behind an ENABLE_* flag) was
+    reachable and got at least its load-bearing config applied, AND every
+    optional service the operator explicitly turned on (ENABLE_BAZARR=1,
+    ENABLE_SABNZBD=1) actually got configured rather than silently no-op'd.
+
+    Returns False otherwise, after logging exactly which piece(s) failed
+    via log.error. This is deliberately NOT the same as "zero warnings" —
+    plenty of individual, independently-retryable sub-steps (a single
+    Cloudflare-banned indexer, a cosmetic naming-scheme write, a handful of
+    stragglers in Bazarr's mass profile-assignment) only log a warning and
+    do not affect this return value. A disabled feature (ENABLE_*=0) or an
+    unset optional credential (PLEX_TOKEN, an indexer API key) is a normal
+    skip, not a failure.
+    """
     config_base = resolve_config_base(
         env.get("CONFIG_ROOT", "./config"), script_dir
     )
+    fatal: list[str] = []
 
     prowlarr_key = _read_api_key(config_base, "prowlarr")
     sonarr_key = _read_api_key(config_base, "sonarr")
@@ -1781,30 +1850,39 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
                 "SABnzbd enabled but API key not found in sabnzbd.ini; "
                 "skipping SABnzbd download client setup in *arrs."
             )
+            fatal.append("SABnzbd enabled but API key not found in sabnzbd.ini")
 
     if prowlarr_key:
-        setup_prowlarr_indexers("http://localhost:9696", prowlarr_key)
+        if not setup_prowlarr_indexers("http://localhost:9696", prowlarr_key):
+            fatal.append("Prowlarr unreachable — no indexers were configured")
         if usenet_enabled:
             setup_prowlarr_usenet_indexers(
                 "http://localhost:9696", prowlarr_key, env,
             )
     else:
         log.warning("Prowlarr API key not found; skipping indexer setup.")
+        fatal.append("Prowlarr API key not found — indexer setup skipped entirely")
 
-    setup_qbittorrent("http://localhost:8080", env)
+    if not setup_qbittorrent("http://localhost:8080", env):
+        fatal.append("Could not authenticate to qBittorrent — nothing was configured")
 
-    if usenet_enabled:
-        setup_sabnzbd("http://localhost:8082", config_base, env)
+    if usenet_enabled and sabnzbd_key:
+        if not setup_sabnzbd("http://localhost:8082", config_base, env):
+            fatal.append("SABnzbd unreachable — config verification skipped")
 
     if sonarr_key:
-        setup_sonarr("http://localhost:8989", sonarr_key, env, sabnzbd_key)
+        if not setup_sonarr("http://localhost:8989", sonarr_key, env, sabnzbd_key):
+            fatal.append("Sonarr unreachable — configuration skipped entirely")
     else:
         log.warning("Sonarr API key not found; skipping Sonarr setup.")
+        fatal.append("Sonarr API key not found — setup skipped entirely")
 
     if radarr_key:
-        setup_radarr("http://localhost:7878", radarr_key, env, sabnzbd_key)
+        if not setup_radarr("http://localhost:7878", radarr_key, env, sabnzbd_key):
+            fatal.append("Radarr unreachable — configuration skipped entirely")
     else:
         log.warning("Radarr API key not found; skipping Radarr setup.")
+        fatal.append("Radarr API key not found — setup skipped entirely")
 
     if prowlarr_key:
         setup_prowlarr_apps(
@@ -1840,16 +1918,25 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
         bazarr_key = _read_bazarr_api_key(config_base)
         if not bazarr_key:
             log.warning("Bazarr enabled but API key not found; skipping Bazarr setup.")
+            fatal.append("Bazarr enabled but API key not found")
         elif not sonarr_key or not radarr_key:
             log.warning("Bazarr enabled but missing Sonarr/Radarr API key(s); skipping Bazarr setup.")
+            fatal.append("Bazarr enabled but missing Sonarr/Radarr API key(s)")
         else:
-            setup_bazarr(
+            if not setup_bazarr(
                 "http://localhost:6767", sonarr_key, radarr_key, config_base,
-            )
+            ):
+                fatal.append("Bazarr enabled but its setup did not fully apply (see warnings above)")
 
     if env.get("ENABLE_CLEANUPARR", "0") == "1":
         _print_cleanuparr_instructions(config_base, env)
 
+    if fatal:
+        log.error(
+            "Media app setup FAILED (%d issue(s)): %s",
+            len(fatal), "; ".join(fatal),
+        )
+        return False
     return True
 
 
