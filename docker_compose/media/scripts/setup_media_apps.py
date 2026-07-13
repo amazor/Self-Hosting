@@ -1627,7 +1627,8 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
             "name": name,
             "items": [
                 {"id": i + 1, "language": lang,
-                 "hi": False, "forced": False, "audio_exclude": False}
+                 "hi": False, "forced": False, "audio_exclude": False,
+                 "audio_only_include": False}
                 for i, lang in enumerate(languages)
             ],
             "cutoff": None,
