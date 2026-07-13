@@ -10,11 +10,15 @@
 # incident (2026-07-13) — it went unnoticed for hours because no alert
 # rules existed at all before this change.
 #
-# `container!="loki"` excludes Loki's own container: Loki logs the text of
-# every query it runs (including this rule's own LogQL, which contains the
-# literal string "permission denied") in its query-stats log line, which
-# would otherwise make this rule self-trigger every evaluation the moment
-# it's live. Confirmed live during design — see git history for this file.
+# `container!~"loki|grafana"` excludes the two components that log this
+# rule's own query text back into the very log stream it searches, causing
+# guaranteed self-triggering the moment the rule goes live:
+#   - Loki logs every query it runs (query-stats log line) at info level.
+#   - Grafana's alerting scheduler logs each datasource query it issues
+#     (tsdb.loki "Response received from loki") at info level.
+# Both contain the literal string "permission denied" (part of this rule's
+# own LogQL) and both were confirmed live, firing on themselves, before this
+# exclusion was added — see git history for this file.
 #
 # Schema/values below were created via the Grafana alerting API first and
 # read back to confirm exact field shapes, then mirrored here for IaC
@@ -39,7 +43,7 @@ groups:
               to: 0
             model:
               expr: >-
-                sum by (host, container) (count_over_time({host=~".+", container!="loki"}
+                sum by (host, container) (count_over_time({host=~".+", container!~"loki|grafana"}
                 |~ "(?i)FATAL|PANIC|permission denied" [5m]))
               queryType: instant
               refId: A
