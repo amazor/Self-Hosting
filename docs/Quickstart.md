@@ -258,7 +258,7 @@ File: `docker_compose/media/.env.example`
 |----------|-------------|
 | `ENABLE_CLEANUPARR` | Auto queue cleanup (stalled/slow/failed downloads) |
 | `ENABLE_SABNZBD` | Usenet download client (requires Usenet provider credentials — see below) |
-| `ENABLE_BAZARR` | Subtitle automation |
+| `ENABLE_BAZARR` | Subtitle automation — **already `1` in `.env.example`**, unlike the other overlays here |
 | `ENABLE_NTFY` | Lightweight push notifications |
 
 **Usenet (when `ENABLE_SABNZBD=1`):** Set these in the media `.env`:
@@ -365,9 +365,11 @@ Deploy in this order: **monitoring → core → media → accelerated**. Each st
 
 > **Important:** `deploy.py all` uses alphabetical order, which is **not** the correct dependency order. Always deploy stacks explicitly in the order below, or pass them in order:
 > ```bash
-> python3 deploy.py monitoring core media accelerated --force --init-env -y
+> python3 deploy.py monitoring core media accelerated --init-env -y
 > ```
 > (only works if all stacks are on the same host — in production, deploy from each VM)
+
+> **Do not add `--force` to these commands.** It skips the `.env` placeholder validation, which is the one check that catches an unfilled `EXPRESSVPN_CODE` or a `GRAFANA_ADMIN_PASSWORD` still set to `CHANGE_ME` — you get a stack that deploys green and is quietly broken or wide open. `--force` exists for throwaway sandboxes (see `AGENTS.md`), where no real credentials exist to validate. Against real infrastructure, a validation failure is information, not an obstacle.
 
 ### Step 1 — Monitoring
 
@@ -375,7 +377,7 @@ SSH into the **monitoring** VM:
 
 ```bash
 cd ~/self-hosting
-python3 deploy.py monitoring --force --init-env -y
+python3 deploy.py monitoring --init-env -y
 ```
 
 What happens: validates `.env`, runs bootstrap, starts Grafana + Prometheus + Loki + Uptime Kuma.
@@ -391,7 +393,7 @@ SSH into the **core** VM:
 
 ```bash
 cd ~/self-hosting
-python3 deploy.py core --force --init-env -y
+python3 deploy.py core --init-env -y
 ```
 
 What happens: validates `.env`, runs bootstrap (generates Caddyfile, dnsmasq config), starts Caddy + Authentik + dnsmasq + whoami. If `AUTHENTIK_BOOTSTRAP_TOKEN` is set, auto-applies the SSO blueprint.
@@ -408,7 +410,7 @@ SSH into the **media** VM:
 
 ```bash
 cd ~/self-hosting
-python3 deploy.py media --force --init-env -y
+python3 deploy.py media --init-env -y
 ```
 
 What happens: validates `.env` (including `EXPRESSVPN_CODE`), sets up NFS mounts if configured, starts VPN + qBittorrent + Sonarr + Radarr + Prowlarr + FlareSolverr + overlays. Runs `setup_media_apps.py` post-deploy (configures indexers, download clients, root folders, naming, Prowlarr sync). Runs Recyclarr sync if enabled.
@@ -427,7 +429,7 @@ SSH into the **accelerated** VM:
 
 ```bash
 cd ~/self-hosting
-python3 deploy.py accelerated --force --init-env -y
+python3 deploy.py accelerated --init-env -y
 ```
 
 What happens: validates `.env`, checks GPU (`/dev/dri`), installs VA-API packages if needed, starts Plex + Immich. Runs `setup_accelerated_apps.py` post-deploy. Extracts `PLEX_TOKEN` and clears the used `PLEX_CLAIM`.
@@ -455,7 +457,7 @@ PLEX_TOKEN=<token from accelerated deploy output>
 Then redeploy media for Sonarr/Radarr to notify Plex of new library items:
 
 ```bash
-python3 deploy.py media --force -y
+python3 deploy.py media -y
 ```
 
 ### 2. Add Caddy routes for services behind the reverse proxy
@@ -503,7 +505,7 @@ CADDY_EXTRA_SERVICES=sonarr:192.168.1.220:8989:sso,sonarr/api:192.168.1.220:8989
 Redeploy core to regenerate the Caddyfile and SSO blueprint:
 
 ```bash
-python3 deploy.py core --force -y
+python3 deploy.py core -y
 ```
 
 ### 3. Configure monitoring scrape targets
@@ -517,7 +519,7 @@ SCRAPE_TARGETS=core:192.168.1.110,media:192.168.1.220,accelerated:192.168.1.230
 Redeploy monitoring to pick up the new targets:
 
 ```bash
-python3 deploy.py monitoring --force -y
+python3 deploy.py monitoring -y
 ```
 
 ### 4. Point your DNS or hosts file at core
@@ -565,7 +567,7 @@ In Uptime Kuma (`http://<MONITORING_IP>:3001`), add HTTP(S) monitors for each se
 | Monitoring VMID / vCPU / RAM | 120 / 2 / 6 GB |
 | Media VMID / vCPU / RAM | 220 / 4 / 8 GB |
 | Accelerated VMID / vCPU / RAM | 230 / 4 / 8 GB |
-| Deploy command | `python3 deploy.py <stack> --force --init-env -y` |
+| Deploy command | `python3 deploy.py <stack> --init-env -y` |
 | Deploy order | monitoring → core → media → accelerated |
 | Only public VM | core (router ports 80/443) |
 | Media root (host → container) | `/mnt/media` → `/data` |
