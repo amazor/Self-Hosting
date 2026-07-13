@@ -17,7 +17,7 @@ services:
   ntfy:
     image: binwiederhier/ntfy:${NTFY_TAG:-latest}
     container_name: ntfy
-    command: ["--cache-file", "/var/cache/ntfy/cache.db", "serve"]
+    command: ["serve", "--cache-file", "/var/cache/ntfy/cache.db"]
     environment:
       - TZ=${TZ:-Etc/UTC}
     volumes:
