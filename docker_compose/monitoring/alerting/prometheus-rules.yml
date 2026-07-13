@@ -1,0 +1,131 @@
+# Homelab Prometheus alerting rules.
+#
+# Copied verbatim into config/prometheus/rules/ by bootstrap (same pattern as
+# dashboards/*.json — this is the source of truth, edit here, not on a VM).
+# Loaded via prometheus.yml's `rule_files:` and evaluated by Prometheus itself
+# (visible at /api/v1/rules). Firing alerts are sent to Alertmanager
+# (alerting.alertmanagers in prometheus.yml), which routes to ntfy.
+#
+# Design notes (see docs/Chapter3b-monitoring-stack.md for the full "why"):
+#   - Every rule here is one that would page a human, not just decorate a
+#     dashboard. Kept deliberately small — a wall of flapping alerts is worse
+#     than silence.
+#   - `for:` durations are chosen to ride out normal blips (Prometheus
+#     restarts, brief scrape misses, VPN's ~2x/day reconnects) without
+#     swallowing a real outage for too long.
+#   - Thresholds are absolute, not fleet-relative — relative comparisons
+#     (e.g. "iowait 30x the rest of the fleet") are fragile and break the
+#     moment the fleet's baseline shifts. Static thresholds set well above
+#     observed-healthy baselines are more predictable to reason about.
+
+groups:
+  - name: homelab-availability
+    rules:
+      # Catches: any exporter/scrape target Prometheus can no longer reach —
+      # node_exporter, cAdvisor, qBittorrent/SABnzbd/scraparr/plex exporters,
+      # blackbox-exporter itself, Prometheus's own self-scrape, etc.
+      - alert: TargetDown
+        expr: up == 0
+        for: 3m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.job }} target down on {{ $labels.instance }}"
+          description: >-
+            Prometheus has not been able to scrape job "{{ $labels.job }}"
+            (instance {{ $labels.instance }}) for 3+ minutes.
+
+      # Catches: blackbox probe failures against *real* endpoints — HTTPS
+      # sites behind Caddy, TCP ports (incl. the NAS NFS port — this is our
+      # stand-in for "NFS is unreachable" since node_exporter's mountstats
+      # collector isn't enabled), ICMP, DNS. Different from TargetDown:
+      # blackbox-exporter itself can be up while the thing it's probing is not.
+      - alert: ProbeFailed
+        expr: probe_success == 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Probe failing: {{ $labels.probe_name }} ({{ $labels.instance }})"
+          description: >-
+            Blackbox probe "{{ $labels.probe_name }}" against
+            {{ $labels.instance }} has failed for 5+ minutes.
+
+  - name: homelab-capacity
+    rules:
+      # accelerated sits at ~76% with ~7.4G free as of 2026-07-13 — the
+      # tightest VM in the fleet. 85%/95% gives two clear steps before disk
+      # actually fills.
+      - alert: DiskSpaceLow
+        expr: >-
+          (100 - ((node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} * 100)
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) > 85
+        for: 30m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} on {{ $labels.host }} is {{ $value | printf \"%.1f\" }}% full"
+          description: >-
+            {{ $labels.mountpoint }} on {{ $labels.host }} ({{ $labels.device }})
+            has been above 85% for 30+ minutes.
+
+      - alert: DiskSpaceCritical
+        expr: >-
+          (100 - ((node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"} * 100)
+          / node_filesystem_size_bytes{fstype!~"tmpfs|overlay"})) > 95
+        for: 10m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} on {{ $labels.host }} is {{ $value | printf \"%.1f\" }}% full"
+          description: >-
+            {{ $labels.mountpoint }} on {{ $labels.host }} ({{ $labels.device }})
+            has been above 95% for 10+ minutes. Disk-full is imminent.
+
+      # Predictive: catches slow leaks (e.g. qBittorrent unbounded seeding)
+      # before DiskSpaceLow/Critical would — see disk_space_investigation memory.
+      - alert: DiskWillFillIn24h
+        expr: >-
+          predict_linear(node_filesystem_avail_bytes{fstype!~"tmpfs|overlay"}[6h], 24 * 3600) < 0
+        for: 1h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Disk {{ $labels.mountpoint }} on {{ $labels.host }} predicted to fill within 24h"
+          description: >-
+            Based on the last 6h trend, {{ $labels.mountpoint }} on
+            {{ $labels.host }} will run out of space within 24 hours.
+
+  - name: homelab-containers
+    rules:
+      # container_start_time_seconds is a gauge that changes value on every
+      # (re)start; changes() over a window counts restarts. media's VPN
+      # container legitimately reconnects ~2x/day (~1 per 12h) which never
+      # reaches 3-in-1h, so it doesn't need an explicit exclusion — but if
+      # that assumption stops holding, add `container!="vpn"` here.
+      - alert: ContainerCrashLooping
+        expr: changes(container_start_time_seconds{container!=""}[1h]) >= 3
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.container }} on {{ $labels.host }} is crash-looping"
+          description: >-
+            {{ $labels.container }} on {{ $labels.host }} has restarted 3+
+            times in the last hour.
+
+  - name: homelab-host
+    rules:
+      # Baselines observed 2026-07-13 were all <1% (no VM was actually at the
+      # "30x" elevated iowait the earlier review cited at the time this rule
+      # was written) — 20% is well above any observed-healthy value on any VM.
+      - alert: HighIowait
+        expr: avg by (instance) (rate(node_cpu_seconds_total{mode="iowait"}[5m])) * 100 > 20
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: "{{ $labels.instance }} has sustained high disk I/O wait"
+          description: >-
+            {{ $labels.instance }} has averaged >20% CPU iowait for 15+
+            minutes — usually NFS latency or a saturated disk.

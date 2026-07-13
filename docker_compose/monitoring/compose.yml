@@ -2,10 +2,18 @@
 #
 # Services:
 #   - Grafana: dashboards + log search (Prometheus + Loki datasources)
-#   - Prometheus: metrics store (scrapes exporters on all VMs)
+#   - Prometheus: metrics store (scrapes exporters on all VMs), evaluates
+#     alert rules from config/prometheus/rules/
+#   - Alertmanager: routes Prometheus alerts to ntfy (compose.ntfy.yml)
 #   - Loki: log aggregation (receives from Alloy agents on all VMs)
 #   - Blackbox Exporter: network probes (HTTP, TCP, ICMP, DNS)
-#   - Uptime Kuma: uptime checks + alerting
+#   - Uptime Kuma: uptime checks (not currently wired to a notification
+#     channel — see docs/Chapter3b-monitoring-stack.md)
+#
+# Alerting: Prometheus (metrics) -> Alertmanager -> ntfy, and Grafana's own
+# unified alerting (one Loki-log-based rule) -> ntfy, both via ntfy's
+# webhook templates. See docker_compose/monitoring/alerting/ and
+# docs/Chapter3b-monitoring-stack.md for the full design + "why".
 #
 # Sidecars (node_exporter, cAdvisor, Alloy) live in the shared overlay:
 #   compose.observability.yml (symlink → ../common/compose.observability.yml)
@@ -91,9 +99,39 @@ services:
     volumes:
       - ${CONFIG_ROOT:-./config}/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
       - ${CONFIG_ROOT:-./config}/prometheus/targets:/etc/prometheus/targets:ro
+      - ${CONFIG_ROOT:-./config}/prometheus/rules:/etc/prometheus/rules:ro
       - ${CONFIG_ROOT:-./config}/prometheus/data:/prometheus
     ports:
       - "9090:9090"
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    restart: unless-stopped
+    networks:
+      - monitoring_internal
+
+  # --- Alertmanager: routes Prometheus alert rule firings to ntfy ---
+  # Prometheus evaluates rules from config/prometheus/rules/ and hands firing
+  # alerts to Alertmanager (alerting.alertmanagers in prometheus.yml).
+  # Alertmanager's single webhook receiver posts to ntfy (compose.ntfy.yml)
+  # using an ntfy webhook template (config/ntfy/templates/alertmanager.yml)
+  # since Alertmanager's raw JSON payload has no human-friendly title/message.
+  # Docs: https://prometheus.io/docs/alerting/latest/alertmanager/
+  alertmanager:
+    image: prom/alertmanager:${ALERTMANAGER_TAG:-latest}
+    container_name: alertmanager
+    logging: *default-logging
+    # nobody (65534) = non-root; official image default. Bootstrap chowns data dir to this UID.
+    user: "nobody"
+    command:
+      - "--config.file=/etc/alertmanager/alertmanager.yml"
+      - "--storage.path=/alertmanager"
+    volumes:
+      - ${CONFIG_ROOT:-./config}/alertmanager/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - ${CONFIG_ROOT:-./config}/alertmanager/data:/alertmanager
+    ports:
+      - "9093:9093"
     security_opt:
       - no-new-privileges:true
     cap_drop:
