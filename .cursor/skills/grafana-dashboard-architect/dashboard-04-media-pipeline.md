@@ -159,6 +159,40 @@ Two panels:
 
 ---
 
+### Section 4b — Usenet (SABnzbd)
+
+**Question:** "Is the Usenet half of the pipeline flowing, and is my provider actually delivering?"
+
+Only populated when the media stack has `ENABLE_SABNZBD=1`. Metrics come from `sabnzbd-exporter` (onedr0p/exportarr, port 9707), which ships inside `compose.sabnzbd.yml` — **not** the exporters overlay, since Scraparr is *arr-only and never exports download clients.
+
+Three panels:
+
+1. **Usenet Download Speed** — Usenet is not peer-limited, so this should sit near line rate whenever the queue is non-empty.
+   ```promql
+   sabnzbd_speed_bps{host=~"$host"}
+   sabnzbd_speed_limit_bps{host=~"$host"} > 0
+   ```
+
+2. **Usenet Queue** — queue length + warnings + remaining bytes (own axis, `bytes` unit).
+   ```promql
+   sabnzbd_queue_length{host=~"$host"}
+   sabnzbd_queue_warnings{host=~"$host"}
+   sabnzbd_remaining_bytes{host=~"$host"}
+   ```
+
+3. **Per-Server Download Rate** — which provider is actually carrying the load.
+   ```promql
+   rate(sabnzbd_server_downloaded_bytes{host=~"$host"}[$__rate_interval])
+   ```
+
+**⚠️ Do NOT build an "article success rate" panel.** The exporter exposes `sabnzbd_server_articles_success` and `sabnzbd_server_articles_total`, and dividing them looks like the obvious Usenet health metric. It is a trap. Verified against a live download on the media VM: SABnzbd reported `articles_tried=17612`, `articles_success=0` while pulling 30 MB/s and 13 GB from a single server. The ratio therefore reads a permanently-red **0%** and will send you chasing a provider fault that does not exist. (The counter appears only to be meaningful in multi-server setups, if at all.) **Delivered bytes per server is the signal that actually works.**
+
+**Why per-server bytes is the key Usenet signal (and has no torrent equivalent):** a torrent stalls because nobody is seeding — an availability problem visible in the swarm. Usenet stalls because *articles are missing* (DMCA takedowns, incomplete posts), which is invisible from the queue alone: speed quietly drops while par2 repair grinds. A fill/block provider (`USENET_SERVER2_*`) is only ever asked for articles the primary could not supply — so **any sustained traffic on the fill server means the primary is missing content**, and that is your cue to care.
+
+**Diagnostic pairing:** zero speed + non-empty queue = provider problem, *not* a "no seeders" problem. That distinction is the whole reason to run both protocols.
+
+---
+
 ### Section 5 — Jellyfin/Plex Streaming Sessions
 
 **Question:** "Who is watching, and is the server handling it?"

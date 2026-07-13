@@ -496,6 +496,39 @@ ntfy is intentionally minimal — alerting belongs in Monitoring.
 
 ---
 
+### Usenet: why add a second protocol at all?
+
+Torrents and Usenet fail in *uncorrelated* ways, which is the whole point of running both. A torrent dies when nobody is seeding it — an availability problem that gets worse with age. A Usenet article dies when it is taken down or was posted incomplete — a retention problem that has nothing to do with popularity. Old, obscure content that has no seeders is often trivially available on Usenet, and vice versa. Running both turns two lossy sources into one fairly reliable one.
+
+The operational differences that shape the design:
+
+| | Torrent (qBittorrent) | Usenet (SABnzbd) |
+|---|---|---|
+| Transport | Peer-to-peer, IP-visible to swarm | Client → provider over TLS |
+| Needs the VPN? | **Yes** — traffic is visible to every peer | **No** — it is a private TLS connection to a paid provider |
+| Speed | Depends on seeders | Usually line rate |
+| Cost | Free | Provider subscription **+** indexer |
+| Fails when | No seeders | Articles missing/taken down |
+| Obligations | Seeding ratio/time | None — download and you're done |
+
+This is why SABnzbd **does not** run behind the VPN container. qBittorrent uses `network_mode: service:vpn` because a torrent swarm exposes your IP to every peer. Usenet is a straightforward TLS connection to a provider you already pay by name — routing it through the VPN would add latency and a failure mode to buy nothing. Usenet also has no seeding obligation, so nothing lingers after import.
+
+> ### 🧠 Philosophy: Protocol Preference Is Not Client Priority
+> Making the *arrs prefer Usenet is done with a **delay profile**, not by ranking download clients. Client priority only breaks ties between clients of the *same* protocol; it has zero influence on usenet-vs-torrent. The stack sets `preferredProtocol: usenet` with a 60-minute torrent delay, so a torrent must age past the window before it is eligible — giving Usenet first refusal. Operational detail in [Chapter 3C](Chapter3c-media-stack.md#sabnzbd-optional--usenet).
+
+#### Where the temp directory lives (an accepted trade-off)
+
+SABnzbd downloads into a temp dir, then repairs (par2) and unpacks before moving the result to the completed folder. Two moves, with opposite requirements:
+
+1. **temp → completed** — internal to SABnzbd. Same filesystem = instant rename; cross-filesystem = a full copy.
+2. **completed → library** — done by Sonarr/Radarr on import. **This** is the one that needs hardlinks, and it is why the completed folder *must* live on the same mount as the library.
+
+Our layout puts both under `MEDIA_ROOT` (the NAS, over NFS). That makes move #2 an instant hardlink, which is non-negotiable. The cost is that par2 repair and unpack — which are random-IO heavy — happen over NFS rather than on local disk.
+
+**This is a known, accepted trade-off, not an oversight.** The alternative (temp on the VM's local SSD) makes repair/unpack much faster and is the usual recommendation, but it converts move #1 into a full copy over the network and, more importantly, the media VM's local disk currently has ~42 GB free — not enough headroom for a large 4K remux job, which would fail mid-unpack. Correctness beats speed here. Revisit if unpack throughput becomes a real bottleneck; the fix is to grow the media VM's disk first, *then* move the temp dir.
+
+---
+
 ## How Optional Services Stay Optional
 
 The goal is simplicity without hiding structure.

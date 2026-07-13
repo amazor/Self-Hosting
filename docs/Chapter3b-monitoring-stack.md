@@ -150,6 +150,20 @@ These labels flow into both Prometheus scrape configs and Alloy log labels, ensu
 |----------|---------|
 | **SCRAPE_TARGETS** | Comma-separated `hostname:ip` pairs for remote VMs running sidecars. Bootstrap writes a file_sd JSON that Prometheus auto-discovers. Leave empty for single-VM setups. Example: `core:192.168.1.110,media:192.168.1.111`. |
 
+### App exporter targets (optional, feeds D04)
+
+Same `hostname:ip` format as **SCRAPE_TARGETS** — each writes its own file_sd JSON. Leave empty to skip the job entirely.
+
+| Variable | Exporter | Port |
+|----------|----------|------|
+| **SCRAPARR_EXPORTER_TARGETS** | Scraparr — Sonarr/Radarr/Prowlarr queue depth, library size, indexer health | 7100 |
+| **QBITTORRENT_EXPORTER_TARGETS** | qbittorrent-exporter — torrent speed, states, ratios | 17871 |
+| **SABNZBD_EXPORTER_TARGETS** | sabnzbd-exporter — Usenet speed, queue, per-server article success | 9707 |
+| **EXPRESSVPN_EXPORTER_TARGETS** | ExpressVPN container metrics | 9797 |
+| **PLEX_EXPORTER_TARGETS** | Plex (on the accelerated VM) | 9000 |
+
+Note that **SABNZBD_EXPORTER_TARGETS** only produces data if the media stack has `ENABLE_SABNZBD=1`. The SABnzbd exporter ships inside the *SABnzbd* overlay rather than the media stack's exporters overlay — it is useless without SABnzbd, and the default media stack runs exporters with SABnzbd disabled, so bundling it with the other exporters would spawn a permanently-failing container on every deploy. Scraparr is *arr-only and does not export download clients, which is why SABnzbd needs its own exporter at all.
+
 ### Blackbox Exporter probe targets (optional, feeds D03/D00)
 
 Bootstrap regenerates `prometheus/targets/blackbox-targets.json` from these on every run. Each is a comma-separated `name:target` list; `name` becomes the `probe_name` label shown in the D03 probe table. Leave any empty to skip that probe category — see [Chapter 2B](Chapter2b-monitoring.md) for what D03 does with them.

@@ -54,15 +54,27 @@ PROWLARR_INDEXERS = [
     {"name": "YTS", "definitionName": "yts"},
     {"name": "Torrent Downloads", "definitionName": "torrentdownloads"},
     {"name": "Knaben", "definitionName": "Knaben"},
+    {"name": "TorrentProject2", "definitionName": "torrentproject2"},
+    {"name": "TorrentsCSV", "definitionName": "TorrentsCSV"},
+    {"name": "showRSS", "definitionName": "showrss"},
     # Anime
-    {"name": "Nyaa.si", "definitionName": "nyaasi",
+    {"name": "Nyaa.si", "definitionName": "nyaasi", "anime": True,
      "fields": {"animeCategories": [5070]}},  # 5070 = Anime - English-translated
-    {"name": "SubsPlease", "definitionName": "SubsPlease"},
-    {"name": "Tokyo Toshokan", "definitionName": "tokyotosho"},
-    {"name": "Shana Project", "definitionName": "shanaproject"},
+    {"name": "SubsPlease", "definitionName": "SubsPlease", "anime": True},
+    {"name": "Tokyo Toshokan", "definitionName": "tokyotosho", "anime": True},
+    {"name": "Shana Project", "definitionName": "shanaproject", "anime": True},
 ]
 
 FLARESOLVERR_TAG_NAME = "flaresolverr"
+
+# Sonarr tags used to keep anime episode searches off general torrent trackers (several sit
+# behind FlareSolverr, and none of them carry anime — every search against them is a wasted,
+# slow query). Mirrored onto series by quality profile: matching ANIME_PROFILE_NAME gets
+# ANIME_TAG_NAME, everything else gets NON_ANIME_TAG_NAME. Usenet indexers (e.g. NZBgeek) are
+# left untagged/universal — they're fast and do carry anime, so there's nothing to scope away.
+ANIME_TAG_NAME = "anime"
+NON_ANIME_TAG_NAME = "general"
+ANIME_PROFILE_NAME = "[Anime] Remux-1080p"
 
 # ---------------------------------------------------------------------------
 # Usenet indexers to add to Prowlarr (require API keys from .env).
@@ -75,6 +87,15 @@ PROWLARR_USENET_INDEXERS = [
         "definitionName": "NZBgeek",
         "env_key": "NZBGEEK_API_KEY",
         "fields": {"apiKey": None},  # filled from env at runtime
+    },
+    # Different index source from NZBgeek, so it genuinely adds coverage rather than
+    # duplicating hits. Both have open registration. Two usenet indexers is the
+    # practical sweet spot — usenet indexers meter API hits, so more is not free.
+    {
+        "name": "NZBFinder",
+        "definitionName": "NZBFinder",
+        "env_key": "NZBFINDER_API_KEY",
+        "fields": {"apiKey": None},
     },
 ]
 
@@ -185,9 +206,20 @@ PROWLARR_SYNC_WAIT_S = 30
 # Ref: https://trash-guides.info/Bazarr/  https://wiki.bazarr.media/
 # ---------------------------------------------------------------------------
 
+BAZARR_PROFILE_ID = 1
 BAZARR_PROFILE_NAME = "English + Hebrew"
 BAZARR_LANGUAGES = ["en", "he"]
-BAZARR_PROVIDERS = ["gestdown", "wizdom", "podnapisi", "yifysubtitles", "animetosho"]
+# podnapisi removed upstream (Bazarr's own config.py: "delete podnapisi section since this
+# provider doesn't exist anymore") — enabling it here is silently dropped with no log line,
+# no error, nothing. Confirmed gone, not renamed: no podnapisi.py anywhere in Bazarr's
+# subliminal/subliminal_patch provider directories.
+
+# Anime gets its own English-only profile — see _bazarr_wanted_profile().
+BAZARR_ANIME_PROFILE_ID = 2
+BAZARR_ANIME_PROFILE_NAME = "English (Anime)"
+BAZARR_ANIME_LANGUAGES = ["en"]
+
+BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho"]
 
 
 # ---------------------------------------------------------------------------
@@ -296,12 +328,27 @@ def _wait_for_service(name: str, url: str, headers: dict) -> bool:
 
 
 def _get_indexer_schema(prowlarr_url: str, headers: dict, definition_name: str) -> dict | None:
-    """Fetch the schema for a specific indexer from Prowlarr."""
+    """Fetch the schema for a specific indexer from Prowlarr.
+
+    Matches definitionName exactly first, then falls back to a case-insensitive
+    match on definitionName or name. Prowlarr's preset names are inconsistently
+    cased (e.g. "NZBgeek" vs "NZBGeek"), and an exact-only match fails silently —
+    the indexer just never gets added, with no error anywhere.
+    """
     schemas = _api(f"{prowlarr_url}/api/v1/indexer/schema", headers)
     if not schemas:
         return None
+
     for s in schemas:
         if s.get("definitionName") == definition_name:
+            return s
+
+    wanted = definition_name.casefold()
+    for s in schemas:
+        if s.get("definitionName", "").casefold() == wanted:
+            return s
+    for s in schemas:
+        if s.get("name", "").casefold() == wanted:
             return s
     return None
 
@@ -429,7 +476,17 @@ def setup_prowlarr_usenet_indexers(
     if existing is None:
         log.warning("Could not list Prowlarr indexers for Usenet setup.")
         return
-    existing_defs = {idx.get("definitionName", "").lower() for idx in existing}
+    # Match on BOTH name and definitionName. Prowlarr stores every Newznab-preset
+    # indexer with definitionName="Newznab" (the preset name survives only in
+    # `name`), so a definitionName-only check never recognises NZBgeek as already
+    # present: each run re-POSTs it, Prowlarr rejects the duplicate, and the run
+    # reports a bogus "1 failed" while the indexer sits there working fine.
+    existing_names = {
+        value.casefold()
+        for idx in existing
+        for value in (idx.get("definitionName", ""), idx.get("name", ""))
+        if value
+    }
 
     added = 0
     skipped = 0
@@ -444,7 +501,7 @@ def setup_prowlarr_usenet_indexers(
             )
             continue
 
-        if idx_def["definitionName"].lower() in existing_defs:
+        if {idx_def["definitionName"].casefold(), idx_def["name"].casefold()} & existing_names:
             skipped += 1
             continue
 
@@ -892,6 +949,14 @@ def _setup_download_client_sabnzbd(
                 if dc.get("priority", 1) != priority:
                     dc["priority"] = priority
                     changed = True
+                # Re-seeding sabnzbd.ini mints a NEW random API key. Without this,
+                # the *arr would keep the stale key and every grab would fail auth
+                # against SABnzbd, with nothing in the logs pointing at the cause.
+                for field in dc.get("fields", []):
+                    if field.get("name") == "apiKey" and field.get("value") != sabnzbd_api_key:
+                        field["value"] = sabnzbd_api_key
+                        changed = True
+                        log.info("%s SABnzbd API key refreshed (key had rotated).", app_name)
                 if changed:
                     _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
                     log.info(
@@ -950,6 +1015,69 @@ def _setup_download_client_sabnzbd(
         log.warning("Failed to add SABnzbd download client to %s.", app_name)
 
 
+def _setup_delay_profile(
+    app_name: str, base_url: str, headers: dict, env: dict[str, str],
+) -> None:
+    """Make Sonarr/Radarr actually prefer Usenet releases over torrents.
+
+    Download-client priority does NOT do this. In Sonarr's DownloadDecisionComparer,
+    client priority only breaks ties between clients of the *same* protocol; protocol
+    preference comes solely from the delay profile's `preferredProtocol`. So setting
+    SABnzbd to priority 1 and qBittorrent to 2 (which we also do, for tie-breaking
+    among usenet clients) has zero effect on usenet-vs-torrent on its own.
+
+    Delays are in minutes and are compared against the release's *age*, not against
+    how long the *arr has known about it. They gate RSS sync only — interactive
+    searches ignore them entirely, so a manual search still returns torrents at once.
+
+    Ref: https://wiki.servarr.com/sonarr/settings#delay-profiles
+    """
+    url = f"{base_url}/api/v3/delayprofile"
+    profiles = _api(url, headers)
+    if not profiles:
+        log.warning("Could not read %s delay profiles; skipping protocol preference.", app_name)
+        return
+
+    # The default catch-all profile is the untagged one — it always exists and
+    # applies to everything not matched by a more specific tagged profile.
+    default = next((p for p in profiles if not p.get("tags")), None)
+    if default is None:
+        log.warning("%s has no default (untagged) delay profile; skipping.", app_name)
+        return
+
+    def _minutes(var: str, fallback: int) -> int:
+        try:
+            return int(env.get(var, "").strip() or fallback)
+        except ValueError:
+            log.warning("%s is not an integer; using %d.", var, fallback)
+            return fallback
+
+    usenet_delay = _minutes("USENET_DELAY_MINUTES", 0)
+    torrent_delay = _minutes("TORRENT_DELAY_MINUTES", 60)
+
+    desired = {
+        "enableUsenet": True,
+        "enableTorrent": True,
+        "preferredProtocol": "usenet",
+        "usenetDelay": usenet_delay,
+        "torrentDelay": torrent_delay,
+    }
+    if all(default.get(key) == val for key, val in desired.items()):
+        log.info("%s delay profile already prefers Usenet.", app_name)
+        return
+
+    default.update(desired)
+    result = _api(f"{url}/{default['id']}", headers, method="PUT", data=default)
+    if result is not None:
+        log.info(
+            "%s delay profile updated: prefer Usenet "
+            "(usenet delay %dm, torrent delay %dm).",
+            app_name, usenet_delay, torrent_delay,
+        )
+    else:
+        log.warning("Failed to update %s delay profile.", app_name)
+
+
 def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
                  sabnzbd_api_key: str | None = None) -> None:
     """Configure Sonarr: TRaSH naming, media management, root folders, download clients."""
@@ -963,6 +1091,9 @@ def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
     _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env, qbit_priority)
     if sabnzbd_api_key:
         _setup_download_client_sabnzbd("Sonarr", sonarr_url, headers, "tv", sabnzbd_api_key, 1)
+        # Only touch the delay profile when Usenet is actually available — otherwise
+        # we would tell a torrent-only stack to prefer a protocol it cannot use.
+        _setup_delay_profile("Sonarr", sonarr_url, headers, env)
 
 
 def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
@@ -978,6 +1109,8 @@ def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
     _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env, qbit_priority)
     if sabnzbd_api_key:
         _setup_download_client_sabnzbd("Radarr", radarr_url, headers, "movies", sabnzbd_api_key, 1)
+        # See Sonarr above: delay profile is what makes Usenet actually win over torrents.
+        _setup_delay_profile("Radarr", radarr_url, headers, env)
 
 
 # ---------------------------------------------------------------------------
@@ -1128,8 +1261,11 @@ def _configure_arr_indexers(app_name: str, base_url: str, headers: dict,
         if criteria_changed:
             idx["seedCriteria"] = seed_criteria
 
+        # forceSave=true: without it, Sonarr re-tests the indexer's connectivity on every PUT
+        # and rejects the whole update (tags included) if that indexer happens to be
+        # erroring/rate-limited at that moment — unrelated to the field actually being changed.
         result = _api(
-            f"{url}/{idx['id']}", headers, method="PUT", data=idx,
+            f"{url}/{idx['id']}?forceSave=true", headers, method="PUT", data=idx,
         )
         if result is not None:
             updated += 1
@@ -1155,6 +1291,89 @@ def _configure_arr_indexers(app_name: str, base_url: str, headers: dict,
             "%s: torrent indexer defaults already applied (%d indexer(s)).",
             app_name, len(torrent_indexers),
         )
+
+
+def _get_or_create_tag(base_url: str, headers: dict, label: str) -> int | None:
+    """Get or create a Sonarr/Radarr tag (v3 API), returning its ID."""
+    tags = _api(f"{base_url}/api/v3/tag", headers)
+    if tags:
+        for t in tags:
+            if t.get("label", "").lower() == label.lower():
+                return t["id"]
+    result = _api(f"{base_url}/api/v3/tag", headers, method="POST", data={"label": label})
+    return result.get("id") if isinstance(result, dict) else None
+
+
+def _tag_anime_indexer_scoping(sonarr_url: str, headers: dict) -> None:
+    """Restrict anime episode searches to anime-native indexers.
+
+    Sonarr only excludes an indexer for a series when the two share no tags at all — an
+    untagged indexer is used for every series regardless of that series' own tags. So tagging
+    only the anime-native indexers isn't enough: general torrent trackers would stay untagged
+    (universal) and still get queried for anime. This tags both sides of the split — anime-
+    native indexers + anime-profile series get ANIME_TAG_NAME, every other torrent indexer +
+    series gets NON_ANIME_TAG_NAME — so each side only ever matches its own.
+    """
+    anime_tag_id = _get_or_create_tag(sonarr_url, headers, ANIME_TAG_NAME)
+    general_tag_id = _get_or_create_tag(sonarr_url, headers, NON_ANIME_TAG_NAME)
+    if anime_tag_id is None or general_tag_id is None:
+        log.warning("Sonarr: could not create anime/general tags, skipping indexer tag-scoping.")
+        return
+
+    anime_indexer_names = {i["name"] for i in PROWLARR_INDEXERS if i.get("anime")}
+    general_indexer_names = {i["name"] for i in PROWLARR_INDEXERS if not i.get("anime")}
+
+    indexers = _api(f"{sonarr_url}/api/v3/indexer", headers) or []
+    indexers_updated = 0
+    for idx in indexers:
+        # Prowlarr-synced indexers land in Sonarr as "<name> (Prowlarr)", not the bare name.
+        name = idx.get("name", "").removesuffix(" (Prowlarr)")
+        if name in anime_indexer_names:
+            mine, other = anime_tag_id, general_tag_id
+        elif name in general_indexer_names:
+            mine, other = general_tag_id, anime_tag_id
+        else:
+            continue  # usenet / other indexers stay untagged (universal)
+        current = set(idx.get("tags") or [])
+        target = (current - {other}) | {mine}
+        if current == target:
+            continue
+        idx["tags"] = sorted(target)
+        # forceSave=true: skip Sonarr's connectivity re-test on PUT (see _configure_arr_indexers).
+        if _api(f"{sonarr_url}/api/v3/indexer/{idx['id']}?forceSave=true", headers,
+                method="PUT", data=idx) is not None:
+            indexers_updated += 1
+
+    profiles = _api(f"{sonarr_url}/api/v3/qualityprofile", headers) or []
+    anime_profile_id = next(
+        (p["id"] for p in profiles if p.get("name") == ANIME_PROFILE_NAME), None,
+    )
+    if anime_profile_id is None:
+        log.info(
+            "Sonarr: no '%s' quality profile found yet, tagged %d indexer(s) but left "
+            "series untouched.", ANIME_PROFILE_NAME, indexers_updated,
+        )
+        return
+
+    series_list = _api(f"{sonarr_url}/api/v3/series", headers) or []
+    series_updated = 0
+    for s in series_list:
+        is_anime = s.get("qualityProfileId") == anime_profile_id
+        wanted_tag = anime_tag_id if is_anime else general_tag_id
+        other_tag = general_tag_id if is_anime else anime_tag_id
+        current = set(s.get("tags") or [])
+        target = (current - {other_tag}) | {wanted_tag}
+        if current == target:
+            continue
+        s["tags"] = sorted(target)
+        if _api(f"{sonarr_url}/api/v3/series/{s['id']}", headers,
+                method="PUT", data=s) is not None:
+            series_updated += 1
+
+    log.info(
+        "Sonarr: anime indexer scoping — %d indexer(s), %d series updated.",
+        indexers_updated, series_updated,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1401,21 +1620,31 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
     # 6. Enable subtitle languages
     form["languages-enabled"] = BAZARR_LANGUAGES
 
-    # 7. Language profile
-    profile = [{
-        "profileId": 1,
-        "name": BAZARR_PROFILE_NAME,
-        "items": [
-            {"id": i + 1, "language": lang,
-             "hi": False, "forced": False, "audio_exclude": False}
-            for i, lang in enumerate(BAZARR_LANGUAGES)
-        ],
-        "cutoff": None,
-        "mustContain": [],
-        "mustNotContain": [],
-        "originalFormat": None,
-    }]
-    form["languages-profiles"] = json.dumps(profile)
+    # 7. Language profiles
+    def _profile(profile_id: int, name: str, languages: list[str]) -> dict:
+        return {
+            "profileId": profile_id,
+            "name": name,
+            "items": [
+                {"id": i + 1, "language": lang,
+                 "hi": False, "forced": False, "audio_exclude": False}
+                for i, lang in enumerate(languages)
+            ],
+            "cutoff": None,
+            "mustContain": [],
+            "mustNotContain": [],
+            "originalFormat": None,
+        }
+
+    form["languages-profiles"] = json.dumps([
+        _profile(BAZARR_PROFILE_ID, BAZARR_PROFILE_NAME, BAZARR_LANGUAGES),
+        _profile(BAZARR_ANIME_PROFILE_ID, BAZARR_ANIME_PROFILE_NAME,
+                 BAZARR_ANIME_LANGUAGES),
+    ])
+
+    # NOTE: the default-profile settings are deliberately NOT part of this form —
+    # posting them together with languages-profiles makes Bazarr return HTTP 500 and
+    # silently drop them.  They go in their own call below (step 8b).
 
     # 8. POST all settings in one call
     status = _bazarr_form_post(settings_url, apikey, form)
@@ -1425,9 +1654,28 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         log.warning("Bazarr settings POST returned %s; check config manually.", status)
         return
 
-    # 9. Mass-assign language profile to all existing series/movies
-    profile_id = 1
-    _bazarr_assign_profiles(bazarr_url, apikey, profile_id)
+    # 8b. Apply a profile to series/movies added *after* this deploy.
+    # Step 9 is a one-shot over the library as it exists right now; without these,
+    # anything added later lands with profileId=None and Bazarr never searches
+    # subtitles for it (it reports 0 missing rather than an error).  New anime still
+    # lands on the shared profile here — step 9 moves it to the anime profile on the
+    # next deploy, since Bazarr has no per-seriesType default.
+    # Must be its own POST: bundled with languages-profiles, Bazarr 500s and drops it.
+    defaults_status = _bazarr_form_post(settings_url, apikey, {
+        "settings-general-serie_default_enabled": "true",
+        "settings-general-serie_default_profile": str(BAZARR_PROFILE_ID),
+        "settings-general-movie_default_enabled": "true",
+        "settings-general-movie_default_profile": str(BAZARR_PROFILE_ID),
+    })
+    general = (_bazarr_get(settings_url, apikey) or {}).get("general", {})
+    if general.get("serie_default_enabled") and general.get("movie_default_enabled"):
+        log.info("Bazarr: default language profile enabled for new series/movies.")
+    else:
+        log.warning("Bazarr: could not enable the default language profile "
+                    "(HTTP %s); series added later will be skipped.", defaults_status)
+
+    # 9. Put every existing series/movie on the right language profile
+    _bazarr_assign_profiles(bazarr_url, apikey)
 
 
 def _bazarr_list(bazarr_url: str, apikey: str, kind: str) -> list[dict]:
@@ -1437,9 +1685,23 @@ def _bazarr_list(bazarr_url: str, apikey: str, kind: str) -> list[dict]:
     return items.get("data", []) if isinstance(items, dict) else items
 
 
-def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
-                            profile_id: int) -> None:
-    """Assign a language profile to all series and movies missing one.
+def _bazarr_wanted_profile(item: dict, kind: str) -> int:
+    """Which language profile an item should be on.
+
+    Anime gets an English-only profile.  The shared profile has no cutoff, so
+    Bazarr wants *every* language on it and re-searches the missing ones forever
+    — and Hebrew anime subtitles essentially do not exist, so putting anime on it
+    means a permanent wanted-queue entry that hammers the providers and never
+    succeeds.  seriesType is Sonarr's own Standard/Daily/Anime field, which Bazarr
+    mirrors on its series objects.
+    """
+    if kind == "series" and item.get("seriesType") == "anime":
+        return BAZARR_ANIME_PROFILE_ID
+    return BAZARR_PROFILE_ID
+
+
+def _bazarr_assign_profiles(bazarr_url: str, apikey: str) -> None:
+    """Assign the right language profile to every series and movie.
 
     Bazarr populates its series/movies list from Sonarr/Radarr asynchronously
     after the connection is saved, so poll briefly instead of acting on a
@@ -1459,12 +1721,16 @@ def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
                         "skipping profile assignment.", kind)
             continue
 
-        needs_update = [
-            item[id_field] for item in data
-            if item.get("profileId") != profile_id and id_field in item
-        ]
+        wanted = {
+            item[id_field]: _bazarr_wanted_profile(item, kind)
+            for item in data if id_field in item
+        }
+        needs_update = {
+            item[id_field]: wanted[item[id_field]] for item in data
+            if id_field in item and item.get("profileId") != wanted[item[id_field]]
+        }
         if not needs_update:
-            log.info("Bazarr: all %s already have profile assigned.", kind)
+            log.info("Bazarr: all %s already on the right profile.", kind)
             continue
 
         # Bazarr's bulk-assign endpoint only honors the first id when given
@@ -1472,19 +1738,20 @@ def _bazarr_assign_profiles(bazarr_url: str, apikey: str,
         # time. It also returns HTTP 500 on success in some versions, so
         # verify the result via GET rather than trusting the status code.
         post_key = "seriesid" if kind == "series" else "radarrid"
-        for item_id in needs_update:
+        for item_id, profile_id in needs_update.items():
             _bazarr_form_post(
                 f"{bazarr_url}/api/{kind}", apikey,
                 {post_key: str(item_id), "profileid": str(profile_id)},
             )
 
-        still_missing = sum(
+        still_wrong = sum(
             1 for item in _bazarr_list(bazarr_url, apikey, kind)
-            if item.get("profileId") != profile_id
+            if id_field in item
+            and item.get("profileId") != _bazarr_wanted_profile(item, kind)
         )
-        if still_missing:
-            log.warning("Bazarr: %d %s still missing a profile after "
-                        "assignment.", still_missing, kind)
+        if still_wrong:
+            log.warning("Bazarr: %d %s still on the wrong profile after "
+                        "assignment.", still_wrong, kind)
         else:
             log.info("Bazarr: assigned profile to %d %s.", len(needs_update), kind)
 
@@ -1544,11 +1811,9 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
         )
 
     if sonarr_key:
-        _configure_arr_indexers(
-            "Sonarr", "http://localhost:8989",
-            {"X-Api-Key": sonarr_key, "Content-Type": "application/json"},
-            env,
-        )
+        sonarr_headers = {"X-Api-Key": sonarr_key, "Content-Type": "application/json"}
+        _configure_arr_indexers("Sonarr", "http://localhost:8989", sonarr_headers, env)
+        _tag_anime_indexer_scoping("http://localhost:8989", sonarr_headers)
     if radarr_key:
         _configure_arr_indexers(
             "Radarr", "http://localhost:7878",
