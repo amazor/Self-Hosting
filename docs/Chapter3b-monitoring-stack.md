@@ -23,6 +23,11 @@ You will walk through the environment template (`.env.example`), important parts
 - [Storage: Why local only and how to size](#storage-why-local-only-and-how-to-size)
 - [Environment: `.env.example`](#environment-envexample)
 - [Compose file: Notable details](#compose-file-notable-details)
+- [Alerting: Design and reasoning](#alerting-design-and-reasoning)
+  - [Why Alertmanager + ntfy](#why-alertmanager--ntfy)
+  - [The rule set and its thresholds](#the-rule-set-and-its-thresholds)
+  - [The log-pattern rule (and why it lives in Grafana)](#the-log-pattern-rule-and-why-it-lives-in-grafana)
+  - [Two gotchas worth knowing](#two-gotchas-worth-knowing)
 - [Bootstrap script: What it does](#bootstrap-script-what-it-does)
 - [Deploying the monitoring stack](#deploying-the-monitoring-stack)
   - [Path 1: Manual (on the Monitoring VM)](#path-1-manual-on-the-monitoring-vm)
@@ -194,7 +199,14 @@ The full stack is in `docker_compose/monitoring/compose.yml`. Below are the part
 | **grafana** | Dashboards and log search; port 3000. Datasources (Prometheus, Loki) are auto-provisioned by bootstrap. |
 | **prometheus** | Metrics store; scrapes node_exporter, cAdvisor, and itself; port 9090. Local targets via `host.docker.internal`; remote targets via `file_sd_configs` (generated from **SCRAPE_TARGETS**). |
 | **loki** | Log aggregation; receives push from Alloy; port 3100 (must be reachable from other VMs for Alloy sidecars). |
-| **uptime-kuma** | Uptime checks and alerting; port 3001; data in `/app/data` (SQLite). |
+| **uptime-kuma** | Uptime checks; port 3001; data in `/app/data` (SQLite). Note: has no notification channel configured — it is *not* the alerting path (see [Alerting](#alerting-design-and-reasoning)). |
+| **alertmanager** | Receives firing alerts from Prometheus, dedupes/groups them, routes to ntfy; port 9093. |
+
+**In `compose.ntfy.yml`** (overlay, `ENABLE_NTFY=1` by default on this VM):
+
+| Service | Role |
+|---------|------|
+| **ntfy** | Push-notification server; port 8099. The delivery path for *both* Alertmanager and Grafana alerting. Subscribe from the ntfy phone/web app. |
 
 **In `compose.observability.yml`** (shared sidecar overlay — same on every VM):
 
@@ -219,6 +231,148 @@ Applied where they do not affect functionality:
 - **read_only: true** on node_exporter (read-only by design).
 - Config and provisioning mounts are **read-only** (`:ro`).
 - Grafana: `GF_ANALYTICS_REPORTING_ENABLED=false`, `GF_USERS_ALLOW_SIGN_UP=false`.
+
+---
+
+## Alerting: Design and reasoning
+
+Until this was built, **the stack collected everything and told you nothing.** Prometheus
+scraped every target happily, Loki ingested every log line — and `GET /api/v1/rules`
+returned `{"groups":[]}`. Nothing evaluated anything, so nothing could ever alert.
+
+That is not a theoretical gap. On 2026-07-13, `immich-postgres` on the accelerated VM lost
+filesystem permissions on its data directory and spent roughly three hours crash-looping,
+emitting a steady stream of `FATAL: ... Permission denied` into Loki. Every one of those log
+lines was captured, indexed, and searchable. Nobody found out, because nothing was watching.
+Observability without alerting is an archive, not a monitor.
+
+A related trap, worth stating because it is the reason the checks below are deliberately few:
+an alert nobody receives is worthless, and an alert that cries wolf is worse than no alert at
+all, because the user learns to ignore it. The bar for every rule here is *"would this
+legitimately be worth waking someone up for?"* — not *"can we measure it?"*
+
+### Why Alertmanager + ntfy
+
+The starting state was less wired-up than it looked. Before this change:
+
+- **No Alertmanager** existed at all.
+- **Uptime Kuma** was deployed and superficially looked like the alerting story — but it had
+  **zero monitors and zero notification channels** configured. It was notifying nobody about
+  nothing.
+- **Grafana** had unified alerting available (its `provisioning/alerting/` directory was
+  already being created by bootstrap) but **no contact points, no notification policy, and no
+  rules** — the scaffold was there and entirely unused.
+- **ntfy** existed in the repo only as an opt-in, default-*off* overlay on the **media** VM,
+  for download-complete pings. Not on monitoring, not for alerts.
+
+So there was no existing, working delivery path to prefer — one had to be chosen and built.
+The choice was **ntfy**, for three reasons:
+
+1. **It is already in the repo and already understood.** No new vendor, no new account, no
+   third-party service holding the homelab's alerting hostage. Self-hosted, consistent with
+   the rest of the lab.
+2. **It reaches a phone.** A notification that only lands in a web UI you have to remember to
+   open is not meaningfully better than no notification — and "I didn't notice for three
+   hours" is precisely the failure we are fixing.
+3. **Both alert sources can share it.** Prometheus-based rules and the Grafana/Loki-based rule
+   both post to the same ntfy topic, so there is exactly *one* place to look and one thing to
+   subscribe to, rather than two half-configured channels.
+
+The resulting topology, deliberately kept to one delivery endpoint:
+
+```
+Prometheus (rule_files) ──► Alertmanager ──┐
+                                            ├──► ntfy topic ──► phone / web
+Grafana alerting (Loki query) ─────────────┘
+```
+
+Alertmanager sits in the Prometheus path (rather than Prometheus posting straight to ntfy)
+because it is what does the grouping, deduplication, and resolved-notification handling that
+makes the difference between "a useful alert" and "a firehose". `group_wait: 30s`,
+`group_interval: 5m`, `repeat_interval: 4h` — the repeat interval is deliberately long: a
+still-broken thing should nag occasionally, not every five minutes.
+
+### The rule set and its thresholds
+
+Seven Prometheus rules, in `docker_compose/monitoring/alerting/prometheus-rules.yml` (copied
+into `config/prometheus/rules/` by bootstrap — edit the source in the repo, never the copy on
+the VM). Thresholds are **absolute, not fleet-relative**: comparisons like "30x the rest of
+the fleet" are seductive but fragile, and break the moment the fleet's baseline shifts. Static
+values set well above observed-healthy readings are duller and far more predictable.
+
+| Rule | Condition | `for:` | Why this threshold |
+|------|-----------|--------|--------------------|
+| **TargetDown** | `up == 0` | 3m | Any exporter Prometheus can't reach. 3m rides out a container restart or a brief scrape miss without sitting on a real outage. |
+| **ProbeFailed** | `probe_success == 0` | 5m | Blackbox probes — HTTPS endpoints, TCP ports, ICMP, DNS. Distinct from TargetDown: blackbox-exporter can be perfectly healthy while the thing it probes is dead. Also our stand-in for "NFS unreachable" via the NAS's 2049 TCP probe. 5m because transient internet/DNS blips are not worth a page. |
+| **DiskSpaceLow** | `> 85%` full | 30m | accelerated was the tightest VM in the fleet (~76%, ~7.4 GB free). 85% gives real runway. 30m avoids firing on a transient write spike. |
+| **DiskSpaceCritical** | `> 95%` full | 10m | The "act now" step. Shorter `for:` because at 95% you don't have 30 minutes to spare. |
+| **DiskWillFillIn24h** | `predict_linear(...[6h], 24h) < 0` | 1h | Catches *slow leaks* (e.g. unbounded torrent seeding) days before a threshold rule would. The 1h `for:` keeps a brief burst of writes from projecting a fake apocalypse. |
+| **ContainerCrashLooping** | `changes(container_start_time_seconds[1h]) >= 3` | 5m | 3-in-1h is the signal-vs-noise line. The media VM's VPN container legitimately reconnects ~2x/day (~1 per 12h) and never comes close to tripping this — so it needs no special-case exclusion, which keeps the rule honest for every other container. |
+| **HighIowait** | `> 20%` avg iowait | 15m | Observed healthy baselines across all four VMs were **under 1%**. 20% is far above anything normal here, so it means something is genuinely wrong (NFS latency, saturated disk) rather than "the fleet is busy". |
+
+### The log-pattern rule (and why it lives in Grafana)
+
+The rule that would actually have caught the immich incident is a **log**-based one — it
+searches Loki for `FATAL`, `PANIC`, and `permission denied` across every container on every
+host, and fires if any appear.
+
+Prometheus cannot query Loki, so this rule cannot live with the other seven. That leaves two
+options: **Loki's own ruler**, or **Grafana's unified alerting**. This uses Grafana, because:
+
+- Grafana's alerting scaffold (`grafana/provisioning/alerting/`) was **already being created
+  by bootstrap** and sitting empty — it cost nothing to start using it.
+- Loki's ruler would have needed its own Alertmanager wiring plus a per-tenant rule-directory
+  layout, all to host a **single rule**. That is a lot of new moving parts for one query.
+- Grafana was already deployed, already had the Loki datasource, and already had a working
+  path to ntfy once the contact point existed.
+
+It is file-provisioned (`alerting/grafana/*.yml`) rather than clicked in the UI, so it
+survives a Grafana rebuild — verified by restarting Grafana from scratch and confirming the
+rule, contact point, and notification policy all reappeared from disk alone.
+
+### Two gotchas worth knowing
+
+Both of these were found by deploying to the live VM and watching what actually happened —
+neither would have surfaced from config review or a `docker compose config` check.
+
+**1. ntfy's `serve` flag ordering changed.** The media VM's existing `compose.ntfy.yml` uses:
+
+```yaml
+command: ["--cache-file", "/var/cache/ntfy/cache.db", "serve"]   # crash-loops
+```
+
+On the current image (ntfy 2.26.0), that fails outright with
+`flag provided but not defined: -cache-file` — the flag is only accepted *after* the `serve`
+subcommand, not before it:
+
+```yaml
+command: ["serve", "--cache-file", "/var/cache/ntfy/cache.db"]   # correct
+```
+
+The container crash-looped on first deploy because of this. Worth noting: **the media stack
+almost certainly has the same latent bug**, but its ntfy is `ENABLE_NTFY=0` by default, so
+nobody has ever hit it.
+
+**2. The log-pattern rule fired on itself — twice.** A rule that searches all logs for the
+string `permission denied` has an obvious-in-hindsight problem: *the act of running that query
+writes the query's own text into the logs it searches.*
+
+- **Loki** logs the full LogQL of every query it executes (its query-stats line, at `info`).
+- **Grafana's alerting scheduler** logs the full query text of every datasource request it
+  issues (`tsdb.loki`, "Response received from loki", also at `info`).
+
+Both lines contain the literal string `permission denied`, because the rule's own query does.
+The result is a perfect feedback loop: the rule fires, which logs the query, which matches the
+rule, forever. It was observed firing on `container=loki` and then on `container=grafana`
+within minutes of going live. The fix is to exclude both from the rule's stream selector:
+
+```logql
+{host=~".+", container!~"loki|grafana"} |~ "(?i)FATAL|PANIC|permission denied"
+```
+
+The general lesson generalises past this one rule: **any log-based alert whose pattern appears
+in its own query text will self-trigger through whatever component logs that query.** If you
+add another log-pattern rule here, exclude the observability components from it.
 
 ---
 
