@@ -1,0 +1,72 @@
+# Grafana file-provisioned alert rule: CriticalLogPattern.
+#
+# The one Loki-backed rule in this stack. Prometheus can't query Loki
+# natively; Loki's own ruler needs its own alertmanager wiring + per-tenant
+# rule-file layout, which was a bigger lift than reusing Grafana's
+# already-present (if previously empty) alerting scaffold for a single rule.
+# See docs/Chapter3b-monitoring-stack.md for the full reasoning.
+#
+# This is the rule that would have caught the immich-postgres permission
+# incident (2026-07-13) — it went unnoticed for hours because no alert
+# rules existed at all before this change.
+#
+# `container!="loki"` excludes Loki's own container: Loki logs the text of
+# every query it runs (including this rule's own LogQL, which contains the
+# literal string "permission denied") in its query-stats log line, which
+# would otherwise make this rule self-trigger every evaluation the moment
+# it's live. Confirmed live during design — see git history for this file.
+#
+# Schema/values below were created via the Grafana alerting API first and
+# read back to confirm exact field shapes, then mirrored here for IaC
+# reproducibility. Uid is stable so re-provisioning updates in place rather
+# than duplicating.
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: homelab-logs
+    folder: Homelab
+    interval: 1m
+    rules:
+      - uid: critical-log-pattern
+        title: CriticalLogPattern
+        condition: C
+        data:
+          - refId: A
+            datasourceUid: loki
+            relativeTimeRange:
+              from: 300
+              to: 0
+            model:
+              expr: >-
+                sum by (host, container) (count_over_time({host=~".+", container!="loki"}
+                |~ "(?i)FATAL|PANIC|permission denied" [5m]))
+              queryType: instant
+              refId: A
+              intervalMs: 1000
+              maxDataPoints: 43200
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator:
+                    type: gt
+                    params: [0]
+              refId: C
+              intervalMs: 1000
+              maxDataPoints: 43200
+        noDataState: OK
+        execErrState: Alerting
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "{{ $labels.container }} on {{ $labels.host }} is logging FATAL/PANIC/permission-denied errors"
+          description: >-
+            Check: docker logs {{ $labels.container }} on {{ $labels.host }}.
+            This is the pattern that would have caught the immich-postgres
+            permission incident.
+        notification_settings:
+          receiver: ntfy
