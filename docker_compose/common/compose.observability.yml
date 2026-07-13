@@ -99,14 +99,17 @@ services:
   # already cover cgroup v2; the only thing privileged actually bought us was
   # CAP_SYSLOG, which is added back explicitly.
   #
-  # Why exactly these caps:
-  #   - cadvisor runs as uid 0 and everything it reads (/var/lib/docker 0710
-  #     root:root, /var/run/docker.sock 0660 root:docker, /sys/fs/cgroup) is
-  #     readable via *owner* permissions, so no DAC_OVERRIDE/DAC_READ_SEARCH.
-  #   - SYSLOG is required to open /dev/kmsg while kernel.dmesg_restrict=1
-  #     (the default). That feeds the OOM-event parser behind
-  #     container_oom_events_total. Drop it and cadvisor still starts, but
-  #     silently stops reporting OOM kills.
+  # Why exactly these two caps, and nothing else — both were verified live by
+  # dropping them and watching what broke:
+  #   - SYSLOG: required to open /dev/kmsg while kernel.dmesg_restrict=1 (the
+  #     default). That feeds the OOM-event parser behind container_oom_events_total.
+  #     Without it cadvisor still starts — it just silently stops reporting OOM kills.
+  #   - DAC_READ_SEARCH: cadvisor walks every container's rootfs under
+  #     /var/lib/docker to count disk/inode usage. Plenty of those directories are
+  #     owned by *other* uids (/home/alloy, /home/nonroot, apt's _apt-owned
+  #     partial/), so being uid 0 is not enough — without this cap it logs
+  #     "permission denied" per container and container_fs_* usage quietly goes
+  #     incomplete. Read/traverse bypass only; it grants no write access.
   cadvisor:
     image: ghcr.io/google/cadvisor:${CADVISOR_TAG:-latest}
     container_name: cadvisor
@@ -122,6 +125,7 @@ services:
       - ALL
     cap_add:
       - SYSLOG
+      - DAC_READ_SEARCH
     security_opt:
       - no-new-privileges:true
     ports:
