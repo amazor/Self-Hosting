@@ -598,8 +598,19 @@ Description=Media anime auto-sync (indexer tag-scoping + Bazarr profile assignme
 [Service]
 Type=oneshot
 WorkingDirectory={stack_dir}
+# The marker is consumed BEFORE the sync runs, not after, and this is load-bearing:
+#   - A series added while a sync is in flight re-touches the marker. Deleting it
+#     afterwards would throw that signal away — the .path unit re-arms, sees no
+#     file, and never triggers again, so that series is silently never tagged or
+#     given a subtitle profile. Deleting it first means the late touch survives the
+#     run and the .path unit fires a second time, which is exactly what we want.
+#   - ExecStartPost does not run when ExecStart fails. A failing sync would leave
+#     the marker in place, re-triggering the unit immediately, over and over, until
+#     systemd's default start limit (5 starts / 10s) trips and parks the unit in
+#     `failed` — the hook then stays dead until someone notices and resets it.
+# rm -f is exit-0 even when the marker is already gone, so it cannot fail the unit.
+ExecStartPre=/usr/bin/rm -f {marker_path}
 ExecStart=/usr/bin/python3 {stack_dir}/scripts/setup_media_apps.py --sync-anime-only
-ExecStartPost=/usr/bin/rm -f {marker_path}
 """
 
 _ANIME_SYNC_PATH_UNIT = """\
@@ -643,12 +654,36 @@ def _ensure_anime_sync_hook(config_base: Path, tracker: StepTracker) -> None:
         _ANIME_SYNC_PATH_UNIT.format(marker_path=marker_path),
     )
 
+    # Report what systemd actually did, not what we asked it to do. Reporting
+    # success unconditionally here would mean a hook that failed to install looks
+    # identical to one that works — the deploy goes green and new anime silently
+    # never gets tagged, which is the whole class of bug this hook exists to close.
+    # Warn rather than fail: this runs in bootstrap, and a failed bootstrap step
+    # aborts the deploy before compose up. The stack itself is fine without the
+    # hook (the next full deploy still syncs); only the auto-trigger is missing.
     if changed:
-        subprocess.run(["systemctl", "daemon-reload"], check=False, capture_output=True)
-    subprocess.run(
+        reload_result = subprocess.run(
+            ["systemctl", "daemon-reload"], check=False, capture_output=True, text=True,
+        )
+        if reload_result.returncode != 0:
+            tracker.warn(
+                "systemctl daemon-reload failed; anime auto-sync hook not active "
+                f"({reload_result.stderr.strip()})"
+            )
+            return
+
+    enable_result = subprocess.run(
         ["systemctl", "enable", "--now", "media-anime-sync.path"],
-        check=False, capture_output=True,
+        check=False, capture_output=True, text=True,
     )
+    if enable_result.returncode != 0:
+        tracker.warn(
+            "Could not enable media-anime-sync.path; new anime series will not be "
+            "auto-synced until the next full deploy "
+            f"({enable_result.stderr.strip()})"
+        )
+        return
+
     tracker.success("Anime auto-sync hook installed (media-anime-sync.path)")
 
 
