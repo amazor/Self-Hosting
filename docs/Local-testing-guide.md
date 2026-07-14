@@ -224,7 +224,7 @@ This walks through one TV show and one movie so the full pipeline works.
 ### 5.1 Prowlarr — indexers
 
 1. Open **https://prowlarr.test.arpa** and log in (SSO or direct).
-2. **Indexers:** Deploy now adds 13 public torrent indexers (with FlareSolverr proxy) automatically via `setup_media_apps.py`. Verify they appear under **Indexers** and are healthy. Add additional indexers (private trackers, Usenet) if desired.
+2. **Indexers:** Deploy now adds 16 public torrent indexers (with FlareSolverr proxy) automatically via `setup_media_apps.py`. Verify they appear under **Indexers** and are healthy. Add additional indexers (private trackers, Usenet) if desired.
 3. **Apps** → Verify **Sonarr** and **Radarr** are listed (`setup_media_apps.py` configures Prowlarr app sync automatically). If not, add them manually (URLs like `http://sonarr:8989` and `http://radarr:7878` from Prowlarr’s perspective). Sync indexers to the apps.
 
 ### 5.2 qBittorrent — categories

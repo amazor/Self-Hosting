@@ -60,7 +60,7 @@ The key design is unchanged from Chapter 2C: one host root (`/mnt/media`) mapped
 | **compose.ntfy.yml** | Optional lightweight push notifications overlay |
 | **.env.example** | Template for required values and optional feature toggles |
 | **bootstrap.py** | Idempotent first-run checks: env validation, mount checks, config directory creation, VPN guardrail |
-| **setup_media_apps.py** | Post-deploy automation via API: Prowlarr indexers (13 public torrent sites) + FlareSolverr proxy, qBittorrent categories and TRaSH settings, Sonarr/Radarr root folders + download clients + TRaSH naming, Prowlarr app sync, Plex library refresh connection (when `PLEX_HOST` and `PLEX_TOKEN` are set). Called automatically by `deploy.py`. |
+| **setup_media_apps.py** | Post-deploy automation via API: Prowlarr indexers (16 public torrent sites) + FlareSolverr proxy, qBittorrent categories and TRaSH settings, Sonarr/Radarr root folders + download clients + TRaSH naming, Prowlarr app sync, Plex library refresh connection (when `PLEX_HOST` and `PLEX_TOKEN` are set). Called automatically by `deploy.py`. |
 
 All overlays are selected from `.env` by `ENABLE_*` flags and are automatically included by `deploy.py` and the generated `media` shell helper.
 
@@ -98,9 +98,21 @@ cp .env.example .env
 | **MEDIA_ROOT** | Host root for both downloads and library. Default is `/mnt/media`. |
 | **CONFIG_ROOT** | Host root for service config (default `./config` from this directory). |
 | **PUID / PGID** | LinuxServer container user/group IDs for volume permissions. |
+| **QBITTORRENT_PGID** | qBittorrent's group, **deliberately not `PGID`** — see below. |
 | **TZ** | Shared timezone for all services. |
 
 Use `id your_user` on the host to get `PUID` and `PGID`.
+
+**Why qBittorrent gets its own GID.** ExpressVPN's Network Lock has a hardcoded exemption for
+**GID 1000** — that's how its daemon lets its own control-plane traffic bypass the kill switch.
+qBittorrent shares the VPN container's network namespace, so if it ran under the default `PGID=1000`
+it would inherit that exemption: its traffic would be allowed *past* the kill switch, and would keep
+flowing over the real host IP if the tunnel ever dropped. Moving it to `QBITTORRENT_PGID=1001` puts
+it back *under* the kill switch, where it belongs.
+
+The ExpressVPN image has no documented way to change its own GID, so qBittorrent is the one that
+moves. Any value other than `1000` works, and it costs nothing: the NFS download and library paths
+are world-writable (777), so file ownership is unaffected. It still runs as the normal `PUID`.
 
 ### VPN (required for torrent routing)
 
@@ -222,7 +234,7 @@ You can deploy directly on the Media VM or use the repo deploy workflow.
 1. Clone/pull the repo and enter stack directory:
 
    ```bash
-   cd ~/Self-Hosting/docker_compose/media
+   cd /opt/self-hosting/docker_compose/media
    ```
 
 2. Create and edit `.env`:
@@ -287,7 +299,7 @@ Optional deploy flags:
 **What's already automated:** After a successful `deploy.py media` run, the following are configured automatically — no manual UI work needed:
 
 - **qBittorrent** — WebUI password pre-seeded by bootstrap; save path, auto TMM, categories (`tv`, `movies`, `anime`), and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP-only protocol, encryption, seeding limits disabled, UPnP off, CSRF off) via `setup_media_apps.py`
-- **Prowlarr** — 13 public torrent indexers (1337x, TPB, EZTV, KAT, LimeTorrents, YTS, Torrent Downloads, Knaben, Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`. Nyaa.si is configured with the "Anime - English-translated" category filter so results are pre-filtered for English subs at the indexer level
+- **Prowlarr** — 16 public torrent indexers (1337x, The Pirate Bay, EZTV, KickAssTorrents.to, KickAssTorrents.ws, LimeTorrents, YTS, Torrent Downloads, Knaben, TorrentProject2, TorrentsCSV, showRSS, plus anime: Nyaa.si, SubsPlease, Tokyo Toshokan, Shana Project) and a FlareSolverr proxy with a `flaresolverr` tag for Cloudflare-blocked sites, via `setup_media_apps.py`. Nyaa.si is configured with the "Anime - English-translated" category filter so results are pre-filtered for English subs at the indexer level
 - **Sonarr/Radarr** — root folders, qBittorrent download clients, and TRaSH naming (including [anime naming format](https://trash-guides.info/Sonarr/Sonarr-recommended-naming-scheme/) with audio language and 10-bit tokens) via `setup_media_apps.py`; quality profiles (including anime), custom formats, and quality settings via Recyclarr (when enabled)
 - **Prowlarr → Sonarr/Radarr app sync** via `setup_media_apps.py`
 - **Plex library refresh connection** — Sonarr and Radarr are wired to call Plex's API after every import, so the library updates immediately. Requires `PLEX_HOST` and `PLEX_TOKEN` in `.env`. If absent at deploy time, add them and re-run `python3 setup_media_apps.py`
