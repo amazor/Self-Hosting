@@ -233,12 +233,32 @@ def _ensure_config_dirs(config_base: Path, tracker: StepTracker) -> None:
     ]
     for d in dirs:
         d.mkdir(parents=True, exist_ok=True)
+
+    # immich-postgres must be excluded from the PUID/PGID chown walk below.
+    # Unlike the linuxserver.io images (plex) which honor PUID/PGID, the
+    # official ghcr.io/immich-app/postgres image ignores them entirely and
+    # always runs as its built-in uid 999 -- postgres's own initdb already
+    # chowns its data directory to 999 on first init, and it must stay that
+    # way. Chowning directories under it to the PUID user (while leaving the
+    # files inside at uid 999, since this walk only touches dirnames, never
+    # files) produces split ownership: postgres (uid 999) can no longer
+    # traverse directories now owned by uid 1000 with mode 0700. The DB then
+    # keeps running invisibly on already-open file descriptors until the next
+    # restart, when it fails to start entirely (live incident, 2026-07-13).
+    # redis has no bind mount here (ephemeral container storage), so no
+    # equivalent fixed-uid risk exists for it today.
+    excluded = {config_base / "immich-postgres"}
+
     try:
         shutil.chown(config_base, user=real_user)
         for root, dirnames, _ in os.walk(config_base):
+            root_path = Path(root)
+            # Prune excluded subtrees so os.walk neither descends into nor
+            # chowns them.
+            dirnames[:] = [d for d in dirnames if root_path / d not in excluded]
             for d in dirnames:
                 try:
-                    shutil.chown(Path(root) / d, user=real_user)
+                    shutil.chown(root_path / d, user=real_user)
                 except (PermissionError, LookupError):
                     pass
     except (PermissionError, LookupError):
