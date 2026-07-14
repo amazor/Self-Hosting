@@ -333,7 +333,7 @@ ExecStart=/usr/local/bin/wait-for-nas.sh %I
 """
 
 
-def _write_if_changed(path: Path, content: str, *, executable: bool = False) -> bool:
+def write_if_changed(path: Path, content: str, *, executable: bool = False) -> bool:
     if path.is_file() and path.read_text() == content:
         return False
     path.parent.mkdir(parents=True, exist_ok=True)
@@ -396,18 +396,18 @@ def _ensure_docker_waits_for_mount(
     wait_unit = wait_escape.stdout.strip()
 
     changed = False
-    changed |= _write_if_changed(
+    changed |= write_if_changed(
         Path(_WAIT_FOR_NAS_SCRIPT), _WAIT_FOR_NAS_SCRIPT_CONTENT, executable=True
     )
-    changed |= _write_if_changed(
+    changed |= write_if_changed(
         Path("/etc/systemd/system/wait-for-nas@.service"),
         _WAIT_FOR_NAS_TEMPLATE_CONTENT,
     )
-    changed |= _write_if_changed(
+    changed |= write_if_changed(
         Path(f"/etc/systemd/system/{mount_unit}.d/wait-for-nas.conf"),
         f"[Unit]\nWants={wait_unit}\nAfter={wait_unit}\n",
     )
-    changed |= _write_if_changed(
+    changed |= write_if_changed(
         Path(f"/etc/systemd/system/docker.service.d/nfs-mount-{mount_unit}.conf"),
         f"[Unit]\nWants={mount_unit} {wait_unit}\nAfter={mount_unit} {wait_unit}\n",
     )
