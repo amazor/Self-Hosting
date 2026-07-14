@@ -547,7 +547,7 @@ Deploy the media stack by creating `.env` from `.env.example` in `docker_compose
 
 - Pre-seeds *arr `config.xml` with External auth and generated API keys
 - Pre-seeds `qBittorrent.conf` with a known WebUI password (so automation and exporters can authenticate)
-- Runs `setup_media_apps.py` — adds Prowlarr indexers (13 public torrent sites) and a FlareSolverr proxy, configures qBittorrent categories (`tv`, `movies`, `anime`) and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP protocol, encryption, seeding limits, UPnP, CSRF), sets up Sonarr/Radarr root folders + download clients + TRaSH naming, and connects Prowlarr app sync to Sonarr/Radarr — all via API
+- Runs `setup_media_apps.py` — adds Prowlarr indexers (16 public torrent sites) and a FlareSolverr proxy, configures qBittorrent categories (`tv`, `movies`, `anime`) and [TRaSH-recommended settings](https://trash-guides.info/Downloaders/qBittorrent/Basic-Setup/) (TCP protocol, encryption, seeding limits, UPnP, CSRF), sets up Sonarr/Radarr root folders + download clients + TRaSH naming, and connects Prowlarr app sync to Sonarr/Radarr — all via API
 - Triggers an initial Recyclarr sync (TRaSH quality profiles including anime) when enabled — Recyclarr then continues as a daemon on its configured cron schedule
 - Auto-populates exporter API keys in `.env` from config.xml (for Prometheus scraparr)
 

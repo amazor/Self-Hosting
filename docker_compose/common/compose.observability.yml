@@ -89,13 +89,30 @@ services:
     restart: unless-stopped
 
   # --- cAdvisor: per-container resource metrics ---
-  # CPU, memory, network, disk I/O per container for Prometheus. Requires
-  # privileged + host paths on Debian/Ubuntu for cgroup v2 access.
+  # CPU, memory, network, disk I/O per container for Prometheus.
   # Docs: https://github.com/google/cadvisor
+  #
+  # Deliberately NOT privileged. The upstream docs suggest `--privileged` on
+  # Debian/Ubuntu, but that grants every capability, all host devices, and an
+  # unmasked read-write /sys — i.e. straightforward host takeover from a
+  # container that only ever needs to *read* cgroups. The read-only mounts below
+  # already cover cgroup v2; the only thing privileged actually bought us was
+  # CAP_SYSLOG, which is added back explicitly.
+  #
+  # Why exactly these two caps, and nothing else — both were verified live by
+  # dropping them and watching what broke:
+  #   - SYSLOG: required to open /dev/kmsg while kernel.dmesg_restrict=1 (the
+  #     default). That feeds the OOM-event parser behind container_oom_events_total.
+  #     Without it cadvisor still starts — it just silently stops reporting OOM kills.
+  #   - DAC_READ_SEARCH: cadvisor walks every container's rootfs under
+  #     /var/lib/docker to count disk/inode usage. Plenty of those directories are
+  #     owned by *other* uids (/home/alloy, /home/nonroot, apt's _apt-owned
+  #     partial/), so being uid 0 is not enough — without this cap it logs
+  #     "permission denied" per container and container_fs_* usage quietly goes
+  #     incomplete. Read/traverse bypass only; it grants no write access.
   cadvisor:
     image: ghcr.io/google/cadvisor:${CADVISOR_TAG:-latest}
     container_name: cadvisor
-    privileged: true
     volumes:
       - /:/rootfs:ro
       - /var/run:/var/run:ro
@@ -104,6 +121,13 @@ services:
       - /dev/disk/:/dev/disk:ro
     devices:
       - /dev/kmsg:/dev/kmsg
+    cap_drop:
+      - ALL
+    cap_add:
+      - SYSLOG
+      - DAC_READ_SEARCH
+    security_opt:
+      - no-new-privileges:true
     ports:
       - "8081:8080"    # host 8081 avoids conflict with qBittorrent Web UI (8080)
     restart: unless-stopped

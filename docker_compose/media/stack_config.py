@@ -581,12 +581,119 @@ def _ensure_nfs_mounts(env: dict[str, str], tracker: StepTracker) -> None:
         tracker.warn(f"NFS mount failed for {media_root} (continuing)")
 
 
+_ANIME_SYNC_TOUCH_SCRIPT = """\
+#!/bin/sh
+# Runs inside the Sonarr container on the onSeriesAdd notification.
+# Just signals the host — see media-anime-sync.path/.service — because
+# giving Sonarr's own container direct access to Bazarr's API key would
+# mean a compromised Sonarr (it parses attacker-influenceable indexer
+# metadata) could rewrite Bazarr's config, not just its own.
+touch /config/.anime-sync-needed
+"""
+
+_ANIME_SYNC_SERVICE_TEMPLATE = """\
+[Unit]
+Description=Media anime auto-sync (indexer tag-scoping + Bazarr profile assignment)
+
+[Service]
+Type=oneshot
+WorkingDirectory={stack_dir}
+# The marker is consumed BEFORE the sync runs, not after, and this is load-bearing:
+#   - A series added while a sync is in flight re-touches the marker. Deleting it
+#     afterwards would throw that signal away — the .path unit re-arms, sees no
+#     file, and never triggers again, so that series is silently never tagged or
+#     given a subtitle profile. Deleting it first means the late touch survives the
+#     run and the .path unit fires a second time, which is exactly what we want.
+#   - ExecStartPost does not run when ExecStart fails. A failing sync would leave
+#     the marker in place, re-triggering the unit immediately, over and over, until
+#     systemd's default start limit (5 starts / 10s) trips and parks the unit in
+#     `failed` — the hook then stays dead until someone notices and resets it.
+# rm -f is exit-0 even when the marker is already gone, so it cannot fail the unit.
+ExecStartPre=/usr/bin/rm -f {marker_path}
+ExecStart=/usr/bin/python3 {stack_dir}/scripts/setup_media_apps.py --sync-anime-only
+"""
+
+_ANIME_SYNC_PATH_UNIT = """\
+[Unit]
+Description=Watch for a new-anime-series marker touched by Sonarr's onSeriesAdd hook
+
+[Path]
+PathExists={marker_path}
+Unit=media-anime-sync.service
+
+[Install]
+WantedBy=multi-user.target
+"""
+
+
+def _ensure_anime_sync_hook(config_base: Path, tracker: StepTracker) -> None:
+    """Install the host side of the anime auto-sync hook.
+
+    A new anime series has no indexer tags and sits on Bazarr's shared
+    subtitle profile until the two steps in setup_media_apps.sync_anime_only()
+    run — normally that only happens on the next full deploy. This lets
+    Sonarr's onSeriesAdd notification (configured by setup_media_apps.py
+    against a script this step installs) trigger it immediately instead:
+    Sonarr touches a marker file in its own config volume, a systemd .path
+    unit on the host notices, and runs sync_anime_only() directly (same
+    trust tier as running deploy.py yourself — no credentials cross into
+    the Sonarr container).
+    """
+    from scripts.homelab_bootstrap import write_if_changed
+
+    marker_path = config_base / "sonarr" / ".anime-sync-needed"
+    script_path = config_base / "sonarr" / "scripts" / "anime-sync-touch.sh"
+    changed = write_if_changed(script_path, _ANIME_SYNC_TOUCH_SCRIPT, executable=True)
+
+    changed |= write_if_changed(
+        Path("/etc/systemd/system/media-anime-sync.service"),
+        _ANIME_SYNC_SERVICE_TEMPLATE.format(stack_dir=SCRIPT_DIR, marker_path=marker_path),
+    )
+    changed |= write_if_changed(
+        Path("/etc/systemd/system/media-anime-sync.path"),
+        _ANIME_SYNC_PATH_UNIT.format(marker_path=marker_path),
+    )
+
+    # Report what systemd actually did, not what we asked it to do. Reporting
+    # success unconditionally here would mean a hook that failed to install looks
+    # identical to one that works — the deploy goes green and new anime silently
+    # never gets tagged, which is the whole class of bug this hook exists to close.
+    # Warn rather than fail: this runs in bootstrap, and a failed bootstrap step
+    # aborts the deploy before compose up. The stack itself is fine without the
+    # hook (the next full deploy still syncs); only the auto-trigger is missing.
+    if changed:
+        reload_result = subprocess.run(
+            ["systemctl", "daemon-reload"], check=False, capture_output=True, text=True,
+        )
+        if reload_result.returncode != 0:
+            tracker.warn(
+                "systemctl daemon-reload failed; anime auto-sync hook not active "
+                f"({reload_result.stderr.strip()})"
+            )
+            return
+
+    enable_result = subprocess.run(
+        ["systemctl", "enable", "--now", "media-anime-sync.path"],
+        check=False, capture_output=True, text=True,
+    )
+    if enable_result.returncode != 0:
+        tracker.warn(
+            "Could not enable media-anime-sync.path; new anime series will not be "
+            "auto-synced until the next full deploy "
+            f"({enable_result.stderr.strip()})"
+        )
+        return
+
+    tracker.success("Anime auto-sync hook installed (media-anime-sync.path)")
+
+
 def bootstrap_steps(
     env: dict[str, str], config_base: Path, args,  # noqa: ANN001
 ) -> list[tuple[str, object]]:
     return [
         ("Configuring NFS mounts", lambda t: _ensure_nfs_mounts(env, t)),
         ("Validating media environment", lambda t: _validate_media_env(env, args, t)),
+        ("Installing anime auto-sync hook", lambda t: _ensure_anime_sync_hook(config_base, t)),
         ("Creating config directories", lambda t: _ensure_config_directories(env, config_base, t)),
         ("Seeding app configs", lambda t: _seed_all_configs(env, config_base, t)),
     ]
@@ -602,10 +709,18 @@ def post_deploy(
     """Configure media apps via API after docker compose up."""
     try:
         from docker_compose.media.scripts import setup_media_apps
-        setup_media_apps.setup(env, SCRIPT_DIR)
-        tracker.success("Media apps configured via API")
+        ok = setup_media_apps.setup(env, SCRIPT_DIR)
     except Exception as exc:
-        tracker.warn(f"Media app setup failed: {exc}")
+        tracker.fail(f"Media app setup crashed: {exc}")
+    else:
+        if ok:
+            tracker.success("Media apps configured via API")
+        else:
+            tracker.fail(
+                "Media app setup failed — a core service (Prowlarr/Sonarr/Radarr/"
+                "qBittorrent) or an explicitly-enabled optional one (Bazarr/SABnzbd) "
+                "did not get configured. See the warnings/errors above for which one."
+            )
 
     if env.get("ENABLE_RECYCLARR", "0") == "1":
         from scripts.homelab_bootstrap import build_compose_command
