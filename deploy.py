@@ -419,7 +419,13 @@ def _deploy_one(
         # nothing above this point would otherwise notice a failed post-deploy step —
         # deploy.py would print its summary and exit 0 even though setup genuinely
         # failed. Check explicitly and propagate.
+        #
+        # The stack itself is up at this point (compose up --wait succeeded) — only
+        # post-deploy *configuration* failed. Write the shell helpers before bailing
+        # so the operator still gets the `<stack>` helper for the VM they now have to
+        # go debug on; returning early here would leave them without it.
         if tracker.failed:
+            _write_stack_functions(installed_dir, real_home, default_file)
             return False, []
 
     # Collect post-deploy actions to surface in the deploy summary
