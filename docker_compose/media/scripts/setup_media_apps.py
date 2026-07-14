@@ -279,7 +279,12 @@ def _bazarr_form_post(url: str, apikey: str,
 
 def _bazarr_get(url: str, apikey: str) -> dict | list | None:
     """GET JSON from Bazarr's API."""
-    full_url = f"{url}?apikey={apikey}"
+    # url may already carry a query string (e.g. _bazarr_list's start/length
+    # params) — a bare "?apikey=" there produces a second "?", which Bazarr
+    # rejects with 401 instead of a parse error, and callers treat that
+    # exactly like "no data" rather than "auth was malformed".
+    sep = "&" if "?" in url else "?"
+    full_url = f"{url}{sep}apikey={apikey}"
     req = urllib.request.Request(full_url)
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
@@ -1425,6 +1430,45 @@ def _setup_plex_connection(
         log.warning("Failed to add Plex notification connection to %s.", app_name)
 
 
+ANIME_SYNC_SCRIPT_PATH = "/config/scripts/anime-sync-touch.sh"
+
+
+def _setup_anime_sync_notification(sonarr_url: str, headers: dict) -> None:
+    """Wire Sonarr's onSeriesAdd event to the host-side anime-sync hook.
+
+    Points at a script installed by stack_config.py's bootstrap step (inside
+    Sonarr's own /config volume) that just touches a marker file — Sonarr
+    never gets Bazarr's API key, only a systemd .path unit on the host does.
+    See media-anime-sync.service/.path and sync_anime_only() below.
+    Idempotent: skips if already configured with the current script path.
+    """
+    url = f"{sonarr_url}/api/v3/notification"
+    existing = _api(url, headers) or []
+    for conn in existing:
+        if conn.get("implementation") == "CustomScript" and conn.get("name") == "Anime Auto-Sync":
+            path_field = next(
+                (f for f in conn.get("fields", []) if f.get("name") == "path"), None,
+            )
+            if path_field and path_field.get("value") == ANIME_SYNC_SCRIPT_PATH:
+                log.info("Sonarr anime auto-sync notification already configured.")
+                return
+            break  # exists but stale — fall through and recreate
+
+    payload = {
+        "implementation": "CustomScript",
+        "configContract": "CustomScriptSettings",
+        "name": "Anime Auto-Sync",
+        "onSeriesAdd": True,
+        "fields": [{"name": "path", "value": ANIME_SYNC_SCRIPT_PATH}],
+    }
+    result = _api(url, headers, method="POST", data=payload)
+    if result and result.get("id"):
+        log.info("Sonarr anime auto-sync notification added (onSeriesAdd → %s).",
+                  ANIME_SYNC_SCRIPT_PATH)
+    else:
+        log.warning("Failed to add Sonarr anime auto-sync notification.")
+
+
 def setup_plex_connect(
     sonarr_url: str,
     sonarr_key: str | None,
@@ -1815,6 +1859,7 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
         sonarr_headers = {"X-Api-Key": sonarr_key, "Content-Type": "application/json"}
         _configure_arr_indexers("Sonarr", "http://localhost:8989", sonarr_headers, env)
         _tag_anime_indexer_scoping("http://localhost:8989", sonarr_headers)
+        _setup_anime_sync_notification("http://localhost:8989", sonarr_headers)
     if radarr_key:
         _configure_arr_indexers(
             "Radarr", "http://localhost:7878",
@@ -1853,6 +1898,33 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
     return True
 
 
+def sync_anime_only(env: dict[str, str], script_dir: Path) -> bool:
+    """Re-tag indexers for anime scoping and reassign Bazarr language profiles.
+
+    Lightweight counterpart to setup(), for the onSeriesAdd hook
+    (media-anime-sync.service): a series added between deploys has no
+    indexer tags and sits on Bazarr's shared profile until one of these two
+    steps runs. Runs only that pair, skipping full app configuration.
+    """
+    config_base = resolve_config_base(env.get("CONFIG_ROOT", "./config"), script_dir)
+
+    sonarr_key = _read_api_key(config_base, "sonarr")
+    if not sonarr_key:
+        log.warning("Sonarr API key not found; skipping anime sync.")
+        return False
+    sonarr_headers = {"X-Api-Key": sonarr_key, "Content-Type": "application/json"}
+    _tag_anime_indexer_scoping("http://localhost:8989", sonarr_headers)
+
+    if env.get("ENABLE_BAZARR", "0") == "1":
+        bazarr_key = _read_bazarr_api_key(config_base)
+        if bazarr_key:
+            _bazarr_assign_profiles("http://localhost:6767", bazarr_key)
+        else:
+            log.warning("Bazarr enabled but API key not found; skipping Bazarr profile sync.")
+
+    return True
+
+
 def main() -> None:
     setup_logging()
     env_file = STACK_DIR / ".env"
@@ -1860,6 +1932,8 @@ def main() -> None:
         log.error("No .env found.")
         sys.exit(1)
     env = load_env(env_file)
+    if "--sync-anime-only" in sys.argv[1:]:
+        sys.exit(0 if sync_anime_only(env, STACK_DIR) else 1)
     setup(env, STACK_DIR)
 
 
