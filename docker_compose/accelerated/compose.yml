@@ -52,6 +52,34 @@ services:
     networks:
       - accelerated_internal
 
+  # --- Plex log shipper — makes Plex's FILE-based log visible to Loki/Grafana ---
+  # linuxserver/plex writes its real server log to a FILE inside /config
+  # ("Plex Media Server.log"); the plex container's own stdout carries only
+  # thumbnail/scanner noise. Alloy's Docker service-discovery ships container
+  # stdout/stderr ONLY, so without this sidecar Plex's actual logs never reach Loki
+  # and can't be correlated with the remote-streaming buffering incidents we chase in
+  # Grafana (see the plex-debug skill's grafana-incident-playbook).
+  #
+  # This ~4 MB busybox sidecar mounts the Plex Logs dir read-only and tails the active
+  # log to ITS OWN stdout; Alloy then ships it automatically, landing in Loki as
+  # service/container="plex-logs" (kept separate from the noisy plex stdout stream).
+  # `-F` (follow-by-name / keep-retrying) survives Plex's log rotation. The log file is
+  # world-readable, so no PUID/PGID is needed. Read-only mount = cannot touch Plex data.
+  plex-logs:
+    image: busybox:${BUSYBOX_TAG:-1.36.1}
+    container_name: plex-logs
+    command: ["tail", "-n", "0", "-F", "/logs/Plex Media Server.log"]
+    volumes:
+      - type: bind
+        source: ${CONFIG_ROOT:-./config}/plex/Library/Application Support/Plex Media Server/Logs
+        target: /logs
+        read_only: true
+    depends_on:
+      - plex
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
+
   # --- Immich database (Postgres) ---
   # Must use Immich's custom image: includes VectorChord + pgvector extensions required
   # for smart search and face recognition. Vanilla postgres:16-alpine will fail at startup.
