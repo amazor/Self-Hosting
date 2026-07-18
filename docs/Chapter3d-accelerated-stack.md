@@ -54,6 +54,7 @@ The Accelerated stack follows the same “one stack, one directory” pattern as
 | **setup_accelerated_apps.py** | Post-deploy automation: waits for Plex to be ready, applies TRaSH-recommended server settings, and creates library sections (Movies, TV Shows, Anime). Called automatically by `deploy.py`. |
 | **scripts/iperf3_test.py** | Print ready-to-paste iperf3 **client** commands (run from the remote end) and run a local sanity check that the iperf3 server is up. See [iperf3 (network testing)](#iperf3-network-testing). |
 | **compose.observability.yml** | Symlink to `docker_compose/common/compose.observability.yml`. Adds node_exporter, cAdvisor, Alloy sidecars, and the Plex metrics exporter when `ENABLE_OBSERVABILITY=1`. |
+| **compose.plex-logs.yml** | Optional overlay (also gated by `ENABLE_OBSERVABILITY=1`). Adds the tiny `plex-logs` busybox sidecar that tails Plex's file-based server log to stdout so Alloy ships it to Loki. See [VM identity and observability](#vm-identity-and-observability). |
 
 All paths in the stack are relative to the directory where you run `docker compose`
 (typically `docker_compose/accelerated` or a symlink like `~/accelerated`).
@@ -136,6 +137,14 @@ The iperf3 server runs 24/7 but is only reachable from the internet while you ma
 
 When observability is enabled, bootstrap generates an Alloy config that tags logs and metrics with consistent labels
 (`instance`, `host`, `vm_role`, `node`, `service`) so existing dashboards can target this VM cleanly.
+
+> **Plex logs → Loki.** Alloy ships every container's stdout/stderr, but `linuxserver/plex` writes its
+> real server log to a *file* (`Plex Media Server.log`) — its stdout is only thumbnail/scanner noise.
+> The `compose.plex-logs.yml` overlay (enabled with the same `ENABLE_OBSERVABILITY=1` toggle) runs a tiny
+> read-only `busybox` sidecar that tails that file to stdout, so Alloy picks it up and it lands in Loki as
+> `{service="plex-logs"}` — the stream to check in Grafana when correlating remote-streaming buffering.
+> Pin the sidecar image with the optional `BUSYBOX_TAG` var. Scope is the main log only; SSH in and
+> `docker logs`/read the other Plex log files in the container for rare deeper debugging.
 
 ---
 

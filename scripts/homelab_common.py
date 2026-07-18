@@ -619,6 +619,17 @@ loki.process "normalize" {{
     }}
   }}
 
+  // Plex (plex-logs sidecar): "Mon DD, YYYY HH:MM:SS.mmm [tid] LEVEL - message".
+  // Levels VERBOSE/DEBUG/INFO/WARN/ERROR/FATAL, anchored on "] LEVEL - " right after
+  // the [thread-id]. Scoped by selector, so it's a no-op on VMs without plex-logs.
+  // (verbose→trace is handled by the canonical map below.)
+  stage.match {{
+    selector = `{{service="plex-logs"}}`
+    stage.regex {{
+      expression = `\\] (?P<level>VERBOSE|DEBUG|INFO|WARN|ERROR|FATAL) - `
+    }}
+  }}
+
   // --- (3) Normalize "raw" level candidate into a single key: level_raw ---
   stage.template {{
     source   = "level_raw"
@@ -642,10 +653,11 @@ loki.process "normalize" {{
   }}
 
   // --- (5) Canonical mapping with safe default (never empty) ---
-  // Aliases: warning→warn, err→error, critical/panic→fatal, log/notice→info (Postgres)
+  // Aliases: warning→warn, err→error, critical/panic→fatal, log/notice→info (Postgres),
+  // verbose→trace (Plex).
   stage.template {{
     source   = "level"
-    template = `{{{{ if eq .level_raw "warning" }}}}warn{{{{ else if eq .level_raw "err" }}}}error{{{{ else if or (eq .level_raw "critical") (eq .level_raw "panic") }}}}fatal{{{{ else if or (eq .level_raw "log") (eq .level_raw "notice") }}}}info{{{{ else if or (eq .level_raw "trace") (eq .level_raw "debug") (eq .level_raw "info") (eq .level_raw "warn") (eq .level_raw "error") (eq .level_raw "fatal") }}}}{{{{ .level_raw }}}}{{{{ else }}}}unknown{{{{ end }}}}`
+    template = `{{{{ if eq .level_raw "warning" }}}}warn{{{{ else if eq .level_raw "err" }}}}error{{{{ else if or (eq .level_raw "critical") (eq .level_raw "panic") }}}}fatal{{{{ else if or (eq .level_raw "log") (eq .level_raw "notice") }}}}info{{{{ else if eq .level_raw "verbose" }}}}trace{{{{ else if or (eq .level_raw "trace") (eq .level_raw "debug") (eq .level_raw "info") (eq .level_raw "warn") (eq .level_raw "error") (eq .level_raw "fatal") }}}}{{{{ .level_raw }}}}{{{{ else }}}}unknown{{{{ end }}}}`
   }}
 
   // --- (6) Attach canonical level as a label (now always non-empty) ---

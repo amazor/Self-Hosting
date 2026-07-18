@@ -1,0 +1,39 @@
+# Plex log shipper — optional observability overlay for the accelerated stack
+#
+# Makes Plex's real, FILE-based server log visible in Loki/Grafana.
+# Enabled when ENABLE_OBSERVABILITY=1 (same toggle as the observability sidecars
+# and the Plex metrics exporter) — pure observability, so it stays out of the base
+# compose.yml and only runs when monitoring is wanted.
+#
+# Why this exists: linuxserver/plex writes its detailed server log to a FILE inside
+# /config ("Plex Media Server.log"); the plex container's own stdout carries only
+# thumbnail/scanner noise. Alloy's Docker service-discovery ships container
+# stdout/stderr ONLY, so without this sidecar Plex's actual logs never reach Loki and
+# can't be correlated with remote-streaming buffering incidents in Grafana (see the
+# plex-debug skill's grafana-incident-playbook).
+#
+# How: this ~4 MB busybox sidecar mounts the Plex Logs dir read-only and tails the
+# active log to ITS OWN stdout; Alloy then ships it automatically, landing in Loki as
+# service/container="plex-logs" (kept separate from the noisy plex stdout stream).
+# `-F` (follow-by-name / keep-retrying) survives Plex's log rotation. The log file is
+# world-readable, so no PUID/PGID is needed. Read-only mount = cannot touch Plex data.
+#
+# Scope is deliberately the MAIN log only. The other files in that dir (scanner,
+# transcoder-statistics, plugin, crash, tuner) are noise for streaming debugging; for
+# rare deeper digging, SSH in and `docker logs`/read them inside the plex container.
+
+services:
+  plex-logs:
+    image: busybox:${BUSYBOX_TAG:-1.36.1}
+    container_name: plex-logs
+    command: ["tail", "-n", "0", "-F", "/logs/Plex Media Server.log"]
+    volumes:
+      - type: bind
+        source: ${CONFIG_ROOT:-./config}/plex/Library/Application Support/Plex Media Server/Logs
+        target: /logs
+        read_only: true
+    depends_on:
+      - plex
+    restart: unless-stopped
+    networks:
+      - accelerated_internal
