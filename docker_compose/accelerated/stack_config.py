@@ -44,6 +44,7 @@ REQUIRED_VARS = [
 COMPOSE_OVERLAYS: list[tuple[str, str, str, str]] = [
     ("ENABLE_OBSERVABILITY", "compose.observability.yml", "1", "Observability"),
     ("ENABLE_OBSERVABILITY", "compose.plex-exporter.yml", "1", "Plex exporter"),
+    ("ENABLE_OBSERVABILITY", "compose.plex-logs.yml", "1", "Plex log shipper"),
 ]
 
 POST_DEPLOY_ACTIONS = [
