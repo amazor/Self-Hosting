@@ -243,10 +243,29 @@ def ensure_nfs_mount(
     Idempotent: updates existing fstab entries if options differ.
     """
     rw = "ro" if read_only else "rw"
+    # Read-write mounts use `hard`; read-only mounts use `soft`.
+    #
+    # `hard` retries an NFS op until the server answers instead of failing with
+    # EIO on a timeout. For a RW mount that qBittorrent/SABnzbd/*arr hammer, that
+    # matters: a `soft` mount can return EIO mid-write and leave silently partial
+    # data, because the client gives up without knowing how much the server
+    # applied. Observed in practice — deleting a 45 GB file over the `soft` RW
+    # mount returned "Input/output error" even though the delete had actually
+    # succeeded on the NAS; an *arr running that delete would treat the EIO as
+    # failure and orphan the file. `hard` waits for the slow op to finish instead.
+    #
+    # Read-only mounts (e.g. Plex's library view) stay `soft`: no write to
+    # corrupt, and returning EIO on a scan-time NFS blip is *preferable* to a
+    # blocked scanner — Plex does not purge library items on an I/O error, only
+    # on a clean "file not found", so `soft` avoids false-trashing during a blip.
+    #
+    # `hard` does NOT risk hanging boot: nofail + _netdev + the wait-for-nas
+    # ordering below keep startup bounded whether or not the NAS is reachable.
+    reliability = "soft" if read_only else "hard"
     fstab_spec = f"{host}:{export}"
     fstab_line = (
         f"{fstab_spec}\t{mount_point}\tnfs\t"
-        f"nofail,_netdev,vers=3,soft,timeo=50,retrans=3,{rw}\t0\t0"
+        f"nofail,_netdev,vers=3,{reliability},timeo=50,retrans=3,{rw}\t0\t0"
     )
 
     fstab = Path("/etc/fstab")
