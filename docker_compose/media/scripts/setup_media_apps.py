@@ -42,6 +42,7 @@ HEALTH_POLL_S = 5
 # it. An explicitly empty value in .env remains the opt-out.
 DEFAULT_SAB_BANDWIDTH_MAX = "25M"      # bytes/sec -> 25 MB/s (~200 Mbps)
 DEFAULT_QBIT_UPLOAD_MBPS = "5"         # decimal Mbps -> 625000 bytes/s
+DEFAULT_ARR_RECYCLE_BIN = "/data/.recyclebin"
 
 # ---------------------------------------------------------------------------
 # Public torrent indexers to add to Prowlarr.
@@ -201,6 +202,10 @@ MEDIA_MANAGEMENT: dict[str, object] = {
     "enableMediaInfo": True,
     "downloadPropersAndRepacks": "doNotPrefer",
     "deleteEmptyFolders": True,
+    # Days a replaced file survives in the recycle bin (see ARR_RECYCLE_BIN).
+    # Pinned rather than left to the default so retention is deliberate — this
+    # is the only undo for an unwanted upgrade.
+    "recycleBinCleanupDays": 7,
 }
 
 # Defaults for torrent indexer health settings.
@@ -887,7 +892,7 @@ def _setup_naming(app_name: str, base_url: str, headers: dict,
 
 
 def _setup_media_management(app_name: str, base_url: str,
-                            headers: dict) -> None:
+                            headers: dict, env: dict[str, str]) -> None:
     """Configure media management settings per TRaSH guide."""
     url = f"{base_url}/api/v3/config/mediamanagement"
     current = _api(url, headers)
@@ -895,11 +900,17 @@ def _setup_media_management(app_name: str, base_url: str,
         log.warning("Could not read %s media management config.", app_name)
         return
     current.update(MEDIA_MANAGEMENT)
+    # Recycle bin: without it, a quality upgrade hard-deletes the previous file
+    # with no undo. Kept in .env rather than MEDIA_MANAGEMENT because it is a
+    # path, and paths are deployment-specific.
+    recycle_bin = env.get("ARR_RECYCLE_BIN", DEFAULT_ARR_RECYCLE_BIN).strip()
+    current["recycleBin"] = recycle_bin
     result = _api(url, headers, method="PUT", data=current)
     if result is not None:
         log.info(
-            "%s media management updated (hardlinks, media info, extras).",
-            app_name,
+            "%s media management updated (hardlinks, media info, extras; "
+            "recycle bin %s).",
+            app_name, recycle_bin or "DISABLED — upgrades hard-delete",
         )
     else:
         log.warning("Failed to update %s media management config.", app_name)
@@ -1183,7 +1194,7 @@ def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
     if not _wait_for_service("Sonarr", f"{sonarr_url}/api/v3/health", headers):
         return False
     _setup_naming("Sonarr", sonarr_url, headers, SONARR_NAMING)
-    _setup_media_management("Sonarr", sonarr_url, headers)
+    _setup_media_management("Sonarr", sonarr_url, headers, env)
     _setup_root_folders("Sonarr", sonarr_url, headers, SONARR_ROOT_FOLDERS)
     qbit_priority = 2 if sabnzbd_api_key else 1
     _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env, qbit_priority)
@@ -1207,7 +1218,7 @@ def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
     if not _wait_for_service("Radarr", f"{radarr_url}/api/v3/health", headers):
         return False
     _setup_naming("Radarr", radarr_url, headers, RADARR_NAMING)
-    _setup_media_management("Radarr", radarr_url, headers)
+    _setup_media_management("Radarr", radarr_url, headers, env)
     _setup_root_folders("Radarr", radarr_url, headers, RADARR_ROOT_FOLDERS)
     qbit_priority = 2 if sabnzbd_api_key else 1
     _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env, qbit_priority)
