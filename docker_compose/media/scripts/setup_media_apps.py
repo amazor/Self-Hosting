@@ -128,6 +128,19 @@ QBIT_CATEGORIES = {
     "anime": "completed/anime",
 }
 
+# Post-import categories: Sonarr/Radarr move a torrent here the moment it
+# successfully imports (movieImportedCategory/tvImportedCategory below), and
+# will not remove torrents in this category themselves. This is the safety
+# gate for Cleanuparr's Download Cleaner seeding rules (see
+# _print_cleanuparr_instructions) - only a torrent Sonarr/Radarr has
+# confirmed importing ever lands here, so ratio/seed-time cleanup can never
+# race an import. No dedicated save path: category change alone doesn't move
+# files (Auto Torrent Management is off), it's purely a routing label.
+QBIT_IMPORTED_CATEGORIES = {
+    "tv-imported": "",
+    "movies-imported": "",
+}
+
 # ---------------------------------------------------------------------------
 # Sonarr / Radarr / Prowlarr configuration
 # Root folders, download clients (qBittorrent), TRaSH naming, app sync.
@@ -679,29 +692,11 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         "anonymous_mode": False,    # worse speeds; issues with private trackers
         # --- Seeding ---
         # No private trackers in use (checked tracker list: opentrackr, dler.org,
-        # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public),
-        # so a global ratio/time cap is safe.
-        #
-        # act MUST be 0 (pause), not 3 (remove torrent + files). Sonarr/Radarr
-        # validate the download client on every save and reject it outright
-        # when qBittorrent is set to remove at the ratio limit:
-        #   HTTP 400 "qBittorrent is configured to remove torrents when they
-        #   reach their Share Ratio Limit" / "unable to perform Completed
-        #   Download Handling as configured"
-        # That 400 blocked EVERY download-client write — priority,
-        # removeCompletedDownloads, and the SABnzbd API-key rotation refresh
-        # (a stale key makes every grab fail auth, with nothing in the logs).
-        #
-        # Disk reclaim after pausing is NOT fully covered by this repo yet.
-        # Sonarr/Radarr remove completed downloads once their seeding goal is
-        # met, which handles the common case. Cleanuparr is the backstop, but
-        # its live seeding rule is scoped to the tv-imported/movies-imported
-        # categories and nothing here sets them — the create path explicitly
-        # skips imported fields. On a fresh rebuild that rule therefore matches
-        # nothing. PR #28 closes this by setting the imported categories; until
-        # it lands, the backstop only exists on hosts where it was applied by
-        # hand. Evidence it matters: a torrent left in plain "tv" was still
-        # seeding 26 days later, outside the rule's scope.
+        # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public).
+        # act=0 pauses (not act=3/remove+files): a global ratio/time timer can't
+        # know whether Sonarr/Radarr has imported yet, so it races imports.
+        # Actual disk reclaim is category-gated via Cleanuparr instead - see
+        # "Post-import cleanup design" in docs/Chapter3c-media-stack.md.
         "max_ratio_enabled": True,
         "max_ratio": 1,
         "max_ratio_act": 0,
@@ -737,7 +732,8 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         pass
 
     # Create categories
-    for cat_name, save_path in QBIT_CATEGORIES.items():
+    all_categories = {**QBIT_CATEGORIES, **QBIT_IMPORTED_CATEGORIES}
+    for cat_name, save_path in all_categories.items():
         if cat_name in existing_cats:
             continue
         try:
@@ -754,7 +750,7 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
 
     log.info(
         "qBittorrent categories configured: %s.",
-        ", ".join(QBIT_CATEGORIES.keys()),
+        ", ".join(all_categories.keys()),
     )
     return True
 
@@ -952,9 +948,16 @@ def _setup_root_folders(app_name: str, base_url: str, headers: dict,
 
 
 def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
-                                category: str, env: dict[str, str],
+                                category: str, imported_category: str,
+                                env: dict[str, str],
                                 priority: int = 1) -> None:
-    """Add qBittorrent download client via schema (idempotent)."""
+    """Add qBittorrent download client via schema (idempotent).
+
+    imported_category is the post-import routing category (see
+    QBIT_IMPORTED_CATEGORIES) - the safety gate that lets Cleanuparr's
+    Download Cleaner reclaim disk space without racing an import. Details:
+    docs/Chapter3c-media-stack.md, "Post-import cleanup design".
+    """
     url = f"{base_url}/api/v3/downloadclient"
     existing = _api(url, headers)
     if existing:
@@ -968,6 +971,12 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
                 if dc.get("priority", 1) != priority:
                     dc["priority"] = priority
                     changed = True
+                for field in dc.get("fields", []):
+                    name = field.get("name", "")
+                    if "category" in name.lower() and "imported" in name.lower():
+                        if field.get("value") != imported_category:
+                            field["value"] = imported_category
+                            changed = True
                 if changed:
                     if _api(f"{url}/{dc['id']}", headers,
                             method="PUT", data=dc) is not None:
@@ -1021,14 +1030,16 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
         name = field.get("name", "")
         if name in field_overrides:
             field["value"] = field_overrides[name]
-        elif "category" in name.lower() and "imported" not in name.lower():
+        elif "category" in name.lower() and "imported" in name.lower():
+            field["value"] = imported_category
+        elif "category" in name.lower():
             field["value"] = category
 
     result = _api(url, headers, method="POST", data=schema)
     if result and result.get("id"):
         log.info(
-            "%s qBittorrent download client added (category=%s, priority=%d).",
-            app_name, category, priority,
+            "%s qBittorrent download client added (category=%s, imported=%s, priority=%d).",
+            app_name, category, imported_category, priority,
         )
     else:
         log.warning("Failed to add qBittorrent download client to %s.", app_name)
@@ -1224,7 +1235,7 @@ def setup_sonarr(sonarr_url: str, api_key: str, env: dict[str, str],
     _setup_media_management("Sonarr", sonarr_url, headers)
     _setup_root_folders("Sonarr", sonarr_url, headers, SONARR_ROOT_FOLDERS)
     qbit_priority = 2 if sabnzbd_api_key else 1
-    _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", env, qbit_priority)
+    _setup_download_client_qbit("Sonarr", sonarr_url, headers, "tv", "tv-imported", env, qbit_priority)
     if sabnzbd_api_key:
         _setup_download_client_sabnzbd("Sonarr", sonarr_url, headers, "tv", sabnzbd_api_key, 1)
         # Only touch the delay profile when Usenet is actually available — otherwise
@@ -1248,7 +1259,7 @@ def setup_radarr(radarr_url: str, api_key: str, env: dict[str, str],
     _setup_media_management("Radarr", radarr_url, headers)
     _setup_root_folders("Radarr", radarr_url, headers, RADARR_ROOT_FOLDERS)
     qbit_priority = 2 if sabnzbd_api_key else 1
-    _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", env, qbit_priority)
+    _setup_download_client_qbit("Radarr", radarr_url, headers, "movies", "movies-imported", env, qbit_priority)
     if sabnzbd_api_key:
         _setup_download_client_sabnzbd("Radarr", radarr_url, headers, "movies", sabnzbd_api_key, 1)
         # See Sonarr above: delay profile is what makes Usenet actually win over torrents.
@@ -1729,6 +1740,28 @@ def _print_cleanuparr_instructions(config_base: Path,
     log.info("     Recommended: start with defaults, tune thresholds later.")
     log.info("")
     step += 1
+    log.info("  %d. Enable Download Cleaner (Settings > Download Cleaner) and add a"
+              " seeding rule", step)
+    log.info("     scoped to categories [tv-imported, movies-imported] only"
+              " (ratio 1.0 / min")
+    log.info("     seed time 24h / max seed time 168h / delete source files)."
+              " qBittorrent's")
+    log.info("     own ratio limit now only pauses (never deletes); Sonarr/Radarr"
+              " move a")
+    log.info("     torrent into the *-imported category the moment it confirms"
+              " import, so")
+    log.info("     scoping the rule to that category is what keeps cleanup from"
+              " racing an")
+    log.info("     import (Cleanuparr does NOT check hardlinks itself - see"
+              " docs/Chapter3c-")
+    log.info("     media-stack.md, 'Post-import cleanup design').")
+    log.info("")
+    log.info("     Tip: set CLEANUPARR_API_KEY in .env (Account Settings > API Key"
+              " in the")
+    log.info("     Cleanuparr UI) and re-run deploy - this step then configures"
+              " itself.")
+    log.info("")
+    step += 1
     log.info("  %d. Enable Malware Blocker (Settings > Malware Blocker).", step)
     log.info("     Add official blocklists for Sonarr and Radarr:")
     log.info("       https://cleanuparr.pages.dev/static/blacklist")
@@ -1740,6 +1773,164 @@ def _print_cleanuparr_instructions(config_base: Path,
     log.info("     Auto-searches for replacements after removing bad downloads.")
     log.info("=" * 64)
     log.info("")
+
+
+CLEANUPARR_SEEDING_RULE_NAME = "post-import cleanup (24h+ratio1)"
+
+# Strikes before Cleanuparr removes a stuck failed-import. At the default 5-min
+# queue-cleaner cadence this is ~25 min of grace, enough for a transient import
+# to resolve itself but short enough that genuinely-stuck items don't linger.
+CLEANUPARR_FAILED_IMPORT_STRIKES = 5
+
+
+def setup_cleanuparr_queue_cleaner(cleanuparr_url: str, api_key: str) -> None:
+    """Enable Cleanuparr's Queue Cleaner failed-import handling via the REST API.
+
+    Sonarr/Radarr keep downloads that fail to import (season packs that unpack
+    to episodes already owned, releases they will only match to a series by ID
+    and so refuse to auto-import) sitting in the queue as completed+warning
+    forever. Nothing else clears them, so the queue accretes stuck items
+    indefinitely — the qBittorrent seeding rule this PR adds only ever sees a
+    torrent that imported cleanly.
+
+    Enabling failed-import handling makes Cleanuparr strike such an item every
+    run and, after maxStrikes, remove it from the queue + download client,
+    blocklist the release, and trigger a re-search — so genuinely-missing
+    episodes get re-requested and already-owned duplicates simply clear.
+
+    patternMode MUST be "Exclude": "Include" with an empty pattern list is
+    rejected by Cleanuparr's own validation ("At least one pattern must be
+    specified") and would mean "match nothing" regardless. "Exclude" with no
+    patterns is "act on every failed import", which is what we want.
+
+    The GET returns the queue-cleaner's slow/stall rules as empty arrays but the
+    server preserves them across this PUT (verified live), so the
+    read-modify-write below does not clobber them.
+    """
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+    config = _api(f"{cleanuparr_url}/api/configuration/queue_cleaner", headers)
+    if not config:
+        log.warning(
+            "Could not reach Cleanuparr API (check CLEANUPARR_API_KEY); "
+            "skipping Queue Cleaner automation."
+        )
+        return
+
+    failed_import = config.get("failedImport") or {}
+    if (failed_import.get("maxStrikes") == CLEANUPARR_FAILED_IMPORT_STRIKES
+            and failed_import.get("patternMode") == "Exclude"):
+        log.info("Cleanuparr failed-import handling already configured.")
+        return
+
+    failed_import["maxStrikes"] = CLEANUPARR_FAILED_IMPORT_STRIKES
+    failed_import["patternMode"] = "Exclude"   # act on ALL failed imports
+    failed_import["patterns"] = []
+    config["failedImport"] = failed_import
+    if _api(f"{cleanuparr_url}/api/configuration/queue_cleaner", headers,
+            method="PUT", data=config) is not None:
+        log.info(
+            "Cleanuparr failed-import handling enabled (maxStrikes=%d) — stuck "
+            "imports now auto-clear and re-search.",
+            CLEANUPARR_FAILED_IMPORT_STRIKES,
+        )
+    else:
+        log.warning("Failed to enable Cleanuparr failed-import handling.")
+
+
+def setup_cleanuparr_download_cleaner(cleanuparr_url: str, api_key: str) -> None:
+    """Enable Cleanuparr's Download Cleaner and ensure the post-import seeding
+    rule exists (idempotent), via Cleanuparr's REST API.
+
+    Requires the qBittorrent connection to already be registered in
+    Cleanuparr - that first-time connection setup still has no API and
+    needs the one-time UI step (see _print_cleanuparr_instructions). Once
+    that's done and CLEANUPARR_API_KEY is set in .env, this closes the loop.
+    Design rationale: docs/Chapter3c-media-stack.md, "Post-import cleanup
+    design".
+    """
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+    config = _api(f"{cleanuparr_url}/api/configuration/download_cleaner", headers)
+    if not config:
+        log.warning(
+            "Could not reach Cleanuparr API (check CLEANUPARR_API_KEY); "
+            "skipping Download Cleaner automation."
+        )
+        return
+
+    qbit_client = next(
+        (c for c in config.get("clients", [])
+         if c.get("downloadClientTypeName") == "qBittorrent"),
+        None,
+    )
+    if qbit_client is None:
+        log.warning(
+            "No qBittorrent connection found in Cleanuparr yet - add it via "
+            "the UI first (see instructions above), then redeploy."
+        )
+        return
+
+    if not config.get("enabled"):
+        if _api(
+            f"{cleanuparr_url}/api/configuration/download_cleaner", headers,
+            method="PUT",
+            data={
+                "Enabled": True,
+                "CronExpression": config.get("cronExpression") or "0 0 * * * ?",
+                "UseAdvancedScheduling": config.get("useAdvancedScheduling", False),
+                "IgnoredDownloads": config.get("ignoredDownloads", []),
+            },
+        ) is not None:
+            log.info("Cleanuparr Download Cleaner enabled.")
+        else:
+            log.warning("Failed to enable Cleanuparr Download Cleaner.")
+
+    target_categories = sorted(QBIT_IMPORTED_CATEGORIES.keys())
+    rule_body = {
+        "Name": CLEANUPARR_SEEDING_RULE_NAME,
+        "Categories": target_categories,
+        "TrackerPatterns": [],
+        "TagsAny": [],
+        "TagsAll": [],
+        "PrivacyType": "Both",
+        "MaxRatio": 1.0,
+        "MinSeedTime": 24,
+        "MaxSeedTime": 168,
+        "MinSeeders": 0,
+        "DeleteSourceFiles": True,
+    }
+    existing_rule = next(
+        (r for r in qbit_client.get("seedingRules", [])
+         if r.get("name") == CLEANUPARR_SEEDING_RULE_NAME),
+        None,
+    )
+    client_id = qbit_client.get("downloadClientId")
+    if existing_rule is None:
+        if _api(f"{cleanuparr_url}/api/seeding-rules/{client_id}", headers,
+                method="POST", data=rule_body) is not None:
+            log.info(
+                "Cleanuparr seeding rule '%s' created (categories=%s).",
+                CLEANUPARR_SEEDING_RULE_NAME, target_categories,
+            )
+        else:
+            log.warning("Failed to create Cleanuparr seeding rule.")
+        return
+
+    needs_update = (
+        sorted(existing_rule.get("categories", [])) != target_categories
+        or existing_rule.get("maxRatio") != rule_body["MaxRatio"]
+        or existing_rule.get("minSeedTime") != rule_body["MinSeedTime"]
+        or existing_rule.get("maxSeedTime") != rule_body["MaxSeedTime"]
+        or not existing_rule.get("deleteSourceFiles")
+    )
+    if not needs_update:
+        log.info("Cleanuparr seeding rule '%s' already configured.", CLEANUPARR_SEEDING_RULE_NAME)
+        return
+
+    if _api(f"{cleanuparr_url}/api/seeding-rules/{existing_rule['id']}", headers,
+            method="PUT", data=rule_body) is not None:
+        log.info("Cleanuparr seeding rule '%s' updated.", CLEANUPARR_SEEDING_RULE_NAME)
+    else:
+        log.warning("Failed to update Cleanuparr seeding rule.")
 
 
 # ---------------------------------------------------------------------------
@@ -2112,6 +2303,10 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
 
     if env.get("ENABLE_CLEANUPARR", "0") == "1":
         _print_cleanuparr_instructions(config_base, env)
+        cleanuparr_key = env.get("CLEANUPARR_API_KEY", "").strip()
+        if cleanuparr_key:
+            setup_cleanuparr_download_cleaner("http://localhost:11011", cleanuparr_key)
+            setup_cleanuparr_queue_cleaner("http://localhost:11011", cleanuparr_key)
 
     if fatal:
         log.error(
