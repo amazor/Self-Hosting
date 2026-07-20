@@ -692,9 +692,16 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         # removeCompletedDownloads, and the SABnzbd API-key rotation refresh
         # (a stale key makes every grab fail auth, with nothing in the logs).
         #
-        # Pausing does not leak disk space here: Cleanuparr's download cleaner
-        # owns removal. If Cleanuparr is ever disabled, seeded torrents will
-        # accumulate — re-check that before assuming this is still safe.
+        # Disk reclaim after pausing is NOT fully covered by this repo yet.
+        # Sonarr/Radarr remove completed downloads once their seeding goal is
+        # met, which handles the common case. Cleanuparr is the backstop, but
+        # its live seeding rule is scoped to the tv-imported/movies-imported
+        # categories and nothing here sets them — the create path explicitly
+        # skips imported fields. On a fresh rebuild that rule therefore matches
+        # nothing. PR #28 closes this by setting the imported categories; until
+        # it lands, the backstop only exists on hosts where it was applied by
+        # hand. Evidence it matters: a torrent left in plain "tv" was still
+        # seeding 26 days later, outside the rule's scope.
         "max_ratio_enabled": True,
         "max_ratio": 1,
         "max_ratio_act": 0,
