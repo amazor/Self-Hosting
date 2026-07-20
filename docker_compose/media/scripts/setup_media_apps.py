@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import socket
+import sqlite3
 import sys
 import time
 import urllib.error
@@ -1633,6 +1634,32 @@ def _detect_lan_ip() -> str:
         return "<vm-ip>"
 
 
+def _cleanuparr_is_configured(config_base: Path) -> bool:
+    """True if Cleanuparr already has *arr connections in its SQLite db.
+
+    Cleanuparr has no API to query, so read its db directly. Anything
+    unexpected (missing file, schema change, locked db) is treated as
+    "not configured" — printing the setup banner one extra time is a much
+    cheaper failure than hiding it from someone who genuinely needs it.
+    """
+    db = config_base / "cleanuparr" / "cleanuparr.db"
+    if not db.is_file():
+        return False
+    conn = None
+    try:
+        # Read-only URI so a concurrent Cleanuparr write can't be disturbed.
+        # sqlite3's context manager commits, it does not close — hence finally.
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        row = conn.execute("SELECT COUNT(*) FROM arr_instances").fetchone()
+        return bool(row and row[0] > 0)
+    except sqlite3.Error as exc:
+        log.debug("Cleanuparr db check failed (%s); assuming unconfigured.", exc)
+        return False
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def _print_cleanuparr_instructions(config_base: Path,
                                    env: dict[str, str]) -> None:
     """Print connection details for Cleanuparr's web UI setup.
@@ -1640,11 +1667,18 @@ def _print_cleanuparr_instructions(config_base: Path,
     Cleanuparr stores config in SQLite and has no public API for adding
     connections programmatically.  Instead, print the exact values so the
     user can paste them into the UI in under a minute.
+
+    Skipped once Cleanuparr is configured: printing a "setup required"
+    banner on every deploy trains people to ignore it, and it dumps
+    credentials into the deploy log every time for no reason.
     """
+    if _cleanuparr_is_configured(config_base):
+        log.info("Cleanuparr already configured (*arr connections present).")
+        return
+
     sonarr_key = _read_api_key(config_base, "sonarr") or "<check config/sonarr/config.xml>"
     radarr_key = _read_api_key(config_base, "radarr") or "<check config/radarr/config.xml>"
     qbit_user = env.get("QBITTORRENT_USERNAME", "admin")
-    qbit_pass = env.get("QBITTORRENT_PASSWORD", "adminadmin")
     usenet_enabled = env.get("ENABLE_SABNZBD", "0") == "1"
     sabnzbd_key = _read_sabnzbd_api_key(config_base) if usenet_enabled else None
     vm_ip = _detect_lan_ip()
@@ -1671,7 +1705,10 @@ def _print_cleanuparr_instructions(config_base: Path,
     log.info("  %d. Add qBittorrent download client:", step)
     log.info("       Host: http://vpn:8080")
     log.info("       Username: %s", qbit_user)
-    log.info("       Password: %s", qbit_pass)
+    # Deliberately not echoed: unlike the *arr API keys this is a reusable
+    # human credential, and deploy output gets scrolled, pasted and shipped
+    # to Loki.
+    log.info("       Password: <QBITTORRENT_PASSWORD in docker_compose/media/.env>")
     log.info("")
     if usenet_enabled:
         step += 1
