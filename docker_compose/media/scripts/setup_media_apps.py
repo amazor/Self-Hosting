@@ -959,12 +959,19 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
                     dc["priority"] = priority
                     changed = True
                 if changed:
-                    _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
-                    log.info(
-                        "%s qBittorrent download client updated "
-                        "(priority=%d, remove completed/failed).",
-                        app_name, priority,
-                    )
+                    if _api(f"{url}/{dc['id']}", headers,
+                            method="PUT", data=dc) is not None:
+                        log.info(
+                            "%s qBittorrent download client updated "
+                            "(priority=%d, remove completed/failed).",
+                            app_name, priority,
+                        )
+                    else:
+                        log.warning(
+                            "%s qBittorrent download client update FAILED "
+                            "(wanted priority=%d); settings remain as-is.",
+                            app_name, priority,
+                        )
                 else:
                     log.info(
                         "%s qBittorrent download client already configured.",
@@ -1058,14 +1065,24 @@ def _setup_download_client_sabnzbd(
                     if field.get("name") == "apiKey" and field.get("value") != sabnzbd_api_key:
                         field["value"] = sabnzbd_api_key
                         changed = True
-                        log.info("%s SABnzbd API key refreshed (key had rotated).", app_name)
+                        # Stated as intent, not outcome: the PUT below is what
+                        # actually persists it, and it can fail.
+                        log.info("%s SABnzbd API key had rotated; updating.", app_name)
                 if changed:
-                    _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
-                    log.info(
-                        "%s SABnzbd download client updated "
-                        "(priority=%d, remove completed/failed).",
-                        app_name, priority,
-                    )
+                    if _api(f"{url}/{dc['id']}", headers,
+                            method="PUT", data=dc) is not None:
+                        log.info(
+                            "%s SABnzbd download client updated "
+                            "(priority=%d, remove completed/failed).",
+                            app_name, priority,
+                        )
+                    else:
+                        log.warning(
+                            "%s SABnzbd download client update FAILED "
+                            "(wanted priority=%d). If the API key had rotated "
+                            "it is still stale, and every grab will fail auth.",
+                            app_name, priority,
+                        )
                 else:
                     log.info(
                         "%s SABnzbd download client already configured.",
