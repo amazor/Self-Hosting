@@ -141,25 +141,6 @@ def _validate_media_env(
             except (PermissionError, LookupError):
                 pass
 
-    # Sonarr/Radarr recycle bin. The *arrs will not create this themselves and
-    # log an error mid-import if it is missing, so the first quality upgrade
-    # after enabling it would fail rather than degrade to a plain delete.
-    # ARR_RECYCLE_BIN is a container path under /data; map it back to the host.
-    recycle_bin = env.get("ARR_RECYCLE_BIN", "/data/.recyclebin").strip()
-    if recycle_bin.startswith("/data/"):
-        target = media_root / recycle_bin[len("/data/"):]
-        if not target.is_dir():
-            target.mkdir(parents=True, exist_ok=True)
-            try:
-                shutil.chown(target, user=real_user)
-            except (PermissionError, LookupError):
-                pass
-    elif recycle_bin:
-        tracker.warn(
-            f"ARR_RECYCLE_BIN={recycle_bin} is not under /data; the *arrs "
-            "cannot see it and upgrades will keep hard-deleting"
-        )
-
     # Compose guardrails
     compose_file = SCRIPT_DIR / "compose.yml"
     if not args.force and compose_file.is_file():
