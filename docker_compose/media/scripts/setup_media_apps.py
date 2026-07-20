@@ -679,11 +679,24 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         # --- Seeding ---
         # No private trackers in use (checked tracker list: opentrackr, dler.org,
         # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public),
-        # so a global ratio/time cap is safe. act=3 removes torrent + files, so
-        # disk space is actually reclaimed instead of just pausing indefinitely.
+        # so a global ratio/time cap is safe.
+        #
+        # act MUST be 0 (pause), not 3 (remove torrent + files). Sonarr/Radarr
+        # validate the download client on every save and reject it outright
+        # when qBittorrent is set to remove at the ratio limit:
+        #   HTTP 400 "qBittorrent is configured to remove torrents when they
+        #   reach their Share Ratio Limit" / "unable to perform Completed
+        #   Download Handling as configured"
+        # That 400 blocked EVERY download-client write — priority,
+        # removeCompletedDownloads, and the SABnzbd API-key rotation refresh
+        # (a stale key makes every grab fail auth, with nothing in the logs).
+        #
+        # Pausing does not leak disk space here: Cleanuparr's download cleaner
+        # owns removal. If Cleanuparr is ever disabled, seeded torrents will
+        # accumulate — re-check that before assuming this is still safe.
         "max_ratio_enabled": True,
         "max_ratio": 1,
-        "max_ratio_act": 3,
+        "max_ratio_act": 0,
         "max_seeding_time_enabled": True,
         "max_seeding_time": 1440,
         "max_inactive_seeding_time_enabled": True,
