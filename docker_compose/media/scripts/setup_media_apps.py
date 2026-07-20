@@ -35,6 +35,14 @@ from scripts.homelab_common import load_env, log, resolve_config_base, setup_log
 HEALTH_TIMEOUT_S = 90
 HEALTH_POLL_S = 5
 
+# Fallbacks for settings introduced after the initial deploy. These MUST match
+# the values in .env.example: a live .env is a copy taken when the stack was
+# first set up and will not contain keys added later, so a fallback of "off"
+# would make the setting a silent no-op on exactly the deployments that need
+# it. An explicitly empty value in .env remains the opt-out.
+DEFAULT_SAB_BANDWIDTH_MAX = "25M"      # bytes/sec -> 25 MB/s (~200 Mbps)
+DEFAULT_QBIT_UPLOAD_MBPS = "5"         # decimal Mbps -> 625000 bytes/s
+
 # ---------------------------------------------------------------------------
 # Public torrent indexers to add to Prowlarr.
 # "name" must match Prowlarr's built-in indexer definition name exactly.
@@ -565,6 +573,35 @@ def setup_prowlarr_usenet_indexers(
 # ---------------------------------------------------------------------------
 
 
+def _qbit_upload_limit_bytes(env: dict[str, str]) -> int:
+    """Global upload cap for qBittorrent, converted from Mbps to bytes/s.
+
+    The setting is expressed in Mbps because that is the unit the WAN link is
+    reasoned about in — qBittorrent's own UI uses KiB/s, and having to convert
+    between the two is how you end up off by 8x. Mbps here is decimal (1 Mbps
+    = 1e6 bits/s), matching how ISPs quote line rates.
+
+    qBittorrent's up_limit is bytes/s and treats <= 0 as unlimited.
+
+    Unset falls back to the documented default so that a deployment whose .env
+    predates this setting still gets capped; an explicitly EMPTY value is the
+    opt-out. A typo also yields unlimited — qBittorrent's own default is a
+    safer landing spot than throttling seeding to an arbitrary crawl.
+    """
+    raw = env.get("QBITTORRENT_UPLOAD_LIMIT_MBPS", DEFAULT_QBIT_UPLOAD_MBPS).strip()
+    if not raw:
+        return 0
+    try:
+        mbps = float(raw)
+    except ValueError:
+        log.warning(
+            "QBITTORRENT_UPLOAD_LIMIT_MBPS=%r is not a number; "
+            "leaving upload unlimited.", raw,
+        )
+        return 0
+    return int(mbps * 1_000_000 / 8) if mbps > 0 else 0
+
+
 def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
     """Configure qBittorrent categories and settings per TRaSH guide.
 
@@ -628,6 +665,11 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         "limit_utp_rate": True,     # prevent uTP flood
         "limit_tcp_overhead": False, # don't count overhead against limits
         "limit_lan_peers": True,
+        # Upload is the scarce direction on an asymmetric residential line, and
+        # it is the one Plex needs to serve remote streams. Uncapped seeding
+        # starves playback long before it saturates the downstream.
+        # qBittorrent wants bytes/s here; the .env value is KiB/s.
+        "up_limit": _qbit_upload_limit_bytes(env),
         "max_active_downloads": 5,
         "max_active_uploads": 5,
         "max_active_torrents": 10,
@@ -767,6 +809,27 @@ def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> b
             "SABnzbd: no servers configured. Add your Usenet provider "
             "in the SABnzbd UI or set USENET_SERVER_* in .env and re-deploy."
         )
+
+    # Download rate cap. This is the path that reaches an EXISTING deployment:
+    # the bootstrap's ini seed returns early once sabnzbd.ini exists, so a
+    # template-only change would silently never apply to a live box.
+    #
+    # bandwidth_max is BYTES/sec — "25M" is 25 MB/s (~200 Mbps), not 25 Mb/s.
+    # SABnzbd downloads at bandwidth_perc% of it; that stays at its 100 default.
+    desired_bw = env.get("SABNZBD_BANDWIDTH_MAX", DEFAULT_SAB_BANDWIDTH_MAX).strip()
+    current_bw = str(sab_config.get("misc", {}).get("bandwidth_max", "")).strip()
+    if current_bw == desired_bw:
+        log.info("SABnzbd: download cap already %s.", desired_bw or "unlimited")
+    elif _sabnzbd_api(
+        sabnzbd_url, api_key, "set_config",
+        {"section": "misc", "keyword": "bandwidth_max", "value": desired_bw},
+    ):
+        log.info(
+            "SABnzbd: download cap set to %s (was %s).",
+            desired_bw or "unlimited", current_bw or "unlimited",
+        )
+    else:
+        log.warning("Failed to set SABnzbd download cap to %s.", desired_bw)
 
     existing_cats = {
         c.get("name", "").lower() for c in sab_config.get("categories", [])
