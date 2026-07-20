@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import socket
+import sqlite3
 import sys
 import time
 import urllib.error
@@ -34,6 +35,14 @@ from scripts.homelab_common import load_env, log, resolve_config_base, setup_log
 
 HEALTH_TIMEOUT_S = 90
 HEALTH_POLL_S = 5
+
+# Fallbacks for settings introduced after the initial deploy. These MUST match
+# the values in .env.example: a live .env is a copy taken when the stack was
+# first set up and will not contain keys added later, so a fallback of "off"
+# would make the setting a silent no-op on exactly the deployments that need
+# it. An explicitly empty value in .env remains the opt-out.
+DEFAULT_SAB_BANDWIDTH_MAX = "25M"      # bytes/sec -> 25 MB/s (~200 Mbps)
+DEFAULT_QBIT_UPLOAD_MBPS = "5"         # decimal Mbps -> 625000 bytes/s
 
 # ---------------------------------------------------------------------------
 # Public torrent indexers to add to Prowlarr.
@@ -565,6 +574,35 @@ def setup_prowlarr_usenet_indexers(
 # ---------------------------------------------------------------------------
 
 
+def _qbit_upload_limit_bytes(env: dict[str, str]) -> int:
+    """Global upload cap for qBittorrent, converted from Mbps to bytes/s.
+
+    The setting is expressed in Mbps because that is the unit the WAN link is
+    reasoned about in — qBittorrent's own UI uses KiB/s, and having to convert
+    between the two is how you end up off by 8x. Mbps here is decimal (1 Mbps
+    = 1e6 bits/s), matching how ISPs quote line rates.
+
+    qBittorrent's up_limit is bytes/s and treats <= 0 as unlimited.
+
+    Unset falls back to the documented default so that a deployment whose .env
+    predates this setting still gets capped; an explicitly EMPTY value is the
+    opt-out. A typo also yields unlimited — qBittorrent's own default is a
+    safer landing spot than throttling seeding to an arbitrary crawl.
+    """
+    raw = env.get("QBITTORRENT_UPLOAD_LIMIT_MBPS", DEFAULT_QBIT_UPLOAD_MBPS).strip()
+    if not raw:
+        return 0
+    try:
+        mbps = float(raw)
+    except ValueError:
+        log.warning(
+            "QBITTORRENT_UPLOAD_LIMIT_MBPS=%r is not a number; "
+            "leaving upload unlimited.", raw,
+        )
+        return 0
+    return int(mbps * 1_000_000 / 8) if mbps > 0 else 0
+
+
 def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
     """Configure qBittorrent categories and settings per TRaSH guide.
 
@@ -628,6 +666,11 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         "limit_utp_rate": True,     # prevent uTP flood
         "limit_tcp_overhead": False, # don't count overhead against limits
         "limit_lan_peers": True,
+        # Upload is the scarce direction on an asymmetric residential line, and
+        # it is the one Plex needs to serve remote streams. Uncapped seeding
+        # starves playback long before it saturates the downstream.
+        # qBittorrent wants bytes/s here; the .env value is KiB/s.
+        "up_limit": _qbit_upload_limit_bytes(env),
         "max_active_downloads": 5,
         "max_active_uploads": 5,
         "max_active_torrents": 10,
@@ -637,11 +680,31 @@ def setup_qbittorrent(qbit_url: str, env: dict[str, str]) -> bool:
         # --- Seeding ---
         # No private trackers in use (checked tracker list: opentrackr, dler.org,
         # demonii, internetwarriors, exodus, bittor.pw, stealth.si - all public),
-        # so a global ratio/time cap is safe. act=3 removes torrent + files, so
-        # disk space is actually reclaimed instead of just pausing indefinitely.
+        # so a global ratio/time cap is safe.
+        #
+        # act MUST be 0 (pause), not 3 (remove torrent + files). Sonarr/Radarr
+        # validate the download client on every save and reject it outright
+        # when qBittorrent is set to remove at the ratio limit:
+        #   HTTP 400 "qBittorrent is configured to remove torrents when they
+        #   reach their Share Ratio Limit" / "unable to perform Completed
+        #   Download Handling as configured"
+        # That 400 blocked EVERY download-client write — priority,
+        # removeCompletedDownloads, and the SABnzbd API-key rotation refresh
+        # (a stale key makes every grab fail auth, with nothing in the logs).
+        #
+        # Disk reclaim after pausing is NOT fully covered by this repo yet.
+        # Sonarr/Radarr remove completed downloads once their seeding goal is
+        # met, which handles the common case. Cleanuparr is the backstop, but
+        # its live seeding rule is scoped to the tv-imported/movies-imported
+        # categories and nothing here sets them — the create path explicitly
+        # skips imported fields. On a fresh rebuild that rule therefore matches
+        # nothing. PR #28 closes this by setting the imported categories; until
+        # it lands, the backstop only exists on hosts where it was applied by
+        # hand. Evidence it matters: a torrent left in plain "tv" was still
+        # seeding 26 days later, outside the rule's scope.
         "max_ratio_enabled": True,
         "max_ratio": 1,
-        "max_ratio_act": 3,
+        "max_ratio_act": 0,
         "max_seeding_time_enabled": True,
         "max_seeding_time": 1440,
         "max_inactive_seeding_time_enabled": True,
@@ -768,6 +831,27 @@ def setup_sabnzbd(sabnzbd_url: str, config_base: Path, env: dict[str, str]) -> b
             "in the SABnzbd UI or set USENET_SERVER_* in .env and re-deploy."
         )
 
+    # Download rate cap. This is the path that reaches an EXISTING deployment:
+    # the bootstrap's ini seed returns early once sabnzbd.ini exists, so a
+    # template-only change would silently never apply to a live box.
+    #
+    # bandwidth_max is BYTES/sec — "25M" is 25 MB/s (~200 Mbps), not 25 Mb/s.
+    # SABnzbd downloads at bandwidth_perc% of it; that stays at its 100 default.
+    desired_bw = env.get("SABNZBD_BANDWIDTH_MAX", DEFAULT_SAB_BANDWIDTH_MAX).strip()
+    current_bw = str(sab_config.get("misc", {}).get("bandwidth_max", "")).strip()
+    if current_bw == desired_bw:
+        log.info("SABnzbd: download cap already %s.", desired_bw or "unlimited")
+    elif _sabnzbd_api(
+        sabnzbd_url, api_key, "set_config",
+        {"section": "misc", "keyword": "bandwidth_max", "value": desired_bw},
+    ):
+        log.info(
+            "SABnzbd: download cap set to %s (was %s).",
+            desired_bw or "unlimited", current_bw or "unlimited",
+        )
+    else:
+        log.warning("Failed to set SABnzbd download cap to %s.", desired_bw)
+
     existing_cats = {
         c.get("name", "").lower() for c in sab_config.get("categories", [])
     }
@@ -885,12 +969,19 @@ def _setup_download_client_qbit(app_name: str, base_url: str, headers: dict,
                     dc["priority"] = priority
                     changed = True
                 if changed:
-                    _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
-                    log.info(
-                        "%s qBittorrent download client updated "
-                        "(priority=%d, remove completed/failed).",
-                        app_name, priority,
-                    )
+                    if _api(f"{url}/{dc['id']}", headers,
+                            method="PUT", data=dc) is not None:
+                        log.info(
+                            "%s qBittorrent download client updated "
+                            "(priority=%d, remove completed/failed).",
+                            app_name, priority,
+                        )
+                    else:
+                        log.warning(
+                            "%s qBittorrent download client update FAILED "
+                            "(wanted priority=%d); settings remain as-is.",
+                            app_name, priority,
+                        )
                 else:
                     log.info(
                         "%s qBittorrent download client already configured.",
@@ -984,14 +1075,24 @@ def _setup_download_client_sabnzbd(
                     if field.get("name") == "apiKey" and field.get("value") != sabnzbd_api_key:
                         field["value"] = sabnzbd_api_key
                         changed = True
-                        log.info("%s SABnzbd API key refreshed (key had rotated).", app_name)
+                        # Stated as intent, not outcome: the PUT below is what
+                        # actually persists it, and it can fail.
+                        log.info("%s SABnzbd API key had rotated; updating.", app_name)
                 if changed:
-                    _api(f"{url}/{dc['id']}", headers, method="PUT", data=dc)
-                    log.info(
-                        "%s SABnzbd download client updated "
-                        "(priority=%d, remove completed/failed).",
-                        app_name, priority,
-                    )
+                    if _api(f"{url}/{dc['id']}", headers,
+                            method="PUT", data=dc) is not None:
+                        log.info(
+                            "%s SABnzbd download client updated "
+                            "(priority=%d, remove completed/failed).",
+                            app_name, priority,
+                        )
+                    else:
+                        log.warning(
+                            "%s SABnzbd download client update FAILED "
+                            "(wanted priority=%d). If the API key had rotated "
+                            "it is still stale, and every grab will fail auth.",
+                            app_name, priority,
+                        )
                 else:
                     log.info(
                         "%s SABnzbd download client already configured.",
@@ -1540,6 +1641,32 @@ def _detect_lan_ip() -> str:
         return "<vm-ip>"
 
 
+def _cleanuparr_is_configured(config_base: Path) -> bool:
+    """True if Cleanuparr already has *arr connections in its SQLite db.
+
+    Cleanuparr has no API to query, so read its db directly. Anything
+    unexpected (missing file, schema change, locked db) is treated as
+    "not configured" — printing the setup banner one extra time is a much
+    cheaper failure than hiding it from someone who genuinely needs it.
+    """
+    db = config_base / "cleanuparr" / "cleanuparr.db"
+    if not db.is_file():
+        return False
+    conn = None
+    try:
+        # Read-only URI so a concurrent Cleanuparr write can't be disturbed.
+        # sqlite3's context manager commits, it does not close — hence finally.
+        conn = sqlite3.connect(f"file:{db}?mode=ro", uri=True, timeout=5)
+        row = conn.execute("SELECT COUNT(*) FROM arr_instances").fetchone()
+        return bool(row and row[0] > 0)
+    except sqlite3.Error as exc:
+        log.debug("Cleanuparr db check failed (%s); assuming unconfigured.", exc)
+        return False
+    finally:
+        if conn is not None:
+            conn.close()
+
+
 def _print_cleanuparr_instructions(config_base: Path,
                                    env: dict[str, str]) -> None:
     """Print connection details for Cleanuparr's web UI setup.
@@ -1547,11 +1674,18 @@ def _print_cleanuparr_instructions(config_base: Path,
     Cleanuparr stores config in SQLite and has no public API for adding
     connections programmatically.  Instead, print the exact values so the
     user can paste them into the UI in under a minute.
+
+    Skipped once Cleanuparr is configured: printing a "setup required"
+    banner on every deploy trains people to ignore it, and it dumps
+    credentials into the deploy log every time for no reason.
     """
+    if _cleanuparr_is_configured(config_base):
+        log.info("Cleanuparr already configured (*arr connections present).")
+        return
+
     sonarr_key = _read_api_key(config_base, "sonarr") or "<check config/sonarr/config.xml>"
     radarr_key = _read_api_key(config_base, "radarr") or "<check config/radarr/config.xml>"
     qbit_user = env.get("QBITTORRENT_USERNAME", "admin")
-    qbit_pass = env.get("QBITTORRENT_PASSWORD", "adminadmin")
     usenet_enabled = env.get("ENABLE_SABNZBD", "0") == "1"
     sabnzbd_key = _read_sabnzbd_api_key(config_base) if usenet_enabled else None
     vm_ip = _detect_lan_ip()
@@ -1578,7 +1712,10 @@ def _print_cleanuparr_instructions(config_base: Path,
     log.info("  %d. Add qBittorrent download client:", step)
     log.info("       Host: http://vpn:8080")
     log.info("       Username: %s", qbit_user)
-    log.info("       Password: %s", qbit_pass)
+    # Deliberately not echoed: unlike the *arr API keys this is a reusable
+    # human credential, and deploy output gets scrolled, pasted and shipped
+    # to Loki.
+    log.info("       Password: <QBITTORRENT_PASSWORD in docker_compose/media/.env>")
     log.info("")
     if usenet_enabled:
         step += 1

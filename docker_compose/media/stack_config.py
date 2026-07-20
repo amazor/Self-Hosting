@@ -351,6 +351,12 @@ def _seed_sabnzbd_config(
         f"download_dir = /data/downloads/sabnzbd/tmp\n"
         f"nzb_backup_dir = /config/nzb-backup\nadmin_dir = admin\nlog_dir = logs\n"
         f"auto_browser = 0\ncheck_new_rel = 0\npropagation_delay = 5\n"
+        # bandwidth_max is BYTES/sec ("25M" = 25 MB/s ~= 200 Mbps, not 25 Mb/s).
+        # Uncapped, 30 connections at line rate swamp the ISP gateway's conntrack
+        # table and induce bufferbloat across every other flow. Only reaches a
+        # FRESH install — existing deployments are capped over the API by
+        # setup_media_apps.py, since this function no-ops once the ini exists.
+        f"bandwidth_max = {_ini_value(env.get('SABNZBD_BANDWIDTH_MAX', '25M'))}\n"
         f"direct_unpack = 1\nsafe_postproc = 1\ndeobfuscate_final_filenames = 1\n"
         f"sfv_check = 1\nenable_recursive = 1\nreplace_illegal = 1\n"
         f"action_on_unwanted_extensions = 2\n"
