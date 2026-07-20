@@ -1777,6 +1777,65 @@ def _print_cleanuparr_instructions(config_base: Path,
 
 CLEANUPARR_SEEDING_RULE_NAME = "post-import cleanup (24h+ratio1)"
 
+# Strikes before Cleanuparr removes a stuck failed-import. At the default 5-min
+# queue-cleaner cadence this is ~25 min of grace, enough for a transient import
+# to resolve itself but short enough that genuinely-stuck items don't linger.
+CLEANUPARR_FAILED_IMPORT_STRIKES = 5
+
+
+def setup_cleanuparr_queue_cleaner(cleanuparr_url: str, api_key: str) -> None:
+    """Enable Cleanuparr's Queue Cleaner failed-import handling via the REST API.
+
+    Sonarr/Radarr keep downloads that fail to import (season packs that unpack
+    to episodes already owned, releases they will only match to a series by ID
+    and so refuse to auto-import) sitting in the queue as completed+warning
+    forever. Nothing else clears them, so the queue accretes stuck items
+    indefinitely — the qBittorrent seeding rule this PR adds only ever sees a
+    torrent that imported cleanly.
+
+    Enabling failed-import handling makes Cleanuparr strike such an item every
+    run and, after maxStrikes, remove it from the queue + download client,
+    blocklist the release, and trigger a re-search — so genuinely-missing
+    episodes get re-requested and already-owned duplicates simply clear.
+
+    patternMode MUST be "Exclude": "Include" with an empty pattern list is
+    rejected by Cleanuparr's own validation ("At least one pattern must be
+    specified") and would mean "match nothing" regardless. "Exclude" with no
+    patterns is "act on every failed import", which is what we want.
+
+    The GET returns the queue-cleaner's slow/stall rules as empty arrays but the
+    server preserves them across this PUT (verified live), so the
+    read-modify-write below does not clobber them.
+    """
+    headers = {"X-Api-Key": api_key, "Content-Type": "application/json"}
+    config = _api(f"{cleanuparr_url}/api/configuration/queue_cleaner", headers)
+    if not config:
+        log.warning(
+            "Could not reach Cleanuparr API (check CLEANUPARR_API_KEY); "
+            "skipping Queue Cleaner automation."
+        )
+        return
+
+    failed_import = config.get("failedImport") or {}
+    if (failed_import.get("maxStrikes") == CLEANUPARR_FAILED_IMPORT_STRIKES
+            and failed_import.get("patternMode") == "Exclude"):
+        log.info("Cleanuparr failed-import handling already configured.")
+        return
+
+    failed_import["maxStrikes"] = CLEANUPARR_FAILED_IMPORT_STRIKES
+    failed_import["patternMode"] = "Exclude"   # act on ALL failed imports
+    failed_import["patterns"] = []
+    config["failedImport"] = failed_import
+    if _api(f"{cleanuparr_url}/api/configuration/queue_cleaner", headers,
+            method="PUT", data=config) is not None:
+        log.info(
+            "Cleanuparr failed-import handling enabled (maxStrikes=%d) — stuck "
+            "imports now auto-clear and re-search.",
+            CLEANUPARR_FAILED_IMPORT_STRIKES,
+        )
+    else:
+        log.warning("Failed to enable Cleanuparr failed-import handling.")
+
 
 def setup_cleanuparr_download_cleaner(cleanuparr_url: str, api_key: str) -> None:
     """Enable Cleanuparr's Download Cleaner and ensure the post-import seeding
@@ -2247,6 +2306,7 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
         cleanuparr_key = env.get("CLEANUPARR_API_KEY", "").strip()
         if cleanuparr_key:
             setup_cleanuparr_download_cleaner("http://localhost:11011", cleanuparr_key)
+            setup_cleanuparr_queue_cleaner("http://localhost:11011", cleanuparr_key)
 
     if fatal:
         log.error(

@@ -583,7 +583,7 @@ Cleanuparr monitors Sonarr/Radarr download queues and automatically handles stal
 4. Add **qBittorrent** download client:
    - Host: `http://vpn:8080` (qBittorrent uses `network_mode: service:vpn`)
    - Username / Password: from `.env` (`QBITTORRENT_USERNAME` / `QBITTORRENT_PASSWORD`, default: `admin` / `adminadmin`)
-5. Enable **Queue Cleaner** and configure strike thresholds. Recommended: start with defaults, tune later based on your indexer health and seeder counts.
+5. Enable **Queue Cleaner** and configure strike thresholds. Recommended: start with defaults, tune later based on your indexer health and seeder counts. Its failed-import handling is also automated when `CLEANUPARR_API_KEY` is set — see "Failed-import auto-clean" below.
 6. Enable **Download Cleaner** with a seeding rule scoped to `[tv-imported, movies-imported]` — see "Post-import cleanup design" below for why, and set `CLEANUPARR_API_KEY` to have `setup_media_apps.py` create it for you instead.
 7. Optionally enable **Malware Blocker**.
 8. Verify by checking the Cleanuparr dashboard — it should show connected services and begin monitoring the queue.
@@ -592,7 +592,7 @@ Cleanuparr monitors Sonarr/Radarr download queues and automatically handles stal
 
 qBittorrent's global ratio/seeding-time limits used to be set to **delete torrent + files** once ratio 1.0 or 24h seeding was reached (`max_ratio_act=3`). This directly races Sonarr/Radarr's import: a fast public torrent can hit ratio 1.0 in minutes, deleting the file before it's ever imported — which is exactly what Radarr/Sonarr's "Download client qBittorrent is set to remove completed downloads" health warning flags. `max_ratio_act` is now `0` (pause, never delete) for this reason.
 
-That alone isn't a complete fix, though — Sonarr/Radarr's own `removeCompletedDownloads` (already `true`) only fires for downloads still in that app's **active queue tracking**. A torrent that ages out of the queue (e.g. a later quality-upgrade replaces the library file, or the item just sits seeding for days) is no longer cleaned up by anything, and disk space is never reclaimed. Confirmed live on `media` (2026-07-18): several already-imported torrents were still sitting in qBittorrent at ratio 0 well after import, with no cleanup path.
+That alone isn't a complete fix, though — Sonarr/Radarr's own `removeCompletedDownloads` (already `true`) only fires for downloads still in that app's **active queue tracking**. A torrent that ages out of the queue (e.g. a later quality-upgrade replaces the library file, or the item just sits seeding for days) is no longer cleaned up by anything, and disk space is never reclaimed — so already-imported torrents accumulate at ratio 0 with no cleanup path.
 
 The actual safety net is **category-based, not time-based**:
 
@@ -600,7 +600,21 @@ The actual safety net is **category-based, not time-based**:
 - Cleanuparr's Download Cleaner seeding rule is scoped to just those two categories. A torrent physically cannot reach either category before Sonarr/Radarr has confirmed the import, so ratio/seed-time cleanup can never race one — the race is closed by construction, not by guessing at hardlinks or timing.
 - Cleanuparr's Download Cleaner does **not** check hardlinks itself (that's a separate, unrelated feature — "Unlinked Downloads" — with its own config). Don't rely on it for import-safety; the category gate is what's actually doing that job here.
 
-Verified live end-to-end (2026-07-18): moved an already-obsolete torrent into `tv-imported`, triggered the Download Cleaner job via `POST /api/jobs/DownloadCleaner/trigger`, and confirmed both the qBittorrent entry and its 1GB file were removed. The production seeding rule (`post-import cleanup (24h+ratio1)`) uses ratio 1.0 / min seed time 24h / max seed time 168h (7-day hard backstop regardless of ratio, for slow public torrents with few peers) / delete source files.
+The seeding rule (`post-import cleanup (24h+ratio1)`) uses ratio 1.0 / min seed time 24h / max seed time 168h (7-day hard backstop regardless of ratio, for slow public torrents with few peers) / delete source files. The Download Cleaner job can be triggered on demand via `POST /api/jobs/DownloadCleaner/trigger`.
+
+#### Failed-import auto-clean
+
+The seeding rule above only ever sees a torrent that imported *cleanly*. The other source of queue clutter is downloads that **fail** to import and then sit forever: Sonarr/Radarr mark them `completed` + `warning` and keep retrying indefinitely. Two common causes on a usenet-heavy setup:
+
+- **"No files are eligible for import"** — a season pack whose episodes are already owned (nothing to import), so it never resolves.
+- **"Matched to series by ID, automatic import is not possible"** — a release Sonarr can only tie to the series via grab history, not by parsing the release name, so it refuses to auto-import for safety.
+
+Neither is cleaned by anything by default (Sonarr/Radarr keep such items on purpose), so the queue accretes stuck entries indefinitely. The fix is Cleanuparr's **Queue Cleaner → failed-import** handling, automated by `setup_cleanuparr_queue_cleaner` in `setup_media_apps.py`: it strikes a failed-import item every run and, after `maxStrikes` (5, ≈25 min at the 5-min cadence), removes it from the queue + client, blocklists the release, and triggers a re-search. Genuinely-missing episodes get re-requested; already-owned duplicates just clear without a re-download.
+
+Two configuration details worth calling out, because both are easy to get silently wrong:
+
+- `patternMode` must be **`Exclude`** (act on every failed import). `Include` with an empty pattern list is rejected by Cleanuparr's own validation and would mean "match nothing" anyway — so setting `maxStrikes` alone, with the default `Include`, is a no-op.
+- The queue-cleaner config `GET` returns its slow/stall rules as empty arrays, but a `PUT` **preserves** them server-side — so `setup_cleanuparr_queue_cleaner`'s read-modify-write is safe and won't wipe your slow/stalled-download rules.
 
 ### ntfy (optional)
 
