@@ -2024,6 +2024,20 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         "settings-general-adaptive_searching_delta": "4w",
     })
 
+    # Embedded-subtitle handling — do NOT let an embedded image/complex subtitle
+    # count as "we have this language", so Bazarr fetches an external .srt instead.
+    # Why: Plex must BURN image-based (PGS/VobSub) and styled (ASS/SSA) subtitles
+    # into the video, and the burn filter (inlineass) can't run on the Intel GPU —
+    # it forces the whole transcode to software (libx264), pinning the CPU. A plain
+    # text .srt is sent to the client as a soft track, so the video can direct-play
+    # or hardware-transcode. use_embedded_subs stays on so an embedded *text* (SRT)
+    # track still counts. See the "Anime forces software transcode" investigation.
+    form.update({
+        "settings-embeddedsubtitles-ignore_ass_subs": "true",
+        "settings-embeddedsubtitles-ignore_pgs_subs": "true",
+        "settings-embeddedsubtitles-ignore_vobsub_subs": "true",
+    })
+
     # Subsync (TRaSH recommended thresholds)
     form.update({
         "settings-subsync-use_subsync": "true",
