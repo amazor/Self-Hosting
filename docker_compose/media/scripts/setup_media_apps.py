@@ -243,6 +243,13 @@ BAZARR_ANIME_LANGUAGES = ["en"]
 
 BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho"]
 
+# OpenSubtitles.com (NOT .org) needs a free account, unlike the providers above,
+# so it is only enabled when OPENSUBTITLES_USERNAME/PASSWORD are set in .env.  It
+# is the practical fix for anime that lacks embedded English subs: animetosho,
+# Bazarr's anime-native provider, is dead without an AniDB API client we do not
+# provision, and OpenSubtitles.com covers anime (and the whole library) directly.
+BAZARR_OPENSUBTITLESCOM = "opensubtitlescom"
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -1939,7 +1946,8 @@ def setup_cleanuparr_download_cleaner(cleanuparr_url: str, api_key: str) -> None
 
 
 def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
-                 radarr_key: str | None, config_base: Path) -> bool:
+                 radarr_key: str | None, config_base: Path,
+                 env: dict[str, str]) -> bool:
     """Configure Bazarr: Sonarr/Radarr connections, language profile,
     providers, subtitle settings, and mass-assign profile.
 
@@ -2047,8 +2055,25 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         "settings-subsync-subsync_movie_threshold": "86",
     })
 
-    # Providers (zero-credential only)
-    form["settings-general-enabled_providers"] = BAZARR_PROVIDERS
+    # Providers: the zero-credential set, plus OpenSubtitles.com when its free
+    # account is configured in .env.  OpenSubtitles.com is what unblocks anime
+    # (and improves the whole library) — see BAZARR_OPENSUBTITLESCOM.
+    providers = list(BAZARR_PROVIDERS)
+    os_user = env.get("OPENSUBTITLES_USERNAME", "").strip()
+    os_pass = env.get("OPENSUBTITLES_PASSWORD", "").strip()
+    if os_user and os_pass:
+        providers.append(BAZARR_OPENSUBTITLESCOM)
+        form.update({
+            "settings-opensubtitlescom-username": os_user,
+            "settings-opensubtitlescom-password": os_pass,
+            # moviehash matching = far more accurate results, no downside.
+            "settings-opensubtitlescom-use_hash": "true",
+        })
+        log.info("Bazarr: OpenSubtitles.com enabled (account %s).", os_user)
+    else:
+        log.info("Bazarr: OpenSubtitles.com skipped "
+                 "(OPENSUBTITLES_USERNAME/PASSWORD not set in .env).")
+    form["settings-general-enabled_providers"] = providers
 
     # 6. Enable subtitle languages
     form["languages-enabled"] = BAZARR_LANGUAGES
@@ -2311,7 +2336,7 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
             fatal.append("Bazarr enabled but missing Sonarr/Radarr API key(s)")
         else:
             if not setup_bazarr(
-                "http://localhost:6767", sonarr_key, radarr_key, config_base,
+                "http://localhost:6767", sonarr_key, radarr_key, config_base, env,
             ):
                 fatal.append("Bazarr enabled but its setup did not fully apply (see warnings above)")
 
