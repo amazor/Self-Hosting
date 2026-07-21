@@ -254,6 +254,12 @@ BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho", "subf2m
 # provision, and OpenSubtitles.com covers anime (and the whole library) directly.
 BAZARR_OPENSUBTITLESCOM = "opensubtitlescom"
 
+# subf2m refuses to run with a blank User-Agent: it self-throttles for 12 hours
+# with `ConfigurationError: 'User-agent config missing'` and contributes nothing.
+# A plain browser UA is all it needs to actually search.
+BAZARR_SUBF2M_USER_AGENT = ("Mozilla/5.0 (X11; Linux x86_64; rv:128.0) "
+                            "Gecko/20100101 Firefox/128.0")
+
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -2078,6 +2084,8 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         log.info("Bazarr: OpenSubtitles.com skipped "
                  "(OPENSUBTITLES_USERNAME/PASSWORD not set in .env).")
     form["settings-general-enabled_providers"] = providers
+    # subf2m needs a User-Agent or it self-throttles for 12h (see the constant).
+    form["settings-subf2m-user_agent"] = BAZARR_SUBF2M_USER_AGENT
 
     # 6. Enable subtitle languages
     form["languages-enabled"] = BAZARR_LANGUAGES
