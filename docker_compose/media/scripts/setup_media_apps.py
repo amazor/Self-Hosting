@@ -241,7 +241,11 @@ BAZARR_ANIME_PROFILE_ID = 2
 BAZARR_ANIME_PROFILE_NAME = "English (Anime)"
 BAZARR_ANIME_LANGUAGES = ["en"]
 
-BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho"]
+# Zero-credential providers, always enabled.  subf2m is the Subscene successor —
+# a large English database that broadens release/hash matching (more providers =>
+# higher chance of a high-scoring match; Bazarr queries them in parallel and
+# keeps the best by score).
+BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho", "subf2m"]
 
 # OpenSubtitles.com (NOT .org) needs a free account, unlike the providers above,
 # so it is only enabled when OPENSUBTITLES_USERNAME/PASSWORD are set in .env.  It
