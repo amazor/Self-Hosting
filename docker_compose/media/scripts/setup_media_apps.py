@@ -245,7 +245,11 @@ BAZARR_ANIME_LANGUAGES = ["en"]
 # a large English database that broadens release/hash matching (more providers =>
 # higher chance of a high-scoring match; Bazarr queries them in parallel and
 # keeps the best by score).
-BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho", "subf2m"]
+# animetosho was deliberately dropped: it fetched 0 subtitles ever (it needs an
+# AniDB API client we don't provision) and only produced recurring
+# `WARNING (anidb:249)` log spam on every anime search.  OpenSubtitles.com now
+# covers anime, so animetosho was pure dead weight.
+BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "subf2m"]
 
 # OpenSubtitles.com (NOT .org) needs a free account, unlike the providers above,
 # so it is only enabled when OPENSUBTITLES_USERNAME/PASSWORD are set in .env.  It
