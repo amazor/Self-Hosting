@@ -249,7 +249,18 @@ BAZARR_ANIME_LANGUAGES = ["en"]
 # AniDB API client we don't provision) and only produced recurring
 # `WARNING (anidb:249)` log spam on every anime search.  OpenSubtitles.com now
 # covers anime, so animetosho was pure dead weight.
-BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "subf2m"]
+# embeddedsubtitles: extracts a text-based embedded track (ASS/SSA/SRT) and
+# converts it to an external .srt.  This is the reliable, offline, rate-limit-free
+# floor for ANIME, whose fansub releases (Vodes, Erai-raws, ...) ship a good
+# English translation embedded as ASS — the right words, wrong format.  Pairing
+# general.ignore_ass_subs=true (ASS doesn't count as "have") with this provider
+# (which DOES extract ASS) means Bazarr sees the ASS-only English as missing, then
+# immediately re-materialises it as a soft .srt that Plex direct-plays instead of
+# burning in (software transcode).  External providers stay enabled to upgrade to a
+# cleaner authored SRT when one exists.  Image subs (PGS/VobSub) are NOT extracted
+# here — they can't become text without OCR and would still force a burn-in.
+BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "subf2m",
+                    "embeddedsubtitles"]
 
 # OpenSubtitles.com (NOT .org) needs a free account, unlike the providers above,
 # so it is only enabled when OPENSUBTITLES_USERNAME/PASSWORD are set in .env.  It
@@ -2054,10 +2065,38 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
     # text .srt is sent to the client as a soft track, so the video can direct-play
     # or hardware-transcode. use_embedded_subs stays on so an embedded *text* (SRT)
     # track still counts. See the "Anime forces software transcode" investigation.
+    #
+    # CRITICAL two-flag gotcha: there are TWO sets of ignore_* flags and they do
+    # different things:
+    #   * settings-GENERAL-ignore_{ass,pgs,vobsub}_subs  -> governs the "do we
+    #     already HAVE this language?" scan. THIS is the one that makes an
+    #     ASS/PGS-only embedded English track count as *missing* so an external
+    #     .srt is fetched. Without it, anime (embedded English ASS, e.g. Vodes/
+    #     Erai-raws) shows "have English, 0 missing" and never gets a soft .srt.
+    #   * settings-EMBEDDEDSUBTITLES-ignore_*  -> only affects the embeddedsubtitles
+    #     *provider* (which extracts embedded tracks to serve as external). That
+    #     provider isn't even enabled here, so these alone were a silent no-op.
+    # Set BOTH: general for the have-check, provider for correctness if it's ever
+    # enabled.
     form.update({
-        "settings-embeddedsubtitles-ignore_ass_subs": "true",
+        "settings-general-ignore_ass_subs": "true",
+        "settings-general-ignore_pgs_subs": "true",
+        "settings-general-ignore_vobsub_subs": "true",
+    })
+
+    # embeddedsubtitles PROVIDER (see BAZARR_PROVIDERS note): it must do the OPPOSITE
+    # of the general have-check for ASS — the general flag makes ASS "not owned", and
+    # this provider then EXTRACTS that ASS and converts it to a soft .srt.  So here
+    # ignore_ass_subs=FALSE (do extract text ASS), but pgs/vobsub=TRUE (never extract
+    # image subs — they can't convert to text and would still burn in).  hi_fallback
+    # off; unknown_as_fallback off.  fese converts ASS->SRT on extraction.
+    form.update({
+        "settings-embeddedsubtitles-ignore_ass_subs": "false",
         "settings-embeddedsubtitles-ignore_pgs_subs": "true",
         "settings-embeddedsubtitles-ignore_vobsub_subs": "true",
+        "settings-embeddedsubtitles-hi_fallback": "false",
+        "settings-embeddedsubtitles-unknown_as_fallback": "false",
+        "settings-embeddedsubtitles-fallback_lang": "en",
     })
 
     # Subsync (TRaSH recommended thresholds)
