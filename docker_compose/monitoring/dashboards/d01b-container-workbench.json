@@ -1,58 +1,12 @@
 {
-  "uid": "homelab-container-workbench",
-  "title": "Container Workbench",
-  "description": "Container resource investigation. Which container is responsible and what's it doing?",
-  "tags": ["homelab", "container", "workbench"],
-  "timezone": "browser",
-  "editable": true,
-  "graphTooltip": 1,
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
-  "timepicker": {},
-  "refresh": "15s",
-  "schemaVersion": 39,
-  "fiscalYearStartMonth": 0,
-  "liveNow": false,
-  "weekStart": "",
-  "links": [
-    {
-      "title": "\u2190 Overview",
-      "type": "link",
-      "url": "/d/homelab-overview",
-      "tooltip": "Back to fleet triage",
-      "icon": "arrow-left",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Host Workbench",
-      "type": "link",
-      "url": "/d/homelab-host-workbench",
-      "tooltip": "VM-level metrics: CPU, memory, disk, I/O",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Log Workbench",
-      "type": "link",
-      "url": "/d/homelab-log-workbench",
-      "tooltip": "Log exploration and error triage",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    }
-  ],
   "annotations": {
     "list": [
       {
         "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -61,123 +15,109 @@
       }
     ]
   },
-  "templating": {
-    "list": [
-      {
-        "name": "datasource_prometheus",
-        "type": "datasource",
-        "query": "prometheus",
-        "current": {},
-        "hide": 0,
-        "includeAll": false,
-        "multi": false,
-        "label": "Prometheus",
-        "refresh": 1
-      },
-      {
-        "name": "datasource_loki",
-        "type": "datasource",
-        "query": "loki",
-        "current": {},
-        "hide": 2,
-        "includeAll": false,
-        "multi": false,
-        "label": "Loki",
-        "description": "Passed to Log Workbench via drilldown links. Not used on this dashboard.",
-        "refresh": 1
-      },
-      {
-        "name": "node",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up, node)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Node"
-      },
-      {
-        "name": "vm_role",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{node=~\"$node\"}, vm_role)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "VM Role"
-      },
-      {
-        "name": "host",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Host"
-      },
-      {
-        "name": "service",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}, service)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 2,
-        "sort": 1,
-        "label": "Service"
-      },
-      {
-        "name": "env",
-        "type": "custom",
-        "current": { "text": "prod", "value": "prod", "selected": true },
-        "hide": 2,
-        "includeAll": false,
-        "multi": false,
-        "query": "prod",
-        "options": [
-          { "text": "prod", "value": "prod", "selected": true }
-        ]
-      }
-    ]
-  },
-
-  "panels": [
-
+  "description": "Container resource investigation. Which container is responsible and what's it doing?",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
     {
-      "type": "row",
-      "title": "At a Glance",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 },
-      "id": 100,
-      "panels": []
+      "icon": "arrow-left",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "\u2190 Overview",
+      "tooltip": "Back to fleet triage",
+      "type": "link",
+      "url": "/d/homelab-overview"
     },
-
     {
-      "id": 1,
-      "type": "stat",
-      "title": "Containers Running",
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Host Workbench",
+      "tooltip": "VM-level metrics: CPU, memory, disk, I/O",
+      "type": "link",
+      "url": "/d/homelab-host-workbench"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Log Workbench",
+      "tooltip": "Log exploration and error triage",
+      "type": "link",
+      "url": "/d/homelab-log-workbench"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 100,
+      "panels": [],
+      "title": "At a Glance",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
       "description": "Number of containers seen by cAdvisor within the last 120 seconds across the selected scope.",
-      "gridPos": { "x": 0, "y": 1, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "fixedColor": "green",
+            "mode": "fixed"
+          },
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "count(container_last_seen{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} > (time() - 120))",
           "instant": true,
@@ -185,43 +125,69 @@
           "refId": "A"
         }
       ],
+      "title": "Containers Running",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Count of containers using more than 50% of a CPU core. Zero is healthy.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "fixed", "fixedColor": "green" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 3
+              }
             ]
           }
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 4,
+        "y": 1
+      },
+      "id": 2,
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-
-    {
-      "id": 2,
-      "type": "stat",
-      "title": "CPU Heavy",
-      "description": "Count of containers using more than 50% of a CPU core. Zero is healthy.",
-      "gridPos": { "x": 4, "y": 1, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "count(sum by (host,service)(rate(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval])) > 0.5) or on() vector(0)",
           "instant": true,
@@ -229,93 +195,145 @@
           "refId": "A"
         }
       ],
+      "title": "CPU Heavy",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Containers using more than 25% of their host's total RAM, named directly. No container here sets a Docker memory limit, so pressure is measured against host memory instead. Click a tile to focus the dashboard on that container.",
       "fieldConfig": {
         "defaults": {
-          "noValue": "0",
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "Focus on ${__field.labels.service}",
+              "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__field.labels.service}&var-host=${__field.labels.host}&${node:queryparam}&${vm_role:queryparam}"
+            }
+          ],
+          "noValue": "None",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 3 }
+              {
+                "color": "yellow",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 0.5
+              }
             ]
-          }
+          },
+          "unit": "percentunit"
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 8,
+        "y": 1
+      },
+      "id": 3,
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-
-    {
-      "id": 3,
-      "type": "stat",
-      "title": "Memory Pressure",
-      "description": "Containers using more than 25% of their host's total RAM. No container here sets a Docker memory limit, so pressure is measured against host memory instead — a container this large is the usual suspect when a VM starts swapping or OOM-killing.",
-      "gridPos": { "x": 8, "y": 1, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
-          "expr": "count(sum by (host,service)(container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}) / on(host) group_left() max by (host)(node_memory_MemTotal_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) > 0.25) or on() vector(0)",
+          "expr": "sum by (host,service) (container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}) / on(host) group_left() max by (host)(node_memory_MemTotal_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) > 0.25",
           "instant": true,
+          "legendFormat": "{{host}}/{{service}}",
           "range": false,
           "refId": "A"
         }
       ],
+      "title": "Memory Pressure",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Containers with failing Docker health checks (starting or unhealthy). Excludes containers without health checks.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
           "noValue": "0",
-          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 1 },
-              { "color": "red", "value": 3 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 2
+              }
             ]
           }
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 12,
+        "y": 1
+      },
+      "id": 5,
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "Health Issues",
-      "description": "Containers with failing Docker health checks (starting or unhealthy). Excludes containers without health checks.",
-      "gridPos": { "x": 12, "y": 1, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "count(container_health_state{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} == 0 or container_health_state{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} >= 2) or on() vector(0)",
           "instant": true,
@@ -323,46 +341,65 @@
           "refId": "A"
         }
       ],
+      "title": "Health Issues",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Total OOM kills across all containers. Should always be 0.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
           "noValue": "0",
-          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 2 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
             ]
           }
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 16,
+        "y": 1
+      },
+      "id": 6,
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-
-    {
-      "id": 6,
-      "type": "stat",
-      "title": "OOM Events",
-      "description": "Total OOM kills across all containers. Should always be 0.",
-      "gridPos": { "x": 16, "y": 1, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "sum(container_oom_events_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}) or on() vector(0)",
           "instant": true,
@@ -370,45 +407,69 @@
           "refId": "A"
         }
       ],
+      "title": "OOM Events",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Containers that started within the current dashboard time range \u2014 indicates a restart or fresh deployment.",
       "fieldConfig": {
         "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
           "noValue": "0",
-          "color": { "mode": "thresholds" },
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "orange",
+                "value": 1
+              },
+              {
+                "color": "red",
+                "value": 5
+              }
             ]
           }
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 4,
+        "x": 20,
+        "y": 1
+      },
+      "id": 4,
       "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
         "colorMode": "background",
         "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-
-    {
-      "id": 4,
-      "type": "stat",
-      "title": "Recent Restarts",
-      "description": "Containers that started within the current dashboard time range \u2014 indicates a restart or fresh deployment.",
-      "gridPos": { "x": 20, "y": 1, "w": 4, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "count(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} > (time() - $__range_s)) or on() vector(0)",
           "instant": true,
@@ -416,224 +477,206 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "0",
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "orange", "value": 1 },
-              { "color": "red", "value": 5 }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": ["lastNotNull"],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
+      "title": "Recent Restarts",
+      "type": "stat"
     },
-
     {
-      "type": "row",
-      "title": "Container Resources",
       "collapsed": false,
-      "gridPos": { "x": 0, "y": 4, "w": 24, "h": 1 },
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
       "id": 101,
-      "panels": []
+      "panels": [],
+      "title": "Container Resources",
+      "type": "row"
     },
-
     {
-      "id": 40,
-      "type": "table",
-      "title": "Container Resource Table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
       "description": "All containers on selected hosts ranked by CPU. Click a service name to focus this dashboard on that container, or use View Logs to jump to the Log Workbench.",
-      "gridPos": { "x": 0, "y": 5, "w": 24, "h": 10 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (host,service)(rate(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "A"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (host,service)(container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"})",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "B"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (host,service)(rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "D"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (host,service)(rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "E"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "time() - max by (host,service)(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"})",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "F"
-        },
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "sum by (host,service)(rate(container_fs_writes_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "legendFormat": "",
-          "refId": "G"
-        }
-      ],
-      "transformations": [
-        { "id": "merge", "options": {} },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": { "Time": true },
-            "indexByName": {
-              "host": 0,
-              "service": 1,
-              "Value #A": 2,
-              "Value #B": 3,
-              "Value #F": 4,
-              "Value #G": 5,
-              "Value #D": 6,
-              "Value #E": 7
-            },
-            "renameByName": {
-              "host": "Host",
-              "service": "Service",
-              "Value #A": "CPU %",
-              "Value #B": "Memory",
-              "Value #F": "Uptime",
-              "Value #G": "Disk Writes",
-              "Value #D": "Net In",
-              "Value #E": "Net Out"
-            }
-          }
-        }
-      ],
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Host" },
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
             "properties": [
-              { "id": "custom.width", "value": 120 }
+              {
+                "id": "custom.width",
+                "value": 120
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "CPU %" },
+            "matcher": {
+              "id": "byName",
+              "options": "CPU %"
+            },
             "properties": [
-              { "id": "unit", "value": "percentunit" },
-              { "id": "decimals", "value": 2 },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 2
+              },
               {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    { "color": "green", "value": null },
-                    { "color": "yellow", "value": 0.5 },
-                    { "color": "red", "value": 0.9 }
+                    {
+                      "color": "green",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.5
+                    },
+                    {
+                      "color": "red",
+                      "value": 0.9
+                    }
                   ]
                 }
               },
-              { "id": "color", "value": { "mode": "continuous-GrYlRd" } },
-              { "id": "custom.cellOptions", "value": { "type": "gauge", "mode": "basic" } }
+              {
+                "id": "color",
+                "value": {
+                  "mode": "continuous-GrYlRd"
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "mode": "basic",
+                  "type": "gauge"
+                }
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "min",
+                "value": 0
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Memory" },
+            "matcher": {
+              "id": "byName",
+              "options": "Memory"
+            },
             "properties": [
-              { "id": "unit", "value": "bytes" },
-              { "id": "decimals", "value": 0 }
+              {
+                "id": "unit",
+                "value": "bytes"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Uptime" },
+            "matcher": {
+              "id": "byName",
+              "options": "Uptime"
+            },
             "properties": [
-              { "id": "unit", "value": "s" },
-              { "id": "decimals", "value": 0 },
-              { "id": "custom.width", "value": 100 }
+              {
+                "id": "unit",
+                "value": "s"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Disk Writes" },
+            "matcher": {
+              "id": "byName",
+              "options": "Disk Writes"
+            },
             "properties": [
-              { "id": "unit", "value": "Bps" },
-              { "id": "decimals", "value": 0 },
-              { "id": "custom.width", "value": 100 }
+              {
+                "id": "unit",
+                "value": "Bps"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "custom.width",
+                "value": 100
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Net In" },
+            "matcher": {
+              "id": "byName",
+              "options": "Net In"
+            },
             "properties": [
-              { "id": "unit", "value": "Bps" },
-              { "id": "decimals", "value": 0 }
+              {
+                "id": "unit",
+                "value": "Bps"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Net Out" },
+            "matcher": {
+              "id": "byName",
+              "options": "Net Out"
+            },
             "properties": [
-              { "id": "unit", "value": "Bps" },
-              { "id": "decimals", "value": 0 }
+              {
+                "id": "unit",
+                "value": "Bps"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Service" },
+            "matcher": {
+              "id": "byName",
+              "options": "Service"
+            },
             "properties": [
               {
                 "id": "links",
                 "value": [
                   {
+                    "targetBlank": false,
                     "title": "Focus on ${__data.fields.Service}",
-                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}&${node:queryparam}&${vm_role:queryparam}",
-                    "targetBlank": false
+                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}&${node:queryparam}&${vm_role:queryparam}"
                   },
                   {
+                    "targetBlank": true,
                     "title": "View Logs \u2192",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}",
-                    "targetBlank": true
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}"
                   }
                 ]
               }
@@ -641,119 +684,251 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 10,
+        "w": 24,
+        "x": 0,
+        "y": 5
+      },
+      "id": 40,
       "options": {
-        "showHeader": true,
-        "sortBy": [{ "displayName": "CPU %", "desc": true }],
         "cellHeight": "sm",
-        "footer": { "show": false }
-      }
-    },
-
-    {
-      "type": "row",
-      "title": "Health & Lifecycle",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 1 },
-      "id": 102,
-      "panels": []
-    },
-
-    {
-      "id": 45,
-      "type": "table",
-      "title": "Health Check Status",
-      "description": "Containers that have Docker health checks configured, with their current status. Unhealthy and starting containers sort to the top.",
-      "gridPos": { "x": 0, "y": 16, "w": 12, "h": 6 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "CPU %"
+          }
+        ]
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
-          "expr": "container_health_state{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}",
+          "expr": "sum by (host,service)(rate(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
           "format": "table",
           "instant": true,
-          "range": false,
           "legendFormat": "",
+          "range": false,
           "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host,service)(container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host,service)(rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host,service)(rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "E"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "time() - max by (host,service)(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"})",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "F"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host,service)(rate(container_fs_writes_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "G"
         }
       ],
+      "title": "Container Resource Table",
       "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
         {
           "id": "organize",
           "options": {
             "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "env": true,
-              "node": true,
-              "vm_role": true,
-              "instance": true,
-              "job": true,
-              "compose_project": true,
-              "container": true,
-              "name": true
+              "Time": true
             },
             "indexByName": {
+              "Value #A": 2,
+              "Value #B": 3,
+              "Value #D": 6,
+              "Value #E": 7,
+              "Value #F": 4,
+              "Value #G": 5,
               "host": 0,
-              "service": 1,
-              "image": 2,
-              "Value": 3
+              "service": 1
             },
             "renameByName": {
+              "Value #A": "CPU %",
+              "Value #B": "Memory",
+              "Value #D": "Net In",
+              "Value #E": "Net Out",
+              "Value #F": "Uptime",
+              "Value #G": "Disk Writes",
               "host": "Host",
-              "service": "Service",
-              "image": "Image",
-              "Value": "Status"
+              "service": "Service"
             }
           }
         }
       ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 102,
+      "panels": [],
+      "title": "Health & Lifecycle",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Containers that have Docker health checks configured, with their current status. Unhealthy and starting containers sort to the top.",
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Status" },
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
             "properties": [
               {
                 "id": "mappings",
                 "value": [
                   {
-                    "type": "value",
                     "options": {
-                      "-1": { "text": "No check", "color": "text", "index": 0 },
-                      "0": { "text": "Starting", "color": "yellow", "index": 1 },
-                      "1": { "text": "Healthy", "color": "green", "index": 2 },
-                      "2": { "text": "Unhealthy", "color": "red", "index": 3 }
-                    }
+                      "-1": {
+                        "color": "text",
+                        "index": 0,
+                        "text": "No check"
+                      },
+                      "0": {
+                        "color": "yellow",
+                        "index": 1,
+                        "text": "Starting"
+                      },
+                      "1": {
+                        "color": "green",
+                        "index": 2,
+                        "text": "Healthy"
+                      },
+                      "2": {
+                        "color": "red",
+                        "index": 3,
+                        "text": "Unhealthy"
+                      }
+                    },
+                    "type": "value"
                   }
                 ]
               },
               {
                 "id": "custom.cellOptions",
-                "value": { "type": "color-background", "applyToRow": true }
+                "value": {
+                  "applyToRow": true,
+                  "type": "color-background"
+                }
               }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Host" },
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
             "properties": [
-              { "id": "custom.width", "value": 90 }
+              {
+                "id": "custom.width",
+                "value": 90
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Image" },
+            "matcher": {
+              "id": "byName",
+              "options": "Image"
+            },
             "properties": [
-              { "id": "custom.width", "value": 180 }
+              {
+                "id": "custom.width",
+                "value": 180
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Status" },
+            "matcher": {
+              "id": "byName",
+              "options": "Status"
+            },
             "properties": [
-              { "id": "custom.width", "value": 90 }
+              {
+                "id": "custom.width",
+                "value": 90
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Service" },
+            "matcher": {
+              "id": "byName",
+              "options": "Service"
+            },
             "properties": [
               {
                 "id": "custom.width",
@@ -763,14 +938,14 @@
                 "id": "links",
                 "value": [
                   {
+                    "targetBlank": false,
                     "title": "Focus on ${__data.fields.Service}",
-                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}&${node:queryparam}&${vm_role:queryparam}",
-                    "targetBlank": false
+                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}&${node:queryparam}&${vm_role:queryparam}"
                   },
                   {
+                    "targetBlank": true,
                     "title": "View Logs \u2192",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}",
-                    "targetBlank": true
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}"
                   }
                 ]
               }
@@ -778,33 +953,42 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 0,
+        "y": 16
+      },
+      "id": 45,
       "options": {
-        "showHeader": true,
-        "sortBy": [{ "displayName": "Status", "desc": true }],
         "cellHeight": "sm",
-        "footer": { "show": false }
-      }
-    },
-
-    {
-      "id": 44,
-      "type": "table",
-      "title": "Recent Restarts",
-      "description": "Containers that started within the current time range \u2014 indicates a restart or fresh deployment. Click a service name to view logs around the restart.",
-      "gridPos": { "x": 12, "y": 16, "w": 12, "h": 6 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Status"
+          }
+        ]
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
-          "expr": "container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} * 1000 > (time() - $__range_s) * 1000",
+          "expr": "container_health_state{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} != -1",
           "format": "table",
           "instant": true,
-          "range": false,
           "legendFormat": "",
+          "range": false,
           "refId": "A"
         }
       ],
+      "title": "Health Check Status",
       "transformations": [
         {
           "id": "organize",
@@ -812,53 +996,71 @@
             "excludeByName": {
               "Time": true,
               "__name__": true,
-              "env": true,
-              "node": true,
-              "vm_role": true,
               "compose_project": true,
               "container": true,
-              "image": true,
+              "env": true,
               "instance": true,
               "job": true,
-              "name": true
+              "name": true,
+              "node": true,
+              "vm_role": true
             },
             "indexByName": {
+              "Value": 3,
               "host": 0,
-              "service": 1,
-              "Value #A": 2
+              "image": 2,
+              "service": 1
             },
             "renameByName": {
+              "Value": "Status",
               "host": "Host",
-              "service": "Service",
-              "Value #A": "Started At"
+              "image": "Image",
+              "service": "Service"
             }
           }
         }
       ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Containers that started within the current time range \u2014 indicates a restart or fresh deployment. Click a service name to view logs around the restart.",
       "fieldConfig": {
         "defaults": {},
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "Started At" },
+            "matcher": {
+              "id": "byName",
+              "options": "Started At"
+            },
             "properties": [
-              { "id": "unit", "value": "dateTimeFromNow" }
+              {
+                "id": "unit",
+                "value": "dateTimeFromNow"
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Service" },
+            "matcher": {
+              "id": "byName",
+              "options": "Service"
+            },
             "properties": [
               {
                 "id": "links",
                 "value": [
                   {
+                    "targetBlank": true,
                     "title": "View Logs around restart \u2192",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}",
-                    "targetBlank": true
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}"
                   },
                   {
+                    "targetBlank": false,
                     "title": "Check host resources \u2192 (OOM? Disk? Memory?)",
-                    "url": "/d/homelab-host-workbench?${__url_time_range}&var-host=${__data.fields.Host}",
-                    "targetBlank": false
+                    "url": "/d/homelab-host-workbench?${__url_time_range}&var-host=${__data.fields.Host}"
                   }
                 ]
               }
@@ -866,350 +1068,861 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 6,
+        "w": 12,
+        "x": 12,
+        "y": 16
+      },
+      "id": 44,
       "options": {
-        "showHeader": true,
-        "sortBy": [{ "displayName": "Started At", "desc": true }],
         "cellHeight": "sm",
-        "footer": { "show": false }
-      }
-    },
-
-    {
-      "type": "row",
-      "title": "Per-Container Detail",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 22, "w": 24, "h": 1 },
-      "id": 103,
-      "panels": []
-    },
-
-    {
-      "id": 41,
-      "type": "timeseries",
-      "title": "Container CPU",
-      "description": "CPU usage per container (fraction of one core). Narrow $service to focus on a single container.",
-      "gridPos": { "x": 0, "y": 23, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Started At"
+          }
+        ]
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"} * 1000 > (time() - $__range_s) * 1000",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Recent Restarts",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "compose_project": true,
+              "container": true,
+              "env": true,
+              "image": true,
+              "instance": true,
+              "job": true,
+              "name": true,
+              "node": true,
+              "vm_role": true
+            },
+            "indexByName": {
+              "Value #A": 2,
+              "host": 0,
+              "service": 1
+            },
+            "renameByName": {
+              "Value #A": "Started At",
+              "host": "Host",
+              "service": "Service"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 28
+      },
+      "id": 103,
+      "panels": [],
+      "title": "Per-Container Detail",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "CPU usage per container (fraction of one core). Narrow $service to focus on a single container.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
+          "custom": {
+            "axisSoftMin": 0,
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "links": [
+            {
+              "targetBlank": true,
+              "title": "View Logs \u2192",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__field.labels.host}&var-service=${__field.labels.service}"
+            }
+          ],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 0,
+        "y": 29
+      },
+      "id": 41,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "sum by (service) (rate(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
           "legendFormat": "{{service}}",
           "range": true,
-          "instant": false,
           "refId": "A"
         }
       ],
+      "title": "Container CPU",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Working set memory per container (what the OOM killer uses). No container here sets a Docker memory limit, so there is no limit line \u2014 judge usage against the host's total RAM on the Host Workbench.",
       "fieldConfig": {
         "defaults": {
-          "unit": "percentunit",
-          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
+            "axisSoftMin": 0,
             "drawStyle": "line",
-            "lineWidth": 2,
             "fillOpacity": 20,
             "gradientMode": "scheme",
-            "spanNulls": false,
+            "lineWidth": 2,
             "showPoints": "never",
-            "stacking": { "mode": "none" },
-            "axisSoftMin": 0
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
           },
-          "color": { "mode": "palette-classic-by-name" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "links": [
             {
+              "targetBlank": true,
               "title": "View Logs \u2192",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__field.labels.host}&var-service=${__field.labels.service}",
-              "targetBlank": true
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__field.labels.host}&var-service=${__field.labels.service}"
             }
-          ]
+          ],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 8,
+        "y": 29
+      },
+      "id": 42,
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
         "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      }
-    },
-
-    {
-      "id": 42,
-      "type": "timeseries",
-      "title": "Container Memory",
-      "description": "Working set memory per container (what the OOM killer uses). No container here sets a Docker memory limit, so there is no limit line \u2014 judge usage against the host's total RAM on the Host Workbench.",
-      "gridPos": { "x": 8, "y": 23, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "sum by (service) (container_memory_working_set_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"})",
+          "instant": false,
           "legendFormat": "{{service}}",
           "range": true,
-          "instant": false,
           "refId": "A"
         }
       ],
+      "title": "Container Memory",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Network throughput per container, colored by service (each container gets a consistent color across panels). Receive (positive, solid line) and transmit (negative, dashed line) form a bidirectional view \u2014 direction is encoded by sign + line style, not color, so it stays readable with many services selected.",
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
-          "min": 0,
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 20,
+            "fillOpacity": 15,
             "gradientMode": "scheme",
-            "spanNulls": false,
+            "lineWidth": 2,
             "showPoints": "never",
-            "stacking": { "mode": "none" },
-            "axisSoftMin": 0
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
           },
-          "color": { "mode": "palette-classic" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
           "links": [
             {
+              "targetBlank": true,
               "title": "View Logs \u2192",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__field.labels.host}&var-service=${__field.labels.service}",
-              "targetBlank": true
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__field.labels.host}&var-service=${__field.labels.service}"
             }
-          ]
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Bps"
         },
-        "overrides": []
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/ tx$/"
+            },
+            "properties": [
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    6,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              }
+            ]
+          }
+        ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 8,
+        "x": 16,
+        "y": 29
+      },
+      "id": 43,
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
         "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      }
-    },
-
-    {
-      "id": 43,
-      "type": "timeseries",
-      "title": "Container Network",
-      "description": "Network throughput per container. Receive (positive) and transmit (negative) form a bidirectional view \u2014 asymmetry is immediately visible.",
-      "gridPos": { "x": 16, "y": 23, "w": 8, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "sum by (service) (rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
           "legendFormat": "{{service}} rx",
           "range": true,
-          "instant": false,
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "- sum by (service) (rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
           "legendFormat": "{{service}} tx",
           "range": true,
-          "instant": false,
           "refId": "B"
         }
       ],
+      "title": "Container Network",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 37
+      },
+      "id": 104,
+      "panels": [],
+      "title": "Saturation & I/O",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "RSS = actual memory the container needs (what OOM killer considers), solid line. Cache = kernel page cache (reclaimable), dashed line. Both colored by service so containers stay distinguishable when $service=All. High cache is normal for database and log-heavy containers; high RSS with an upward trend indicates a memory leak.",
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps",
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 2,
             "fillOpacity": 15,
             "gradientMode": "scheme",
-            "spanNulls": false,
+            "lineWidth": 2,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-          "links": [
-            {
-              "title": "View Logs \u2192",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__field.labels.host}&var-service=${__field.labels.service}",
-              "targetBlank": true
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
             }
-          ]
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "bytes"
         },
         "overrides": [
           {
-            "matcher": { "id": "byRegexp", "options": "/rx$/" },
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/cache$/"
+            },
             "properties": [
-              { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" } },
-              { "id": "custom.fillOpacity", "value": 15 }
-            ]
-          },
-          {
-            "matcher": { "id": "byRegexp", "options": "/tx$/" },
-            "properties": [
-              { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" } }
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    6,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              },
+              {
+                "id": "custom.fillOpacity",
+                "value": 5
+              }
             ]
           }
         ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 38
+      },
+      "id": 47,
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
         "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      }
-    },
-
-    {
-      "type": "row",
-      "title": "Saturation & I/O",
-      "collapsed": false,
-      "gridPos": { "x": 0, "y": 31, "w": 24, "h": 1 },
-      "id": 104,
-      "panels": []
-    },
-
-    {
-      "id": 47,
-      "type": "timeseries",
-      "title": "Memory: RSS vs Cache",
-      "description": "RSS = actual memory the container needs (what OOM killer considers). Cache = kernel page cache (reclaimable). High cache is normal for database and log-heavy containers; high RSS with upward trend indicates a memory leak.",
-      "gridPos": { "x": 0, "y": 32, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "sum by (service)(container_memory_rss{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"})",
+          "instant": false,
           "legendFormat": "{{service}} RSS",
           "range": true,
-          "instant": false,
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "sum by (service)(container_memory_cache{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"})",
+          "instant": false,
           "legendFormat": "{{service}} cache",
           "range": true,
-          "instant": false,
           "refId": "B"
         }
       ],
+      "title": "Memory: RSS vs Cache",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Container filesystem write (positive, solid) and read (negative, dashed) rates, colored by service. High write rates from Prometheus, Loki, or databases are normal; unexpected spikes from app containers may indicate issues.",
       "fieldConfig": {
         "defaults": {
-          "unit": "bytes",
-          "min": 0,
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 2,
             "fillOpacity": 15,
             "gradientMode": "scheme",
-            "spanNulls": false,
+            "lineWidth": 2,
             "showPoints": "never",
-            "stacking": { "mode": "none" }
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
           },
-          "color": { "mode": "palette-classic" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              }
+            ]
+          },
+          "unit": "Bps"
         },
         "overrides": [
           {
-            "matcher": { "id": "byRegexp", "options": "/cache$/" },
+            "matcher": {
+              "id": "byRegexp",
+              "options": "/ reads$/"
+            },
             "properties": [
-              { "id": "custom.lineStyle", "value": { "fill": "dash", "dash": [6, 6] } },
-              { "id": "custom.fillOpacity", "value": 5 },
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-blue" } }
+              {
+                "id": "custom.lineStyle",
+                "value": {
+                  "dash": [
+                    6,
+                    6
+                  ],
+                  "fill": "dash"
+                }
+              }
             ]
           }
         ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 38
+      },
+      "id": 48,
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
         "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
           "displayMode": "table",
           "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      }
-    },
-
-    {
-      "id": 48,
-      "type": "timeseries",
-      "title": "Disk I/O",
-      "description": "Container filesystem write and read rates. High write rates from Prometheus, Loki, or databases are normal; unexpected spikes from app containers may indicate issues.",
-      "gridPos": { "x": 12, "y": 32, "w": 12, "h": 8 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "sum by (service)(rate(container_fs_writes_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
           "legendFormat": "{{service}} writes",
           "range": true,
-          "instant": false,
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "- sum by (service)(rate(container_fs_reads_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
           "legendFormat": "{{service}} reads",
           "range": true,
-          "instant": false,
           "refId": "B"
         }
       ],
+      "title": "Disk I/O",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Number of times each container's start time changed within the current time range \u2014 a true restart COUNT, not just 'started at least once'. The Recent Restarts table above only shows the most recent start; a container silently crash-looping (e.g. 5 restarts in an hour) looks identical to a single clean restart there. This panel makes that visible.",
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps",
           "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "gradientMode": "scheme",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": { "mode": "none" }
-          },
-          "color": { "mode": "palette-classic" },
-          "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byRegexp", "options": "/writes$/" },
+            "matcher": {
+              "id": "byName",
+              "options": "Restarts"
+            },
             "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-orange" } }
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "yellow",
+                      "value": null
+                    },
+                    {
+                      "color": "red",
+                      "value": 3
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
             ]
           },
           {
-            "matcher": { "id": "byRegexp", "options": "/reads$/" },
+            "matcher": {
+              "id": "byName",
+              "options": "Service"
+            },
             "properties": [
-              { "id": "color", "value": { "mode": "fixed", "fixedColor": "semi-dark-green" } }
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "View Logs \u2192",
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}"
+                  }
+                ]
+              }
             ]
           }
         ]
       },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 46,
       "options": {
-        "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": ["mean", "max"]
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Restarts"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "changes(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__range]) > 0",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
         }
-      }
+      ],
+      "title": "Restart Count (crash-loop detector)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "compose_project": true,
+              "container": true,
+              "env": true,
+              "image": true,
+              "instance": true,
+              "job": true,
+              "name": true,
+              "node": true,
+              "vm_role": true
+            },
+            "indexByName": {
+              "Value": 2,
+              "host": 0,
+              "service": 1
+            },
+            "renameByName": {
+              "Value": "Restarts",
+              "host": "Host",
+              "service": "Service"
+            }
+          }
+        }
+      ],
+      "type": "table"
     }
-
-  ]
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": [
+    "homelab",
+    "container",
+    "workbench"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Prometheus",
+        "multi": false,
+        "name": "datasource_prometheus",
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "description": "Passed to Log Workbench via drilldown links. Not used on this dashboard.",
+        "hide": 2,
+        "includeAll": false,
+        "label": "Loki",
+        "multi": false,
+        "name": "datasource_loki",
+        "query": "loki",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Node",
+        "multi": true,
+        "name": "node",
+        "query": "label_values(up, node)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "VM Role",
+        "multi": true,
+        "name": "vm_role",
+        "query": "label_values(up{node=~\"$node\"}, vm_role)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Host",
+        "multi": true,
+        "name": "host",
+        "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "query": "label_values(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}, service)",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "prod",
+          "value": "prod"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "env",
+        "options": [
+          {
+            "selected": true,
+            "text": "prod",
+            "value": "prod"
+          }
+        ],
+        "query": "prod",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Container Workbench",
+  "uid": "homelab-container-workbench",
+  "weekStart": ""
 }
