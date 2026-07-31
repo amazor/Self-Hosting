@@ -241,7 +241,39 @@ BAZARR_ANIME_PROFILE_ID = 2
 BAZARR_ANIME_PROFILE_NAME = "English (Anime)"
 BAZARR_ANIME_LANGUAGES = ["en"]
 
-BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "animetosho"]
+# Zero-credential providers, always enabled.  subf2m is the Subscene successor —
+# a large English database that broadens release/hash matching (more providers =>
+# higher chance of a high-scoring match; Bazarr queries them in parallel and
+# keeps the best by score).
+# animetosho was deliberately dropped: it fetched 0 subtitles ever (it needs an
+# AniDB API client we don't provision) and only produced recurring
+# `WARNING (anidb:249)` log spam on every anime search.  OpenSubtitles.com now
+# covers anime, so animetosho was pure dead weight.
+# embeddedsubtitles: extracts a text-based embedded track (ASS/SSA/SRT) and
+# converts it to an external .srt.  This is the reliable, offline, rate-limit-free
+# floor for ANIME, whose fansub releases (Vodes, Erai-raws, ...) ship a good
+# English translation embedded as ASS — the right words, wrong format.  Pairing
+# general.ignore_ass_subs=true (ASS doesn't count as "have") with this provider
+# (which DOES extract ASS) means Bazarr sees the ASS-only English as missing, then
+# immediately re-materialises it as a soft .srt that Plex direct-plays instead of
+# burning in (software transcode).  External providers stay enabled to upgrade to a
+# cleaner authored SRT when one exists.  Image subs (PGS/VobSub) are NOT extracted
+# here — they can't become text without OCR and would still force a burn-in.
+BAZARR_PROVIDERS = ["gestdown", "wizdom", "yifysubtitles", "subf2m",
+                    "embeddedsubtitles"]
+
+# OpenSubtitles.com (NOT .org) needs a free account, unlike the providers above,
+# so it is only enabled when OPENSUBTITLES_USERNAME/PASSWORD are set in .env.  It
+# is the practical fix for anime that lacks embedded English subs: animetosho,
+# Bazarr's anime-native provider, is dead without an AniDB API client we do not
+# provision, and OpenSubtitles.com covers anime (and the whole library) directly.
+BAZARR_OPENSUBTITLESCOM = "opensubtitlescom"
+
+# subf2m refuses to run with a blank User-Agent: it self-throttles for 12 hours
+# with `ConfigurationError: 'User-agent config missing'` and contributes nothing.
+# A plain browser UA is all it needs to actually search.
+BAZARR_SUBF2M_USER_AGENT = ("Mozilla/5.0 (X11; Linux x86_64; rv:128.0) "
+                            "Gecko/20100101 Firefox/128.0")
 
 
 # ---------------------------------------------------------------------------
@@ -1939,7 +1971,8 @@ def setup_cleanuparr_download_cleaner(cleanuparr_url: str, api_key: str) -> None
 
 
 def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
-                 radarr_key: str | None, config_base: Path) -> bool:
+                 radarr_key: str | None, config_base: Path,
+                 env: dict[str, str]) -> bool:
     """Configure Bazarr: Sonarr/Radarr connections, language profile,
     providers, subtitle settings, and mass-assign profile.
 
@@ -2032,10 +2065,38 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
     # text .srt is sent to the client as a soft track, so the video can direct-play
     # or hardware-transcode. use_embedded_subs stays on so an embedded *text* (SRT)
     # track still counts. See the "Anime forces software transcode" investigation.
+    #
+    # CRITICAL two-flag gotcha: there are TWO sets of ignore_* flags and they do
+    # different things:
+    #   * settings-GENERAL-ignore_{ass,pgs,vobsub}_subs  -> governs the "do we
+    #     already HAVE this language?" scan. THIS is the one that makes an
+    #     ASS/PGS-only embedded English track count as *missing* so an external
+    #     .srt is fetched. Without it, anime (embedded English ASS, e.g. Vodes/
+    #     Erai-raws) shows "have English, 0 missing" and never gets a soft .srt.
+    #   * settings-EMBEDDEDSUBTITLES-ignore_*  -> only affects the embeddedsubtitles
+    #     *provider* (which extracts embedded tracks to serve as external). That
+    #     provider isn't even enabled here, so these alone were a silent no-op.
+    # Set BOTH: general for the have-check, provider for correctness if it's ever
+    # enabled.
     form.update({
-        "settings-embeddedsubtitles-ignore_ass_subs": "true",
+        "settings-general-ignore_ass_subs": "true",
+        "settings-general-ignore_pgs_subs": "true",
+        "settings-general-ignore_vobsub_subs": "true",
+    })
+
+    # embeddedsubtitles PROVIDER (see BAZARR_PROVIDERS note): it must do the OPPOSITE
+    # of the general have-check for ASS — the general flag makes ASS "not owned", and
+    # this provider then EXTRACTS that ASS and converts it to a soft .srt.  So here
+    # ignore_ass_subs=FALSE (do extract text ASS), but pgs/vobsub=TRUE (never extract
+    # image subs — they can't convert to text and would still burn in).  hi_fallback
+    # off; unknown_as_fallback off.  fese converts ASS->SRT on extraction.
+    form.update({
+        "settings-embeddedsubtitles-ignore_ass_subs": "false",
         "settings-embeddedsubtitles-ignore_pgs_subs": "true",
         "settings-embeddedsubtitles-ignore_vobsub_subs": "true",
+        "settings-embeddedsubtitles-hi_fallback": "false",
+        "settings-embeddedsubtitles-unknown_as_fallback": "false",
+        "settings-embeddedsubtitles-fallback_lang": "en",
     })
 
     # Subsync (TRaSH recommended thresholds)
@@ -2047,8 +2108,27 @@ def setup_bazarr(bazarr_url: str, sonarr_key: str | None,
         "settings-subsync-subsync_movie_threshold": "86",
     })
 
-    # Providers (zero-credential only)
-    form["settings-general-enabled_providers"] = BAZARR_PROVIDERS
+    # Providers: the zero-credential set, plus OpenSubtitles.com when its free
+    # account is configured in .env.  OpenSubtitles.com is what unblocks anime
+    # (and improves the whole library) — see BAZARR_OPENSUBTITLESCOM.
+    providers = list(BAZARR_PROVIDERS)
+    os_user = env.get("OPENSUBTITLES_USERNAME", "").strip()
+    os_pass = env.get("OPENSUBTITLES_PASSWORD", "").strip()
+    if os_user and os_pass:
+        providers.append(BAZARR_OPENSUBTITLESCOM)
+        form.update({
+            "settings-opensubtitlescom-username": os_user,
+            "settings-opensubtitlescom-password": os_pass,
+            # moviehash matching = far more accurate results, no downside.
+            "settings-opensubtitlescom-use_hash": "true",
+        })
+        log.info("Bazarr: OpenSubtitles.com enabled (account %s).", os_user)
+    else:
+        log.info("Bazarr: OpenSubtitles.com skipped "
+                 "(OPENSUBTITLES_USERNAME/PASSWORD not set in .env).")
+    form["settings-general-enabled_providers"] = providers
+    # subf2m needs a User-Agent or it self-throttles for 12h (see the constant).
+    form["settings-subf2m-user_agent"] = BAZARR_SUBF2M_USER_AGENT
 
     # 6. Enable subtitle languages
     form["languages-enabled"] = BAZARR_LANGUAGES
@@ -2311,7 +2391,7 @@ def setup(env: dict[str, str], script_dir: Path) -> bool:
             fatal.append("Bazarr enabled but missing Sonarr/Radarr API key(s)")
         else:
             if not setup_bazarr(
-                "http://localhost:6767", sonarr_key, radarr_key, config_base,
+                "http://localhost:6767", sonarr_key, radarr_key, config_base, env,
             ):
                 fatal.append("Bazarr enabled but its setup did not fully apply (see warnings above)")
 
