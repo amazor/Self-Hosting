@@ -82,8 +82,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           }
@@ -144,8 +143,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -222,8 +220,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "yellow",
-                "value": null
+                "color": "yellow"
               },
               {
                 "color": "red",
@@ -290,8 +287,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "orange",
@@ -360,8 +356,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -426,8 +421,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "orange",
@@ -534,8 +528,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "green",
-                      "value": null
+                      "color": "green"
                     },
                     {
                       "color": "yellow",
@@ -1137,6 +1130,143 @@
       "type": "table"
     },
     {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Number of times each container's start time changed within the current time range \u2014 a true restart COUNT, not just 'started at least once'. The Recent Restarts table above only shows the most recent start; a container silently crash-looping (e.g. 5 restarts in an hour) looks identical to a single clean restart there. This panel makes that visible.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "align": "auto",
+            "cellOptions": {
+              "type": "auto"
+            }
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Restarts"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 120
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "yellow"
+                    },
+                    {
+                      "color": "red",
+                      "value": 3
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Service"
+            },
+            "properties": [
+              {
+                "id": "links",
+                "value": [
+                  {
+                    "targetBlank": true,
+                    "title": "View Logs \u2192",
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 22
+      },
+      "id": 46,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Restarts"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "changes(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__range]) > 0",
+          "format": "table",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Restart Count (crash-loop detector)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "compose_project": true,
+              "container": true,
+              "env": true,
+              "image": true,
+              "instance": true,
+              "job": true,
+              "name": true,
+              "node": true,
+              "vm_role": true
+            },
+            "indexByName": {
+              "Value": 2,
+              "host": 0,
+              "service": 1
+            },
+            "renameByName": {
+              "Value": "Restarts",
+              "host": "Host",
+              "service": "Service"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
       "collapsed": false,
       "gridPos": {
         "h": 1,
@@ -1184,8 +1314,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1267,8 +1396,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1348,8 +1476,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1467,8 +1594,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1576,8 +1702,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1654,148 +1779,10 @@
       ],
       "title": "Disk I/O",
       "type": "timeseries"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource_prometheus}"
-      },
-      "description": "Number of times each container's start time changed within the current time range \u2014 a true restart COUNT, not just 'started at least once'. The Recent Restarts table above only shows the most recent start; a container silently crash-looping (e.g. 5 restarts in an hour) looks identical to a single clean restart there. This panel makes that visible.",
-      "fieldConfig": {
-        "defaults": {
-          "custom": {
-            "align": "auto",
-            "cellOptions": {
-              "type": "auto"
-            }
-          }
-        },
-        "overrides": [
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Restarts"
-            },
-            "properties": [
-              {
-                "id": "custom.width",
-                "value": 120
-              },
-              {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    {
-                      "color": "yellow",
-                      "value": null
-                    },
-                    {
-                      "color": "red",
-                      "value": 3
-                    }
-                  ]
-                }
-              },
-              {
-                "id": "custom.cellOptions",
-                "value": {
-                  "type": "color-background"
-                }
-              }
-            ]
-          },
-          {
-            "matcher": {
-              "id": "byName",
-              "options": "Service"
-            },
-            "properties": [
-              {
-                "id": "links",
-                "value": [
-                  {
-                    "targetBlank": true,
-                    "title": "View Logs \u2192",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-host=${__data.fields.Host}&var-service=${__data.fields.Service}"
-                  }
-                ]
-              }
-            ]
-          }
-        ]
-      },
-      "gridPos": {
-        "h": 6,
-        "w": 24,
-        "x": 0,
-        "y": 22
-      },
-      "id": 46,
-      "options": {
-        "cellHeight": "sm",
-        "footer": {
-          "show": false
-        },
-        "showHeader": true,
-        "sortBy": [
-          {
-            "desc": true,
-            "displayName": "Restarts"
-          }
-        ]
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "changes(container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", name!=\"\", image!=\"\"}[$__range]) > 0",
-          "format": "table",
-          "instant": true,
-          "legendFormat": "",
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "title": "Restart Count (crash-loop detector)",
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "compose_project": true,
-              "container": true,
-              "env": true,
-              "image": true,
-              "instance": true,
-              "job": true,
-              "name": true,
-              "node": true,
-              "vm_role": true
-            },
-            "indexByName": {
-              "Value": 2,
-              "host": 0,
-              "service": 1
-            },
-            "renameByName": {
-              "Value": "Restarts",
-              "host": "Host",
-              "service": "Service"
-            }
-          }
-        }
-      ],
-      "type": "table"
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 39,
+  "schemaVersion": 42,
   "tags": [
     "homelab",
     "container",
@@ -1810,6 +1797,7 @@
         "label": "Prometheus",
         "multi": false,
         "name": "datasource_prometheus",
+        "options": [],
         "query": "prometheus",
         "refresh": 1,
         "type": "datasource"
@@ -1822,6 +1810,7 @@
         "label": "Loki",
         "multi": false,
         "name": "datasource_loki",
+        "options": [],
         "query": "loki",
         "refresh": 1,
         "type": "datasource"
@@ -1833,11 +1822,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "Node",
         "multi": true,
         "name": "node",
+        "options": [],
         "query": "label_values(up, node)",
         "refresh": 1,
         "sort": 1,
@@ -1850,11 +1840,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "VM Role",
         "multi": true,
         "name": "vm_role",
+        "options": [],
         "query": "label_values(up{node=~\"$node\"}, vm_role)",
         "refresh": 1,
         "sort": 1,
@@ -1872,6 +1863,7 @@
         "label": "Host",
         "multi": true,
         "name": "host",
+        "options": [],
         "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
         "refresh": 1,
         "sort": 1,
@@ -1889,6 +1881,7 @@
         "label": "Service",
         "multi": true,
         "name": "service",
+        "options": [],
         "query": "label_values(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}, service)",
         "refresh": 2,
         "sort": 1,

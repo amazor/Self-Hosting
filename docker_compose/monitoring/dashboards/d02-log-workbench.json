@@ -113,8 +113,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -280,8 +279,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -366,8 +364,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
-                "value": null
+                "color": "text"
               }
             ]
           }
@@ -431,8 +428,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "yellow",
-                      "value": null
+                      "color": "yellow"
                     },
                     {
                       "color": "orange",
@@ -533,8 +529,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "text",
-                "value": null
+                "color": "text"
               }
             ]
           }
@@ -582,8 +577,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "yellow",
-                      "value": null
+                      "color": "yellow"
                     },
                     {
                       "color": "orange",
@@ -758,8 +752,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -884,7 +877,7 @@
     }
   ],
   "refresh": "10s",
-  "schemaVersion": 39,
+  "schemaVersion": 42,
   "tags": [
     "homelab",
     "log",
@@ -899,6 +892,7 @@
         "label": "Loki",
         "multi": false,
         "name": "datasource_loki",
+        "options": [],
         "query": "loki",
         "refresh": 1,
         "type": "datasource"
@@ -910,6 +904,7 @@
         "label": "Prometheus",
         "multi": false,
         "name": "datasource_prometheus",
+        "options": [],
         "query": "prometheus",
         "refresh": 1,
         "type": "datasource"
@@ -921,11 +916,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "Node",
         "multi": true,
         "name": "node",
+        "options": [],
         "query": "label_values(up{job=\"node-exporter\"}, node)",
         "refresh": 1,
         "sort": 1,
@@ -938,11 +934,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "VM Role",
         "multi": true,
         "name": "vm_role",
+        "options": [],
         "query": "label_values(up{job=\"node-exporter\", node=~\"$node\"}, vm_role)",
         "refresh": 1,
         "sort": 1,
@@ -960,6 +957,7 @@
         "label": "Host",
         "multi": true,
         "name": "host",
+        "options": [],
         "query": "label_values(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
         "refresh": 1,
         "sort": 1,
@@ -978,6 +976,7 @@
         "label": "Service",
         "multi": true,
         "name": "service",
+        "options": [],
         "query": "label_values({host=~\"$host\", vm_role=~\"$vm_role\"}, service)",
         "refresh": 2,
         "sort": 1,

@@ -92,8 +92,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "yellow",
@@ -162,8 +161,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -229,8 +227,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
-                "value": null
+                "color": "blue"
               }
             ]
           },
@@ -292,8 +289,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "orange",
@@ -602,8 +598,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "orange",
@@ -663,6 +658,83 @@
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
       },
+      "description": "Content Sonarr/Radarr know about but haven't found yet (scraparr). A growing count with a healthy pipeline is normal (not on indexers yet); a growing count alongside indexer failures means it IS available but can't be found \u2014 check Indexer Health.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "decimals": 0,
+          "mappings": [],
+          "noValue": "Deploy scraparr",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "blue"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 6,
+        "x": 6,
+        "y": 12
+      },
+      "id": 23,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value_and_name",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum(sonarr_missing_episodes{host=~\"$host\"})",
+          "instant": true,
+          "legendFormat": "Sonarr missing",
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum(radarr_missing_movies{host=~\"$host\"})",
+          "instant": true,
+          "legendFormat": "Radarr missing",
+          "range": false,
+          "refId": "B"
+        }
+      ],
+      "title": "Missing Content",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
       "description": "Ratio of enabled to configured Prowlarr indexers, as reported by scraparr. Prowlarr auto-disables indexers that fail repeatedly, so a ratio below 100% usually means an indexer needs attention. Note: scraparr exports counts, not a boolean healthy/unhealthy per indexer \u2014 this ratio is the closest available proxy. Uses the scalar *_total gauges rather than sum() over the per-type series, so an added label dimension can't silently double-count; the denominator is clamped so zero indexers reads 0%, not NaN. Click to check Prowlarr logs.",
       "fieldConfig": {
         "defaults": {
@@ -684,8 +756,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "orange",
@@ -802,8 +873,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -884,8 +954,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -966,8 +1035,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1054,8 +1122,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1131,8 +1198,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "yellow",
@@ -1239,8 +1305,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           }
@@ -1405,8 +1470,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1537,8 +1601,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1609,8 +1672,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           }
@@ -1721,8 +1783,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1779,84 +1840,6 @@
       },
       "title": "Exporter Status",
       "type": "text"
-    },
-    {
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource_prometheus}"
-      },
-      "description": "Content Sonarr/Radarr know about but haven't found yet (scraparr). A growing count with a healthy pipeline is normal (not on indexers yet); a growing count alongside indexer failures means it IS available but can't be found \u2014 check Indexer Health.",
-      "fieldConfig": {
-        "defaults": {
-          "color": {
-            "mode": "palette-classic"
-          },
-          "decimals": 0,
-          "mappings": [],
-          "noValue": "Deploy scraparr",
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "blue",
-                "value": null
-              }
-            ]
-          },
-          "unit": "short"
-        },
-        "overrides": []
-      },
-      "gridPos": {
-        "h": 7,
-        "w": 6,
-        "x": 6,
-        "y": 12
-      },
-      "id": 23,
-      "options": {
-        "colorMode": "value",
-        "graphMode": "none",
-        "justifyMode": "center",
-        "orientation": "horizontal",
-        "reduceOptions": {
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": "",
-          "values": false
-        },
-        "textMode": "value_and_name",
-        "wideLayout": true
-      },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "sum(sonarr_missing_episodes{host=~\"$host\"})",
-          "instant": true,
-          "legendFormat": "Sonarr missing",
-          "range": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "sum(radarr_missing_movies{host=~\"$host\"})",
-          "instant": true,
-          "legendFormat": "Radarr missing",
-          "range": false,
-          "refId": "B"
-        }
-      ],
-      "title": "Missing Content",
-      "type": "stat"
     },
     {
       "collapsed": false,
@@ -2259,8 +2242,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "blue",
-                "value": null
+                "color": "blue"
               }
             ]
           },
@@ -2305,7 +2287,6 @@
         }
       ],
       "title": "Torrent State Distribution",
-      "transformations": [],
       "type": "bargauge"
     },
     {
@@ -2324,8 +2305,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           }
@@ -2637,8 +2617,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -2716,8 +2695,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -2820,7 +2798,7 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 39,
+  "schemaVersion": 42,
   "tags": [
     "homelab",
     "media",
@@ -2835,6 +2813,7 @@
         "label": "Prometheus",
         "multi": false,
         "name": "datasource_prometheus",
+        "options": [],
         "query": "prometheus",
         "refresh": 1,
         "type": "datasource"
@@ -2846,6 +2825,7 @@
         "label": "Loki",
         "multi": false,
         "name": "datasource_loki",
+        "options": [],
         "query": "loki",
         "refresh": 1,
         "type": "datasource"
@@ -2857,11 +2837,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "Node",
         "multi": true,
         "name": "node",
+        "options": [],
         "query": "label_values(up, node)",
         "refresh": 1,
         "sort": 1,
@@ -2874,11 +2855,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "VM Role",
         "multi": true,
         "name": "vm_role",
+        "options": [],
         "query": "label_values(up{node=~\"$node\"}, vm_role)",
         "refresh": 1,
         "sort": 1,
@@ -2896,6 +2878,7 @@
         "label": "Host",
         "multi": true,
         "name": "host",
+        "options": [],
         "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
         "refresh": 1,
         "sort": 1,

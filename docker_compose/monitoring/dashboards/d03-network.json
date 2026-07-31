@@ -82,8 +82,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "red",
@@ -149,8 +148,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "yellow",
@@ -220,8 +218,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "yellow",
@@ -391,8 +388,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "green",
-                      "value": null
+                      "color": "green"
                     },
                     {
                       "color": "yellow",
@@ -433,8 +429,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "green",
-                      "value": null
+                      "color": "green"
                     },
                     {
                       "color": "yellow",
@@ -610,8 +605,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -693,8 +687,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -776,8 +769,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -853,8 +845,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -948,8 +939,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1023,8 +1013,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1225,8 +1214,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -1322,8 +1310,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1399,8 +1386,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "green",
-                      "value": null
+                      "color": "green"
                     },
                     {
                       "color": "yellow",
@@ -1530,8 +1516,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -1596,8 +1581,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -1781,8 +1765,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -1861,8 +1844,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
@@ -1928,8 +1910,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -2009,8 +1990,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
           },
@@ -2117,8 +2097,7 @@
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
@@ -2232,8 +2211,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "red",
-                      "value": null
+                      "color": "red"
                     },
                     {
                       "color": "yellow",
@@ -2326,7 +2304,7 @@
     }
   ],
   "refresh": "15s",
-  "schemaVersion": 39,
+  "schemaVersion": 42,
   "tags": [
     "homelab",
     "network",
@@ -2341,6 +2319,7 @@
         "label": "Prometheus",
         "multi": false,
         "name": "datasource_prometheus",
+        "options": [],
         "query": "prometheus",
         "refresh": 1,
         "type": "datasource"
@@ -2352,6 +2331,7 @@
         "label": "Loki",
         "multi": false,
         "name": "datasource_loki",
+        "options": [],
         "query": "loki",
         "refresh": 1,
         "type": "datasource"
@@ -2363,11 +2343,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "Node",
         "multi": true,
         "name": "node",
+        "options": [],
         "query": "label_values(up, node)",
         "refresh": 1,
         "sort": 1,
@@ -2380,11 +2361,12 @@
           "type": "prometheus",
           "uid": "${datasource_prometheus}"
         },
-        "hide": 0,
+        "hide": 2,
         "includeAll": true,
         "label": "VM Role",
         "multi": true,
         "name": "vm_role",
+        "options": [],
         "query": "label_values(up{node=~\"$node\"}, vm_role)",
         "refresh": 1,
         "sort": 1,
@@ -2402,6 +2384,7 @@
         "label": "Host",
         "multi": true,
         "name": "host",
+        "options": [],
         "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
         "refresh": 1,
         "sort": 1,
@@ -2419,6 +2402,7 @@
         "label": "Probe",
         "multi": true,
         "name": "probe",
+        "options": [],
         "query": "label_values(probe_http_duration_seconds, probe_name)",
         "refresh": 1,
         "sort": 1,
