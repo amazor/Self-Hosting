@@ -11,9 +11,11 @@
 # rendering legibly, add ?template=grafana (template file already exists
 # at config/ntfy/templates/grafana.yml).
 #
-# NOTE: the topic name here must match NTFY_ALERT_TOPIC in .env — this file
-# is static (Grafana file-provisioning doesn't expand shell env vars), so if
-# you change NTFY_ALERT_TOPIC, update the url below to match.
+# NOTE: the topic in the url below is a DEFAULT, not a hardcoded value. Grafana's
+# file-provisioning doesn't expand shell env vars, so bootstrap rewrites this url
+# to NTFY_ALERT_TOPIC when it copies this file into config/grafana/provisioning/
+# (see _render_alerting_file in stack_config.py). Edit NTFY_ALERT_TOPIC in .env,
+# not this line — and don't rely on this file being used as-is.
 apiVersion: 1
 
 contactPoints:
