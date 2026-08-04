@@ -1,58 +1,12 @@
 {
-  "uid": "homelab-overview",
-  "title": "Homelab Overview",
-  "description": "Fleet-level triage board. Is something wrong? Where do I click?",
-  "tags": ["homelab", "overview", "noc"],
-  "timezone": "browser",
-  "editable": true,
-  "graphTooltip": 1,
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
-  "timepicker": {},
-  "refresh": "15s",
-  "schemaVersion": 39,
-  "fiscalYearStartMonth": 0,
-  "liveNow": false,
-  "weekStart": "",
-  "links": [
-    {
-      "title": "Host Workbench",
-      "type": "link",
-      "url": "/d/homelab-host-workbench",
-      "tooltip": "VM-level metrics: CPU, memory, disk, I/O",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Container Workbench",
-      "type": "link",
-      "url": "/d/homelab-container-workbench",
-      "tooltip": "Container resource consumption, lifecycle, per-service detail",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Log Workbench",
-      "type": "link",
-      "url": "/d/homelab-log-workbench",
-      "tooltip": "Log exploration and error triage",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    }
-  ],
   "annotations": {
     "list": [
       {
         "builtIn": 1,
-        "datasource": { "type": "grafana", "uid": "-- Grafana --" },
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
         "enable": true,
         "hide": true,
         "iconColor": "rgba(0, 211, 255, 1)",
@@ -61,524 +15,871 @@
       }
     ]
   },
-  "templating": {
-    "list": [
-      {
-        "name": "datasource_prometheus",
-        "type": "datasource",
-        "query": "prometheus",
-        "current": {},
-        "hide": 0,
-        "includeAll": false,
-        "multi": false,
-        "label": "Prometheus",
-        "refresh": 1
-      },
-      {
-        "name": "datasource_loki",
-        "type": "datasource",
-        "query": "loki",
-        "current": {},
-        "hide": 0,
-        "includeAll": false,
-        "multi": false,
-        "label": "Loki",
-        "refresh": 1
-      },
-      {
-        "name": "node",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{job=\"node-exporter\"}, node)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Node"
-      },
-      {
-        "name": "vm_role",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\"}, vm_role)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "VM Role"
-      },
-      {
-        "name": "host",
-        "type": "query",
-        "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Host"
-      },
-      {
-        "name": "env",
-        "type": "custom",
-        "current": { "text": "prod", "value": "prod", "selected": true },
-        "hide": 2,
-        "includeAll": false,
-        "multi": false,
-        "query": "prod",
-        "options": [
-          { "text": "prod", "value": "prod", "selected": true }
-        ]
-      }
-    ]
-  },
-  "panels": [
-
+  "description": "Fleet-level triage board. Is something wrong? Where do I click?",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
     {
-      "id": 1,
-      "type": "stat",
-      "title": "Host Status",
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Host Workbench",
+      "tooltip": "VM-level metrics: CPU, memory, disk, I/O",
+      "type": "link",
+      "url": "/d/homelab-host-workbench"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Container Workbench",
+      "tooltip": "Container resource consumption, lifecycle, per-service detail",
+      "type": "link",
+      "url": "/d/homelab-container-workbench"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Log Workbench",
+      "tooltip": "Log exploration and error triage",
+      "type": "link",
+      "url": "/d/homelab-log-workbench"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Network & Connectivity",
+      "tooltip": "Probes, DNS, throughput, TLS",
+      "type": "link",
+      "url": "/d/homelab-network"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Media Pipeline",
+      "tooltip": "Download queue, indexers, Plex/Jellyfin sessions",
+      "type": "link",
+      "url": "/d/homelab-media-pipeline"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
       "description": "Number of VMs with a failed node_exporter scrape. Zero means all hosts are reachable. Click to investigate in the Host Workbench.",
-      "gridPos": { "x": 0, "y": 0, "w": 6, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}"
+            }
+          ],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "All Hosts UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 0,
+        "y": 0
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "count(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} == 0) OR on() vector(0)",
           "instant": true,
+          "legendFormat": "",
           "range": false,
-          "legendFormat": "",
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "All Hosts UP", "index": 0 }
-              }
-            }
-          ],
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "none",
-        "colorMode": "background",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
+      "title": "Host Status",
+      "type": "stat"
     },
-
     {
-      "id": 2,
-      "type": "stat",
-      "title": "Errors /min",
-      "description": "Fleet-wide error + fatal log rate per minute. Sparkline shows trend direction — rising means the situation is getting worse.",
-      "gridPos": { "x": 6, "y": 0, "w": 9, "h": 3 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-          "editorMode": "code",
-          "expr": "sum(rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", level=~\"error|fatal\"}[5m])) * 60",
-          "queryType": "range",
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "description": "Fleet-wide error + fatal log rate per minute. Sparkline shows trend direction \u2014 rising means the situation is getting worse.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 0.5 },
-              { "color": "red", "value": 5 }
-            ]
+          "color": {
+            "mode": "thresholds"
           },
-          "mappings": [],
           "decimals": 1,
-          "noValue": "0",
           "links": [
             {
+              "targetBlank": false,
               "title": "\u2192 Log Workbench",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}&var-level=error&var-search=",
-              "targetBlank": false
+              "url": "/d/homelab-log-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&var-level=error&var-search="
             }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "area",
-        "colorMode": "background",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
-      "id": 12,
-      "type": "stat",
-      "title": "Containers",
-      "description": "Number of containers currently below the expected fleet count (deficit). Expected = peak running count over the last 24 hours. Zero means all containers are up. A non-zero value means one or more containers went down. The sparkline shows the deficit over time — restart events appear as brief spikes that return to zero once the container recovers.",
-      "gridPos": { "x": 15, "y": 0, "w": 9, "h": 3 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "clamp_min(clamp_min(max_over_time(count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[24h:5m]), 1) - count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}), 0) OR on() vector(0)",
-          "instant": false,
-          "range": true,
-          "legendFormat": "",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
+          ],
+          "mappings": [],
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "red", "value": 1 }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "All Up", "index": 0 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 0.5
+              },
+              {
+                "color": "red",
+                "value": 5
               }
-            }
-          ],
-          "decimals": 0,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Container Workbench",
-              "url": "/d/homelab-container-workbench?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}",
-              "targetBlank": false
-            }
-          ]
+            ]
+          }
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 6,
+        "y": 0
+      },
+      "id": 2,
       "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "area",
         "colorMode": "background",
+        "graphMode": "area",
         "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
         "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
-      "id": 5,
-      "type": "stat",
-      "title": "VM Availability",
-      "description": "Per-VM node_exporter status. Click a VM to drill down to the Host Workbench.",
-      "gridPos": { "x": 0, "y": 3, "w": 24, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+        "textMode": "auto",
+        "wideLayout": true
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service!~\"alloy|blackbox-exporter\", level=~\"error|fatal\"}[5m])) * 60",
+          "legendFormat": "",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Errors /min",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Number of containers currently below the expected fleet count (deficit). Expected = peak running count over the last 1 hour. Zero means all containers are up. A non-zero value means one or more containers went down. The sparkline shows the deficit over time \u2014 restart events appear as brief spikes that return to zero once the container recovers. 1h window (was 24h) so an intentional container removal self-heals within an hour instead of lingering as a false deficit for a full day.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Container Workbench",
+              "url": "/d/homelab-container-workbench?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}"
+            }
+          ],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "All Up"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 12,
+        "y": 0
+      },
+      "id": 12,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "clamp_min(clamp_min(max_over_time(count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[1h:5m]), 1) - count(container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}), 0) OR on() vector(0)",
+          "instant": false,
+          "legendFormat": "",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Containers",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Per-VM node_exporter status. Click a VM to drill down to the Host Workbench.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}"
+            }
+          ],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "DOWN"
+                },
+                "1": {
+                  "index": 1,
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "dark-red",
+                "value": null
+              },
+              {
+                "color": "dark-green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 24,
+        "x": 0,
+        "y": 3
+      },
+      "id": 5,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "max by (host, vm_role) (up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
           "instant": true,
-          "range": false,
           "legendFormat": "{{host}}",
+          "range": false,
           "refId": "A"
         }
       ],
+      "title": "VM Availability",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Current CPU utilization per VM. Based on the idle rate over the last 2 minutes.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}"
+            }
+          ],
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "dark-red", "value": null },
-              { "color": "dark-green", "value": 1 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
             ]
           },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "DOWN", "index": 0 },
-                "1": { "text": "UP", "index": 1 }
-              }
-            }
-          ],
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
+          "unit": "percent"
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "none",
-        "colorMode": "background",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 0,
+        "y": 7
+      },
       "id": 7,
-      "type": "bargauge",
-      "title": "CPU",
-      "description": "Current CPU utilization per VM. Based on the idle rate over the last 2 minutes.",
-      "gridPos": { "x": 0, "y": 7, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 25,
+        "minVizWidth": 8,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "(1 - avg by (host, vm_role) (rate(node_cpu_seconds_total{mode=\"idle\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[2m]))) * 100",
           "instant": true,
-          "range": false,
           "legendFormat": "{{host}}",
+          "range": false,
           "refId": "A"
         }
       ],
+      "title": "CPU",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Current memory utilization per VM. Based on MemAvailable vs MemTotal. Aggregated with max to prevent duplicate series from multiple scrape paths.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}"
+            }
+          ],
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 85 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
             ]
           },
-          "mappings": [],
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
+          "unit": "percent"
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "sizing": "auto",
-        "minVizWidth": 8,
-        "minVizHeight": 25
-      }
-    },
-
-    {
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 6,
+        "y": 7
+      },
       "id": 8,
-      "type": "bargauge",
-      "title": "Memory",
-      "description": "Current memory utilization per VM. Based on MemAvailable vs MemTotal. Aggregated with max to prevent duplicate series from multiple scrape paths.",
-      "gridPos": { "x": 6, "y": 7, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 25,
+        "minVizWidth": 8,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "auto"
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "(1 - (max by (host, vm_role) (node_memory_MemAvailable_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}) / max by (host, vm_role) (node_memory_MemTotal_bytes{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))) * 100",
           "instant": true,
-          "range": false,
           "legendFormat": "{{host}}",
+          "range": false,
           "refId": "A"
         }
       ],
+      "title": "Memory",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Filesystem utilization per VM (root disk) and NFS mounts (shared NAS storage). NFS query excludes nested sub-path mounts (e.g. a VM mounting a subdirectory of another VM's NAS export) so the same underlying NAS volume isn't double-counted as separate bars. NFS filling up silently stops downloads and recordings while containers appear healthy.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}"
+            }
+          ],
+          "mappings": [],
+          "max": 100,
+          "min": 0,
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 85 }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 70
+              },
+              {
+                "color": "red",
+                "value": 85
+              }
             ]
           },
-          "mappings": [],
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 1,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
+          "unit": "percent"
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "sizing": "auto",
-        "minVizWidth": 8,
-        "minVizHeight": 25
-      }
-    },
-
-    {
+      "gridPos": {
+        "h": 5,
+        "w": 6,
+        "x": 12,
+        "y": 7
+      },
       "id": 9,
-      "type": "bargauge",
-      "title": "Disk",
-      "description": "Filesystem utilization per VM (root disk) and NFS mounts (shared NAS storage). NFS filling up silently stops downloads and recordings while containers appear healthy.",
-      "gridPos": { "x": 12, "y": 7, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "options": {
+        "displayMode": "gradient",
+        "maxVizHeight": 24,
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showUnfilled": true,
+        "sizing": "manual",
+        "text": {
+          "titleSize": 12,
+          "valueSize": 12
+        }
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "max by (host, vm_role) ((1 - (node_filesystem_avail_bytes{mountpoint=\"/\", fstype!=\"tmpfs\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} / node_filesystem_size_bytes{mountpoint=\"/\", fstype!=\"tmpfs\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})) * 100)",
           "instant": true,
-          "range": false,
           "legendFormat": "{{host}}",
+          "range": false,
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
-          "expr": "max by (host, vm_role, mountpoint) ((1 - (node_filesystem_avail_bytes{fstype=~\"nfs|nfs4\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} / node_filesystem_size_bytes{fstype=~\"nfs|nfs4\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})) * 100)",
+          "expr": "max by (host, vm_role, mountpoint) ((1 - (node_filesystem_avail_bytes{fstype=~\"nfs|nfs4\", mountpoint!~\"^/mnt/[^/]+/.+\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"} / node_filesystem_size_bytes{fstype=~\"nfs|nfs4\", mountpoint!~\"^/mnt/[^/]+/.+\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})) * 100)",
           "instant": true,
+          "legendFormat": "NFS {{host}}:{{mountpoint}}",
           "range": false,
-          "legendFormat": "NFS {{mountpoint}}",
           "refId": "B"
         }
       ],
+      "title": "Disk",
+      "type": "bargauge"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Running vs expected containers per VM. Expected = peak running count over the last 1 hour (shortened from 24h so an intentional container removal doesn't look like an incident for a full day). The gauge column fills green when all containers are up; a deficit is immediately visible. Click a row to drill into the Container Workbench.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Container Workbench",
+              "url": "/d/homelab-container-workbench?${__url_time_range}&var-node=${__data.fields.node}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.Host}"
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 70 },
-              { "color": "red", "value": 85 }
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "vm_role"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
             ]
           },
-          "mappings": [],
-          "unit": "percent",
-          "min": 0,
-          "max": 100,
-          "decimals": 0,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "node"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 110
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Up"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 35
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Exp"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 40
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Health"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "applyToRow": true,
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "percentunit"
+              },
+              {
+                "id": "decimals",
+                "value": 0
+              },
+              {
+                "id": "min",
+                "value": 0
+              },
+              {
+                "id": "max",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 0.8
+                    },
+                    {
+                      "color": "green",
+                      "value": 1
+                    }
+                  ]
+                }
+              },
+              {
+                "id": "custom.width",
+                "value": 55
+              }
+            ]
+          }
+        ]
       },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "orientation": "horizontal",
-        "displayMode": "gradient",
-        "showUnfilled": true,
-        "sizing": "manual",
-        "minVizWidth": 8,
-        "minVizHeight": 16,
-        "maxVizHeight": 24,
-        "text": { "titleSize": 12, "valueSize": 12 }
-      }
-    },
-
-    {
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 7
+      },
       "id": 13,
-      "type": "table",
-      "title": "Containers Running",
-      "description": "Running vs expected containers per VM. Expected = peak running count over the last 24 hours. The gauge column fills green when all containers are up; a deficit is immediately visible. Click a row to drill into the Container Workbench.",
-      "gridPos": { "x": 18, "y": 7, "w": 6, "h": 5 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "fields": [
+            "Up",
+            "Exp"
+          ],
+          "reducer": [
+            "sum"
+          ],
+          "show": true
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Host"
+          }
+        ]
+      },
       "targets": [
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "count by (host, vm_role, node) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
-          "instant": true,
           "format": "table",
+          "instant": true,
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
-          "expr": "clamp_min(max_over_time(count by (host, vm_role, node) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[24h:5m]), 1)",
-          "instant": true,
+          "expr": "clamp_min(max_over_time(count by (host, vm_role, node) (container_start_time_seconds{name!=\"\", image!=\"\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})[1h:5m]), 1)",
           "format": "table",
+          "instant": true,
           "refId": "B"
         }
       ],
+      "title": "Containers Running",
       "transformations": [
         {
           "id": "merge",
@@ -587,13 +888,13 @@
         {
           "id": "calculateField",
           "options": {
-            "mode": "binary",
+            "alias": "Health",
             "binary": {
               "left": "Value #A",
               "operator": "/",
               "right": "Value #B"
             },
-            "alias": "Health",
+            "mode": "binary",
             "replaceFields": false
           }
         },
@@ -604,253 +905,390 @@
               "Time": true
             },
             "indexByName": {
-              "host": 0,
+              "Health": 3,
               "Value #A": 1,
               "Value #B": 2,
-              "Health": 3,
-              "vm_role": 4,
-              "node": 5
+              "host": 0,
+              "node": 5,
+              "vm_role": 4
             },
             "renameByName": {
-              "host": "Host",
+              "Health": "Health",
               "Value #A": "Up",
               "Value #B": "Exp",
-              "Health": "Health"
+              "host": "Host"
             }
           }
         }
       ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Seconds since the last successful Prometheus scrape per VM. High values indicate collection problems.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${__field.labels.node}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}"
+            }
+          ],
+          "mappings": [],
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "text", "value": null }
+              {
+                "color": "green",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 60
+              },
+              {
+                "color": "red",
+                "value": 300
+              }
             ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 9,
+        "x": 0,
+        "y": 15
+      },
+      "id": 10,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "time() - max by (host, node, vm_role) (timestamp(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))",
+          "instant": true,
+          "legendFormat": "{{host}}",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Scrape Staleness",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "description": "Log volume per VM (lines/min). The sparkline is the signal: a steady line means healthy pipeline, a cliff to zero means Alloy stopped shipping, a sudden spike means log churn from an incident. STALE means zero logs in the current window.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${__field.labels.node}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}"
+            }
+          ],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "STALE"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "NO DATA",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 9,
+        "x": 9,
+        "y": 15
+      },
+      "id": 11,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host, node, vm_role) (rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m])) * 60",
+          "legendFormat": "{{host}}",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Log Freshness",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "datasource",
+        "uid": "-- Mixed --"
+      },
+      "description": "Services producing the most errors in the selected time range, ranked by error count with restart context. Restarts are detected via the recency method (container_start_time_seconds within the time window) \u2014 consistent with the fleet Restarts panel and immune to cAdvisor series drops during stop+start cycles. Empty when healthy \u2014 that's by design.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
           },
           "links": [
             {
-              "title": "\u2192 Container Workbench",
-              "url": "/d/homelab-container-workbench?${__url_time_range}&var-node=${__data.fields.node}&var-vm_role=${__data.fields.vm_role}&var-host=${__data.fields.Host}",
-              "targetBlank": false
+              "targetBlank": false,
+              "title": "\u2192 Log Workbench",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${__data.fields.node}&${vm_role:queryparam}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error&var-search="
             }
-          ]
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text",
+                "value": null
+              }
+            ]
+          }
         },
         "overrides": [
           {
-            "matcher": { "id": "byName", "options": "vm_role" },
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
             "properties": [
-              { "id": "custom.hidden", "value": true }
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "node" },
+            "matcher": {
+              "id": "byName",
+              "options": "node"
+            },
             "properties": [
-              { "id": "custom.hidden", "value": true }
+              {
+                "id": "displayName",
+                "value": "Node"
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Host" },
+            "matcher": {
+              "id": "byName",
+              "options": "host"
+            },
             "properties": [
-              { "id": "custom.width", "value": 80 }
+              {
+                "id": "displayName",
+                "value": "Host"
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Up" },
+            "matcher": {
+              "id": "byName",
+              "options": "service"
+            },
             "properties": [
-              { "id": "custom.width", "value": 35 }
+              {
+                "id": "displayName",
+                "value": "Service"
+              }
             ]
           },
           {
-            "matcher": { "id": "byName", "options": "Exp" },
-            "properties": [
-              { "id": "custom.width", "value": 40 }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Health" },
+            "matcher": {
+              "id": "byName",
+              "options": "Errors"
+            },
             "properties": [
               {
                 "id": "custom.cellOptions",
                 "value": {
-                  "type": "color-background",
-                  "applyToRow": true
+                  "type": "color-background"
                 }
               },
-              { "id": "unit", "value": "percentunit" },
-              { "id": "decimals", "value": 0 },
-              { "id": "min", "value": 0 },
-              { "id": "max", "value": 1 },
               {
                 "id": "thresholds",
                 "value": {
                   "mode": "absolute",
                   "steps": [
-                    { "color": "red", "value": null },
-                    { "color": "yellow", "value": 0.8 },
-                    { "color": "green", "value": 1 }
+                    {
+                      "color": "yellow",
+                      "value": null
+                    },
+                    {
+                      "color": "orange",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 50
+                    }
                   ]
                 }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Restarts"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
               },
-              { "id": "custom.width", "value": 55 }
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "text",
+                      "value": null
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 1
+                    },
+                    {
+                      "color": "orange",
+                      "value": 3
+                    },
+                    {
+                      "color": "red",
+                      "value": 5
+                    }
+                  ]
+                }
+              }
             ]
           }
         ]
       },
-      "options": {
-        "showHeader": true,
-        "cellHeight": "sm",
-        "sortBy": [{ "displayName": "Host", "desc": false }],
-        "footer": {
-          "show": true,
-          "reducer": ["sum"],
-          "fields": ["Up", "Exp"]
-        }
-      }
-    },
-
-    {
-      "id": 10,
-      "type": "stat",
-      "title": "Scrape Staleness",
-      "description": "Seconds since the last successful Prometheus scrape per VM. High values indicate collection problems.",
-      "gridPos": { "x": 0, "y": 12, "w": 12, "h": 4 },
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "targets": [
-        {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-          "editorMode": "code",
-          "expr": "time() - max by (host, node, vm_role) (timestamp(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}))",
-          "instant": true,
-          "range": false,
-          "legendFormat": "{{host}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "green", "value": null },
-              { "color": "yellow", "value": 60 },
-              { "color": "red", "value": 300 }
-            ]
-          },
-          "mappings": [],
-          "unit": "s",
-          "decimals": 0,
-          "noValue": "N/A",
-          "links": [
-            {
-              "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${__field.labels.node}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 19
       },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "none",
-        "colorMode": "value",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
-      "id": 11,
-      "type": "stat",
-      "title": "Log Freshness",
-      "description": "Log volume per VM (lines/min). The sparkline is the signal: a steady line means healthy pipeline, a cliff to zero means Alloy stopped shipping, a sudden spike means log churn from an incident. STALE means zero logs in the current window.",
-      "gridPos": { "x": 12, "y": 12, "w": 12, "h": 4 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "targets": [
-        {
-          "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-          "editorMode": "code",
-          "expr": "sum by (host, node, vm_role) (rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m])) * 60",
-          "queryType": "range",
-          "legendFormat": "{{host}}",
-          "refId": "A"
-        }
-      ],
-      "fieldConfig": {
-        "defaults": {
-          "color": { "mode": "thresholds" },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              { "color": "red", "value": null },
-              { "color": "green", "value": 1 }
-            ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": { "text": "STALE", "index": 0 }
-              }
-            }
-          ],
-          "unit": "short",
-          "decimals": 0,
-          "noValue": "NO DATA",
-          "links": [
-            {
-              "title": "\u2192 Host Workbench",
-              "url": "/d/homelab-host-workbench?${__url_time_range}&var-node=${__field.labels.node}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": false },
-        "graphMode": "area",
-        "colorMode": "value",
-        "justifyMode": "center",
-        "textMode": "auto",
-        "wideLayout": true,
-        "showPercentChange": false,
-        "orientation": "auto"
-      }
-    },
-
-    {
       "id": 6,
-      "type": "table",
-      "title": "Top Offenders",
-      "description": "Services producing the most errors in the selected time range, ranked by error count with restart context. Restarts are detected via the recency method (container_start_time_seconds within the time window) — consistent with the fleet Restarts panel and immune to cAdvisor series drops during stop+start cycles. Empty when healthy — that's by design.",
-      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 6 },
-      "datasource": { "type": "datasource", "uid": "-- Mixed --" },
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Errors"
+          }
+        ]
+      },
       "targets": [
         {
-          "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
           "editorMode": "code",
-          "expr": "sum by (node, host, service) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", level=~\"error|fatal\"}[$__range]))",
-          "queryType": "instant",
+          "expr": "sum by (node, host, service) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service!~\"alloy|blackbox-exporter\", level=~\"error|fatal\"}[$__range]))",
           "legendFormat": "Errors",
+          "queryType": "instant",
           "refId": "A"
         },
         {
-          "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
           "editorMode": "code",
           "expr": "count by (node, host, service) (container_start_time_seconds{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service!=\"\", name!=\"\", image!=\"\"} > (time() - $__range_s))",
           "instant": true,
-          "range": false,
           "legendFormat": "Restarts",
+          "range": false,
           "refId": "B"
         }
       ],
+      "title": "Top Offenders",
       "transformations": [
         {
           "id": "merge",
@@ -862,122 +1300,321 @@
             "excludeByName": {
               "Time": true
             },
+            "indexByName": {
+              "Errors": 3,
+              "Restarts": 4,
+              "host": 1,
+              "node": 0,
+              "service": 2
+            },
             "renameByName": {
               "Value #A": "Errors",
               "Value #B": "Restarts"
-            },
-            "indexByName": {
-              "node": 0,
-              "host": 1,
-              "service": 2,
-              "Errors": 3,
-              "Restarts": 4
             }
           }
         },
         {
           "id": "filterByValue",
           "options": {
-            "type": "include",
-            "match": "any",
             "filters": [
               {
-                "fieldName": "Errors",
                 "config": {
                   "id": "greater",
-                  "options": { "value": 0 }
-                }
+                  "options": {
+                    "value": 0
+                  }
+                },
+                "fieldName": "Errors"
               }
-            ]
+            ],
+            "match": "any",
+            "type": "include"
           }
         }
       ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Count of Prometheus alerting rules currently in the 'firing' state, fleet-wide. Zero means nothing is actively alerting. Click to open Grafana's alert list.",
       "fieldConfig": {
         "defaults": {
-          "color": { "mode": "thresholds" },
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 0,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Alert List",
+              "url": "/alerting/list"
+            }
+          ],
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "No Firing Alerts"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "N/A",
           "thresholds": {
             "mode": "absolute",
             "steps": [
-              { "color": "text", "value": null }
-            ]
-          },
-          "links": [
-            {
-              "title": "\u2192 Log Workbench",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-node=${__data.fields.node}&var-vm_role=${vm_role}&var-host=${__data.fields.host}&var-service=${__data.fields.service}&var-level=error&var-search=",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": [
-          {
-            "matcher": { "id": "byName", "options": "Time" },
-            "properties": [
-              { "id": "custom.hidden", "value": true }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "node" },
-            "properties": [
-              { "id": "displayName", "value": "Node" }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "host" },
-            "properties": [
-              { "id": "displayName", "value": "Host" }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "service" },
-            "properties": [
-              { "id": "displayName", "value": "Service" }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Errors" },
-            "properties": [
-              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
               {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    { "color": "yellow", "value": null },
-                    { "color": "orange", "value": 10 },
-                    { "color": "red", "value": 50 }
-                  ]
-                }
-              }
-            ]
-          },
-          {
-            "matcher": { "id": "byName", "options": "Restarts" },
-            "properties": [
-              { "id": "custom.cellOptions", "value": { "type": "color-background" } },
+                "color": "green",
+                "value": null
+              },
               {
-                "id": "thresholds",
-                "value": {
-                  "mode": "absolute",
-                  "steps": [
-                    { "color": "text", "value": null },
-                    { "color": "yellow", "value": 1 },
-                    { "color": "orange", "value": 3 },
-                    { "color": "red", "value": 5 }
-                  ]
-                }
+                "color": "red",
+                "value": 1
               }
             ]
           }
-        ]
+        },
+        "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 6,
+        "x": 18,
+        "y": 0
+      },
+      "id": 14,
       "options": {
-        "showHeader": true,
-        "sortBy": [{ "displayName": "Errors", "desc": true }],
-        "cellHeight": "sm",
-        "footer": { "show": false }
-      }
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "count(ALERTS{alertstate=\"firing\"}) OR on() vector(0)",
+          "instant": true,
+          "legendFormat": "",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Firing Alerts",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Absolute free space on the NAS-backed NFS volume (deduped to the canonical top-level mount, same exclusion as the Disk panel).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 2,
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "\u2192 Host Workbench",
+              "url": "/d/homelab-host-workbench?${__url_time_range}&var-vm_role=${__field.labels.vm_role}&var-host=${__field.labels.host}"
+            }
+          ],
+          "mappings": [],
+          "noValue": "N/A",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red",
+                "value": null
+              },
+              {
+                "color": "yellow",
+                "value": 1726319158886
+              },
+              {
+                "color": "green",
+                "value": 3452638317773
+              }
+            ]
+          },
+          "unit": "decbytes"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 6,
+        "x": 18,
+        "y": 15
+      },
+      "id": 15,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "showPercentChange": false,
+        "textMode": "auto",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "min(node_filesystem_avail_bytes{fstype=~\"nfs|nfs4\", mountpoint!~\"^/mnt/[^/]+/.+\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"})",
+          "instant": true,
+          "legendFormat": "NAS Free",
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "NAS Free",
+      "type": "stat"
     }
-
-  ]
+  ],
+  "refresh": "15s",
+  "schemaVersion": 39,
+  "tags": [
+    "homelab",
+    "overview",
+    "noc"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Prometheus",
+        "multi": false,
+        "name": "datasource_prometheus",
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Loki",
+        "multi": false,
+        "name": "datasource_loki",
+        "query": "loki",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "Node",
+        "multi": true,
+        "name": "node",
+        "query": "label_values(up{job=\"node-exporter\"}, node)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "VM Role",
+        "multi": true,
+        "name": "vm_role",
+        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\"}, vm_role)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Host",
+        "multi": true,
+        "name": "host",
+        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "prod",
+          "value": "prod"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "env",
+        "options": [
+          {
+            "selected": true,
+            "text": "prod",
+            "value": "prod"
+          }
+        ],
+        "query": "prod",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Homelab Overview",
+  "uid": "homelab-overview",
+  "weekStart": ""
 }

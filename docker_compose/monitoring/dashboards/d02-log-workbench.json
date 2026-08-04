@@ -1,241 +1,1078 @@
 {
-  "uid": "homelab-log-workbench",
-  "title": "Log Workbench",
+  "annotations": {
+    "list": [
+      {
+        "builtIn": 1,
+        "datasource": {
+          "type": "grafana",
+          "uid": "-- Grafana --"
+        },
+        "enable": true,
+        "hide": true,
+        "iconColor": "rgba(0, 211, 255, 1)",
+        "name": "Annotations & Alerts",
+        "type": "dashboard"
+      }
+    ]
+  },
   "description": "Log exploration and error triage. What went wrong? Search by service, severity, or free text (movie names, error messages).",
-  "tags": ["homelab", "log", "workbench"],
-  "timezone": "browser",
   "editable": true,
-  "graphTooltip": 1,
-  "time": { "from": "now-1h", "to": "now" },
-  "timepicker": {},
-  "refresh": "10s",
-  "schemaVersion": 39,
   "fiscalYearStartMonth": 0,
-  "liveNow": false,
-  "weekStart": "",
+  "graphTooltip": 1,
   "links": [
-    { "title": "\u2190 Overview", "type": "link", "url": "/d/homelab-overview",
-      "tooltip": "Back to fleet triage", "icon": "arrow-left",
-      "targetBlank": false, "includeVars": true, "keepTime": true },
-    { "title": "Host Workbench", "type": "link", "url": "/d/homelab-host-workbench",
-      "tooltip": "VM resources (CPU, memory, disk)", "icon": "external link",
-      "targetBlank": false, "includeVars": true, "keepTime": true },
-    { "title": "Container Workbench", "type": "link", "url": "/d/homelab-container-workbench",
-      "tooltip": "Container resources", "icon": "external link",
-      "targetBlank": false, "includeVars": true, "keepTime": true },
-    { "title": "Media Pipeline", "type": "link", "url": "/d/homelab-media-pipeline",
-      "tooltip": "Media automation troubleshooting", "icon": "external link",
-      "targetBlank": false, "includeVars": true, "keepTime": true },
-    { "title": "Network", "type": "link", "url": "/d/homelab-network",
-      "tooltip": "Connectivity and bandwidth", "icon": "external link",
-      "targetBlank": false, "includeVars": true, "keepTime": true }
-  ],
-  "annotations": { "list": [
-    { "builtIn": 1, "datasource": { "type": "grafana", "uid": "-- Grafana --" },
-      "enable": true, "hide": true, "iconColor": "rgba(0, 211, 255, 1)",
-      "name": "Annotations & Alerts", "type": "dashboard" }
-  ]},
-  "templating": { "list": [
-    { "name": "datasource_loki", "type": "datasource", "query": "loki",
-      "current": {}, "hide": 0, "includeAll": false, "multi": false,
-      "label": "Loki", "refresh": 1 },
-    { "name": "datasource_prometheus", "type": "datasource", "query": "prometheus",
-      "current": {}, "hide": 2, "includeAll": false, "multi": false,
-      "label": "Prometheus", "refresh": 1 },
-    { "name": "node", "type": "query",
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "query": "label_values(up{job=\"node-exporter\"}, node)",
-      "current": {}, "hide": 0, "includeAll": true, "multi": true,
-      "allValue": ".+", "refresh": 1, "sort": 1, "label": "Node" },
-    { "name": "vm_role", "type": "query",
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "query": "label_values(up{job=\"node-exporter\", node=~\"$node\"}, vm_role)",
-      "current": {}, "hide": 0, "includeAll": true, "multi": true,
-      "allValue": ".+", "refresh": 1, "sort": 1, "label": "VM Role" },
-    { "name": "host", "type": "query",
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "query": "label_values(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
-      "current": {}, "hide": 0, "includeAll": true, "multi": true,
-      "allValue": ".+", "refresh": 1, "sort": 1, "label": "Host" },
-    { "name": "service", "type": "query",
-      "datasource": { "type": "prometheus", "uid": "${datasource_prometheus}" },
-      "query": "label_values(container_cpu_usage_seconds_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}, service)",
-      "current": {}, "hide": 0, "includeAll": true, "multi": true,
-      "allValue": ".+", "refresh": 2, "sort": 1, "label": "Service" },
-    { "name": "level", "type": "custom",
-      "current": { "text": "All", "value": "$__all" },
-      "hide": 0, "includeAll": true, "multi": true,
-      "allValue": ".+",
-      "query": "fatal,error,warn,info,debug,unknown",
-      "options": [
-        { "text": "All", "value": "$__all", "selected": true },
-        { "text": "fatal", "value": "fatal", "selected": false },
-        { "text": "error", "value": "error", "selected": false },
-        { "text": "warn", "value": "warn", "selected": false },
-        { "text": "info", "value": "info", "selected": false },
-        { "text": "debug", "value": "debug", "selected": false },
-        { "text": "unknown", "value": "unknown", "selected": false }
-      ],
-      "label": "Level" },
-    { "name": "search", "type": "textbox",
-      "current": { "text": "", "value": "" },
-      "hide": 0, "label": "Search",
-      "description": "Free text search \u2014 movie titles, error messages, hostnames. Searches across all selected services." },
-    { "name": "env", "type": "custom",
-      "current": { "text": "prod", "value": "prod", "selected": true },
-      "hide": 2, "includeAll": false, "multi": false, "query": "prod",
-      "options": [{ "text": "prod", "value": "prod", "selected": true }] }
-  ]},
-
-  "panels": [
-
-    { "type": "row", "title": "Log Volume", "collapsed": false,
-      "gridPos": { "x": 0, "y": 0, "w": 24, "h": 1 }, "id": 400, "panels": [] },
-
     {
-      "id": 10, "type": "timeseries", "title": "Log Volume by Level",
+      "icon": "arrow-left",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "\u2190 Overview",
+      "tooltip": "Back to fleet triage",
+      "type": "link",
+      "url": "/d/homelab-overview"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Host Workbench",
+      "tooltip": "VM resources (CPU, memory, disk)",
+      "type": "link",
+      "url": "/d/homelab-host-workbench"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Container Workbench",
+      "tooltip": "Container resources",
+      "type": "link",
+      "url": "/d/homelab-container-workbench"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Media Pipeline",
+      "tooltip": "Media automation troubleshooting",
+      "type": "link",
+      "url": "/d/homelab-media-pipeline"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Network",
+      "tooltip": "Connectivity and bandwidth",
+      "type": "link",
+      "url": "/d/homelab-network"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 0
+      },
+      "id": 400,
+      "panels": [],
+      "title": "Log Volume",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
       "description": "Log lines per second by severity across the selected scope. A spike in error/warn correlates with pipeline failures or incidents. Context panel \u2014 scan for anomalies before reading raw log lines.",
-      "gridPos": { "x": 0, "y": 1, "w": 24, "h": 6 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "bars",
+            "fillOpacity": 80,
+            "gradientMode": "none",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "cps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "warn"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "debug"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unknown"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 1
+      },
+      "id": 10,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
-        { "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
           "editorMode": "code",
           "expr": "sum by (level) (rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\"} |= `$search` [$__auto]))",
+          "legendFormat": "{{level}}",
           "queryType": "range",
-          "legendFormat": "{{level}}", "refId": "A" }
+          "refId": "A"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "cps", "min": 0,
-        "custom": { "drawStyle": "bars", "lineWidth": 1, "fillOpacity": 80,
-          "gradientMode": "none", "spanNulls": false, "showPoints": "never",
-          "stacking": { "mode": "normal" } },
-        "color": { "mode": "palette-classic" },
-        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] }
-      }, "overrides": [
-        { "matcher": { "id": "byName", "options": "error" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "warn" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "info" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "debug" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "unknown" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" }}]}
-      ]},
-      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }}
+      "title": "Log Volume by Level",
+      "type": "timeseries"
     },
-
-    { "type": "row", "title": "Error Rate per Service", "collapsed": false,
-      "gridPos": { "x": 0, "y": 7, "w": 24, "h": 1 }, "id": 401, "panels": [] },
-
     {
-      "id": 11, "type": "timeseries", "title": "Error Rate per Service",
-      "description": "Error + fatal log lines per second, grouped by service. Click a service line to focus the entire dashboard on that service. Pairs with D00 Top Offenders \u2014 D00 shows current count, this panel shows trend over time.",
-      "gridPos": { "x": 0, "y": 8, "w": 24, "h": 7 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 7
+      },
+      "id": 401,
+      "panels": [],
+      "title": "Error Rate per Service",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "description": "Error + fatal log lines per second, grouped by service. Excludes alloy (log shipper) and blackbox-exporter (probe churn) self-noise so real application errors aren't buried. Click a service line to focus the entire dashboard on that service. Pairs with D00 Top Offenders \u2014 D00 shows current count, this panel shows trend over time.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 20,
+            "gradientMode": "none",
+            "lineWidth": 2,
+            "pointSize": 5,
+            "showPoints": "auto",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "Focus on ${__field.labels.service}",
+              "url": "/d/${__dashboard.uid}?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&var-service=${__field.labels.service}&${level:queryparam}&var-search=${search:percentencode}"
+            }
+          ],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "cps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 7,
+        "w": 24,
+        "x": 0,
+        "y": 8
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
       "targets": [
-        { "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
           "editorMode": "code",
-          "expr": "sum by (service) (rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", level=~\"error|fatal\"} [$__auto]))",
+          "expr": "sum by (service) (rate({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", level=~\"error|fatal\", service!~\"alloy|blackbox-exporter\"} [$__auto]))",
+          "legendFormat": "{{service}}",
           "queryType": "range",
-          "legendFormat": "{{service}}", "refId": "A" }
+          "refId": "A"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "cps", "min": 0,
-        "custom": { "drawStyle": "line", "lineWidth": 2, "fillOpacity": 20,
-          "gradientMode": "none", "spanNulls": false, "showPoints": "auto",
-          "pointSize": 5, "stacking": { "mode": "none" } },
-        "color": { "mode": "palette-classic" },
-        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-        "links": [
+      "title": "Error Rate per Service",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 15
+      },
+      "id": 404,
+      "panels": [],
+      "title": "Error Analysis",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "description": "Distinct error message shapes ranked by frequency over the visible time range. Messages are normalized (timestamps, hex ids, request ids, long tokens replaced with placeholders) so repeated errors with different embedded values group together. Turns the raw error rate into an actionable list instead of a scroll of individual lines. Click a row to narrow the Log Stream to that service at error level.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false,
+            "inspect": false
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "Filter to ${__data.fields.Service}",
+              "url": "/d/${__dashboard.uid}?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&var-service=${__data.fields.Service}&var-level=error&var-search="
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": [
           {
-            "title": "Focus on ${__field.labels.service}",
-            "url": "/d/${__dashboard.uid}?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}&var-service=${__field.labels.service}&var-level=${level}&var-search=${search:percentencode}",
-            "targetBlank": false
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "service"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Service"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "msg"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Message"
+              },
+              {
+                "id": "custom.width",
+                "value": 640
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Count"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "yellow"
+                    },
+                    {
+                      "color": "orange",
+                      "value": 5
+                    },
+                    {
+                      "color": "red",
+                      "value": 20
+                    }
+                  ]
+                }
+              }
+            ]
           }
         ]
-      }, "overrides": [] },
-      "options": { "tooltip": { "mode": "multi", "sort": "desc" },
-        "legend": { "displayMode": "list", "placement": "bottom", "showLegend": true }}
-    },
-
-    { "type": "row", "title": "Log Stream", "collapsed": false,
-      "gridPos": { "x": 0, "y": 15, "w": 24, "h": 1 }, "id": 402, "panels": [] },
-
-    {
-      "id": 1, "type": "logs", "title": "Logs",
-      "description": "Live log stream filtered by service, level, and free text search. Use the $search variable to find specific movie/show names across all media services. When logs reveal infrastructure problems (OOM, disk full, I/O timeout), use the Host Workbench link to investigate.",
-      "gridPos": { "x": 0, "y": 16, "w": 24, "h": 18 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-      "targets": [{
-        "datasource": { "type": "loki", "uid": "${datasource_loki}" },
-        "editorMode": "code",
-        "expr": "{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", level=~\"$level\"} |= `$search`",
-        "queryType": "range",
-        "refId": "A"
-      }],
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 16
+      },
+      "id": 13,
       "options": {
-        "showTime": true,
-        "showLabels": true,
-        "showCommonLabels": false,
-        "wrapLogMessage": true,
-        "prettifyLogMessage": false,
-        "enableLogDetails": true,
-        "sortOrder": "Descending",
-        "dedupStrategy": "none"
-      }
-    },
-
-    { "type": "row", "title": "Log Level Distribution", "collapsed": true,
-      "gridPos": { "x": 0, "y": 34, "w": 24, "h": 1 }, "id": 403, "panels": [
-
-    {
-      "id": 12, "type": "bargauge", "title": "Log Level Distribution",
-      "description": "Total log lines by severity for the current time range and scope. Useful for profiling unknown services \u2014 is this service 80% warn or 80% info? Helps calibrate whether switching to Level=All will be overwhelmingly noisy.",
-      "gridPos": { "x": 0, "y": 35, "w": 24, "h": 5 },
-      "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Count"
+          }
+        ]
+      },
       "targets": [
-        { "datasource": { "type": "loki", "uid": "${datasource_loki}" },
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
+          "editorMode": "code",
+          "expr": "topk(20,\n  sum by (service, msg) (\n    count_over_time(\n      {node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", level=~\"error|fatal\", service!~\"alloy|blackbox-exporter\"} |= `$search`\n        | label_format msg=`{{ regexReplaceAll \"[0-9]+\" (regexReplaceAll \"[A-Za-z0-9+/_=.-]{20,}\" (regexReplaceAll \"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}\" (regexReplaceAll \"\\\\[Req#[^\\\\]]*\\\\]\" __line__ \"\") \"<uuid>\") \"<token>\") \"N\" }}`\n      [$__range]\n    )\n  )\n)",
+          "legendFormat": "",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Top Error Patterns",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "Value #A": 2,
+              "msg": 1,
+              "service": 0
+            },
+            "renameByName": {
+              "Value #A": "Count"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "description": "Error + fatal line count per service over the visible time range, ranked descending. Excludes alloy/blackbox-exporter self-noise. Click a row to focus the dashboard on that service.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "custom": {
+            "align": "left",
+            "cellOptions": {
+              "type": "auto"
+            },
+            "filterable": false,
+            "inspect": false
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "Focus on ${__data.fields.Service}",
+              "url": "/d/${__dashboard.uid}?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&var-service=${__data.fields.Service}&${level:queryparam}&var-search=${search:percentencode}"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "text"
+              }
+            ]
+          }
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Time"
+            },
+            "properties": [
+              {
+                "id": "custom.hidden",
+                "value": true
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "service"
+            },
+            "properties": [
+              {
+                "id": "displayName",
+                "value": "Service"
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Count"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "yellow"
+                    },
+                    {
+                      "color": "orange",
+                      "value": 10
+                    },
+                    {
+                      "color": "red",
+                      "value": 50
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 9,
+        "w": 24,
+        "x": 0,
+        "y": 25
+      },
+      "id": 14,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Count"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (service) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", level=~\"error|fatal\", service!~\"alloy|blackbox-exporter\"} |= `$search` [$__range]))",
+          "legendFormat": "",
+          "queryType": "instant",
+          "refId": "A"
+        }
+      ],
+      "title": "Errors by Service",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "Value #A": 1,
+              "service": 0
+            },
+            "renameByName": {
+              "Value #A": "Count"
+            }
+          }
+        },
+        {
+          "id": "filterByValue",
+          "options": {
+            "filters": [
+              {
+                "config": {
+                  "id": "greater",
+                  "options": {
+                    "value": 0
+                  }
+                },
+                "fieldName": "Count"
+              }
+            ],
+            "match": "any",
+            "type": "include"
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 34
+      },
+      "id": 402,
+      "panels": [],
+      "title": "Log Stream",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "description": "Live log stream filtered by service, level, and free text search. Use the $search variable to find specific movie/show names across all media services. When logs reveal infrastructure problems (OOM, disk full, I/O timeout), use the Host Workbench link to investigate.",
+      "gridPos": {
+        "h": 18,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "id": 1,
+      "options": {
+        "dedupStrategy": "none",
+        "enableLogDetails": true,
+        "prettifyLogMessage": false,
+        "showCommonLabels": false,
+        "showLabels": true,
+        "showTime": true,
+        "sortOrder": "Descending",
+        "wrapLogMessage": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
+          "editorMode": "code",
+          "expr": "{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\", level=~\"$level\"} |= `$search`",
+          "queryType": "range",
+          "refId": "A"
+        }
+      ],
+      "title": "Logs",
+      "type": "logs"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 53
+      },
+      "id": 403,
+      "panels": [],
+      "title": "Log Level Distribution",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "loki",
+        "uid": "${datasource_loki}"
+      },
+      "description": "Total log lines by severity for the current time range and scope. Useful for profiling unknown services \u2014 is this service 80% warn or 80% info? Helps calibrate whether switching to Level=All will be overwhelmingly noisy.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic"
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "Filter to ${__field.displayName}",
+              "url": "/d/${__dashboard.uid}?${__url_time_range}&${node:queryparam}&${vm_role:queryparam}&${host:queryparam}&${service:queryparam}&var-level=${__field.displayName}&var-search=${search:percentencode}"
+            }
+          ],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "short"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "error"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "red",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "warn"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "orange",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "info"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "green",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "debug"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "blue",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "unknown"
+            },
+            "properties": [
+              {
+                "id": "color",
+                "value": {
+                  "fixedColor": "purple",
+                  "mode": "fixed"
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 5,
+        "w": 24,
+        "x": 0,
+        "y": 54
+      },
+      "id": 12,
+      "options": {
+        "displayMode": "gradient",
+        "minVizHeight": 16,
+        "minVizWidth": 8,
+        "namePlacement": "auto",
+        "orientation": "horizontal",
+        "reduceOptions": {
+          "calcs": [
+            "sum"
+          ],
+          "fields": "",
+          "values": true
+        },
+        "showUnfilled": true,
+        "valueMode": "color"
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "loki",
+            "uid": "${datasource_loki}"
+          },
           "editorMode": "code",
           "expr": "sum by (level) (count_over_time({node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", service=~\"$service\"} [$__range]))",
+          "legendFormat": "{{level}}",
           "queryType": "instant",
-          "legendFormat": "{{level}}", "refId": "A" }
+          "refId": "A"
+        }
       ],
-      "fieldConfig": { "defaults": { "unit": "short", "min": 0,
-        "color": { "mode": "palette-classic" },
-        "thresholds": { "mode": "absolute", "steps": [{ "color": "green", "value": null }] },
-        "links": [
-          {
-            "title": "Filter to ${__field.displayName}",
-            "url": "/d/${__dashboard.uid}?${__url_time_range}&var-node=${node}&var-vm_role=${vm_role}&var-host=${host}&var-service=${service}&var-level=${__field.displayName}&var-search=${search:percentencode}",
-            "targetBlank": false
-          }
-        ]
-      }, "overrides": [
-        { "matcher": { "id": "byName", "options": "error" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "red", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "warn" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "orange", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "info" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "green", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "debug" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "blue", "mode": "fixed" }}]},
-        { "matcher": { "id": "byName", "options": "unknown" }, "properties": [
-          { "id": "color", "value": { "fixedColor": "purple", "mode": "fixed" }}]}
-      ]},
-      "options": {
-        "reduceOptions": { "calcs": ["sum"], "fields": "", "values": false },
-        "displayMode": "gradient",
-        "orientation": "horizontal",
-        "showUnfilled": true,
-        "minVizWidth": 8,
-        "minVizHeight": 16,
-        "namePlacement": "auto",
-        "valueMode": "color"
-      }
+      "title": "Log Level Distribution",
+      "type": "bargauge"
     }
-
-    ]}
-
-  ]
+  ],
+  "refresh": "10s",
+  "schemaVersion": 42,
+  "tags": [
+    "homelab",
+    "log",
+    "workbench"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Loki",
+        "multi": false,
+        "name": "datasource_loki",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 2,
+        "includeAll": false,
+        "label": "Prometheus",
+        "multi": false,
+        "name": "datasource_prometheus",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "Node",
+        "multi": true,
+        "name": "node",
+        "options": [],
+        "query": "label_values(up{job=\"node-exporter\"}, node)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "VM Role",
+        "multi": true,
+        "name": "vm_role",
+        "options": [],
+        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\"}, vm_role)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Host",
+        "multi": true,
+        "name": "host",
+        "options": [],
+        "query": "label_values(up{job=\"node-exporter\", node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "loki",
+          "uid": "${datasource_loki}"
+        },
+        "description": "Sourced from Loki (not Prometheus) so the dropdown matches actual log stream labels \u2014 some services (e.g. plex -> plex-logs) have diverged names between metrics and logs.",
+        "hide": 0,
+        "includeAll": true,
+        "label": "Service",
+        "multi": true,
+        "name": "service",
+        "options": [],
+        "query": "label_values({host=~\"$host\", vm_role=~\"$vm_role\"}, service)",
+        "refresh": 2,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {
+          "text": "All",
+          "value": "$__all"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Level",
+        "multi": true,
+        "name": "level",
+        "options": [
+          {
+            "selected": true,
+            "text": "All",
+            "value": "$__all"
+          },
+          {
+            "selected": false,
+            "text": "fatal",
+            "value": "fatal"
+          },
+          {
+            "selected": false,
+            "text": "error",
+            "value": "error"
+          },
+          {
+            "selected": false,
+            "text": "warn",
+            "value": "warn"
+          },
+          {
+            "selected": false,
+            "text": "info",
+            "value": "info"
+          },
+          {
+            "selected": false,
+            "text": "debug",
+            "value": "debug"
+          },
+          {
+            "selected": false,
+            "text": "unknown",
+            "value": "unknown"
+          }
+        ],
+        "query": "fatal,error,warn,info,debug,unknown",
+        "type": "custom"
+      },
+      {
+        "current": {
+          "text": "",
+          "value": ""
+        },
+        "description": "Free text search \u2014 movie titles, error messages, hostnames. Searches across all selected services.",
+        "hide": 0,
+        "label": "Search",
+        "name": "search",
+        "type": "textbox"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "prod",
+          "value": "prod"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "env",
+        "options": [
+          {
+            "selected": true,
+            "text": "prod",
+            "value": "prod"
+          }
+        ],
+        "query": "prod",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Log Workbench",
+  "uid": "homelab-log-workbench",
+  "weekStart": ""
 }

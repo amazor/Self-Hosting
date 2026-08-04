@@ -1,57 +1,4 @@
 {
-  "uid": "homelab-network",
-  "title": "Network & Connectivity",
-  "description": "Can I reach the internet? Can the internet reach me? Why is my app slow? Who is using all the bandwidth?",
-  "tags": [
-    "homelab",
-    "network",
-    "connectivity"
-  ],
-  "timezone": "browser",
-  "editable": true,
-  "graphTooltip": 1,
-  "time": {
-    "from": "now-1h",
-    "to": "now"
-  },
-  "timepicker": {},
-  "refresh": "15s",
-  "schemaVersion": 39,
-  "fiscalYearStartMonth": 0,
-  "liveNow": false,
-  "weekStart": "",
-  "links": [
-    {
-      "title": "← Overview",
-      "type": "link",
-      "url": "/d/homelab-overview",
-      "tooltip": "Back to fleet triage",
-      "icon": "arrow-left",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Container Workbench",
-      "type": "link",
-      "url": "/d/homelab-container-workbench",
-      "tooltip": "Container resources and per-service detail",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    },
-    {
-      "title": "Log Workbench",
-      "type": "link",
-      "url": "/d/homelab-log-workbench",
-      "tooltip": "Log exploration and error triage",
-      "icon": "external link",
-      "targetBlank": false,
-      "includeVars": true,
-      "keepTime": true
-    }
-  ],
   "annotations": {
     "list": [
       {
@@ -68,131 +15,105 @@
       }
     ]
   },
-  "templating": {
-    "list": [
-      {
-        "name": "datasource_prometheus",
-        "type": "datasource",
-        "query": "prometheus",
-        "current": {},
-        "hide": 0,
-        "includeAll": false,
-        "multi": false,
-        "label": "Prometheus",
-        "refresh": 1
-      },
-      {
-        "name": "datasource_loki",
-        "type": "datasource",
-        "query": "loki",
-        "current": {},
-        "hide": 2,
-        "includeAll": false,
-        "multi": false,
-        "label": "Loki",
-        "refresh": 1
-      },
-      {
-        "name": "node",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource_prometheus}"
-        },
-        "query": "label_values(up, node)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Node"
-      },
-      {
-        "name": "vm_role",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource_prometheus}"
-        },
-        "query": "label_values(up{node=~\"$node\"}, vm_role)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "VM Role"
-      },
-      {
-        "name": "host",
-        "type": "query",
-        "datasource": {
-          "type": "prometheus",
-          "uid": "${datasource_prometheus}"
-        },
-        "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
-        "current": {},
-        "hide": 0,
-        "includeAll": true,
-        "multi": true,
-        "allValue": ".+",
-        "refresh": 1,
-        "sort": 1,
-        "label": "Host"
-      },
-      {
-        "name": "env",
-        "type": "custom",
-        "current": {
-          "text": "prod",
-          "value": "prod",
-          "selected": true
-        },
-        "hide": 2,
-        "includeAll": false,
-        "multi": false,
-        "query": "prod",
-        "options": [
-          {
-            "text": "prod",
-            "value": "prod",
-            "selected": true
-          }
-        ]
-      }
-    ]
-  },
-  "panels": [
+  "description": "Can I reach the internet? Can the internet reach me? Why is my app slow? Who is using all the bandwidth?",
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 1,
+  "links": [
     {
-      "type": "row",
-      "title": "Connectivity",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 0,
-        "w": 24,
-        "h": 1
-      },
-      "id": 200,
-      "panels": []
+      "icon": "arrow-left",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "\u2190 Overview",
+      "tooltip": "Back to fleet triage",
+      "type": "link",
+      "url": "/d/homelab-overview"
     },
     {
-      "id": 1,
-      "type": "stat",
-      "title": "Probes Failing",
-      "description": "Endpoints that can’t be reached right now. Zero is healthy. If this is non-zero, check the table below to see which probe failed and why.",
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Container Workbench",
+      "tooltip": "Container resources and per-service detail",
+      "type": "link",
+      "url": "/d/homelab-container-workbench"
+    },
+    {
+      "icon": "external link",
+      "includeVars": true,
+      "keepTime": true,
+      "targetBlank": false,
+      "title": "Log Workbench",
+      "tooltip": "Log exploration and error triage",
+      "type": "link",
+      "url": "/d/homelab-log-workbench"
+    }
+  ],
+  "liveNow": false,
+  "panels": [
+    {
+      "collapsed": false,
       "gridPos": {
+        "h": 1,
+        "w": 24,
         "x": 0,
-        "y": 1,
-        "w": 8,
-        "h": 3
+        "y": 0
       },
+      "id": 200,
+      "panels": [],
+      "title": "Connectivity",
+      "type": "row"
+    },
+    {
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
+      },
+      "description": "Endpoints that can\u2019t be reached right now. Zero is healthy. If this is non-zero, check the table below to see which probe failed and why.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "red",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 0,
+        "y": 1
+      },
+      "id": 1,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
       },
       "targets": [
         {
@@ -207,86 +128,27 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "noValue": "0",
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "red",
-                "value": 1
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
+      "title": "Probes Failing",
+      "type": "stat"
     },
     {
-      "id": 2,
-      "type": "stat",
-      "title": "My TLS Certificate",
-      "description": "Days until YOUR Let’s Encrypt certificate expires.\n\nTo enable: add your public domain to blackbox-targets.json:\n  {\"targets\": [\"https://yourdomain.com\"], \"labels\": {\"module\": \"http_2xx\", \"name\": \"public-site\"}}\n\nThis validates DDNS + Caddy + TLS cert + reachability in one probe.",
-      "gridPos": {
-        "x": 8,
-        "y": 1,
-        "w": 8,
-        "h": 3
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "min((probe_ssl_earliest_cert_expiry{name!=\"internet\"} - time()) / 86400 > 0)",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
+      "description": "Days until the soonest-expiring TLS certificate among all monitored HTTPS probes (9 certs currently tracked: auth, cleanuparr, grafana, prowlarr, qbit, radarr, sonarr, uptime, whoami). See the TLS Certificates table below for the full per-domain breakdown.",
       "fieldConfig": {
         "defaults": {
-          "unit": "d",
-          "decimals": 0,
-          "noValue": "Add your domain",
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
+          "noValue": "No certs found",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "yellow",
@@ -297,40 +159,102 @@
                 "value": 14
               }
             ]
-          }
+          },
+          "unit": "d"
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 8,
+        "y": 1
+      },
+      "id": 2,
       "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
         "reduceOptions": {
-          "values": false,
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
-        "orientation": "auto",
         "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "min((probe_ssl_earliest_cert_expiry{probe_name!=\"internet\"} - time()) / 86400 > 0)",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Nearest Cert Expiry",
+      "type": "stat"
     },
     {
-      "id": 3,
-      "type": "stat",
-      "title": "Probe Uptime",
-      "description": "Average probe success rate over the dashboard time range. 100% = every probe passed every check. Drops below 100% indicate intermittent connectivity issues even if everything is passing right now.",
-      "gridPos": {
-        "x": 16,
-        "y": 1,
-        "w": 8,
-        "h": 3
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
+      },
+      "description": "Average probe success rate over the dashboard time range. 100% = every probe passed every check. Drops below 100% indicate intermittent connectivity issues even if everything is passing right now.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "yellow",
+                "value": 0.95
+              },
+              {
+                "color": "green",
+                "value": 0.999
+              }
+            ]
+          },
+          "unit": "percentunit"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 16,
+        "y": 1
+      },
+      "id": 3,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
       },
       "targets": [
         {
@@ -345,148 +269,15 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "percentunit",
-          "decimals": 1,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 0.95
-              },
-              {
-                "color": "green",
-                "value": 0.999
-              }
-            ]
-          }
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
+      "title": "Probe Uptime",
+      "type": "stat"
     },
     {
-      "id": 10,
-      "type": "table",
-      "title": "Probe Status",
-      "description": "All connectivity checks. Failures sort first. If internet fails but dns passes → routing/firewall issue. If both fail → total internet outage. Click a probe name to check its logs.",
-      "gridPos": {
-        "x": 0,
-        "y": 4,
-        "w": 24,
-        "h": 6
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "max by (instance, probe_name) (probe_success)",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "max by (instance, probe_name) (probe_duration_seconds)",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "max by (instance, probe_name) (probe_http_status_code)",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "C"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "merge",
-          "options": {}
-        },
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true,
-              "__name__": true,
-              "env": true,
-              "node": true,
-              "vm_role": true,
-              "host": true,
-              "job": true
-            },
-            "indexByName": {
-              "probe_name": 0,
-              "instance": 1,
-              "Value #A": 2,
-              "Value #C": 3,
-              "Value #B": 4
-            },
-            "renameByName": {
-              "probe_name": "Probe",
-              "instance": "Target",
-              "Value #A": "Status",
-              "Value #C": "HTTP Code",
-              "Value #B": "Latency"
-            }
-          }
-        },
-        {
-          "id": "sortBy",
-          "options": {
-            "fields": {},
-            "sort": [
-              {
-                "field": "Status",
-                "desc": false
-              }
-            ]
-          }
-        }
-      ],
+      "description": "All connectivity checks. Failures sort first. If internet fails but dns passes \u2192 routing/firewall issue. If both fail \u2192 total internet outage. Click a probe name to check its logs.",
       "fieldConfig": {
         "defaults": {},
         "overrides": [
@@ -504,9 +295,9 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "View Logs →",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Probe}",
-                    "targetBlank": true
+                    "targetBlank": true,
+                    "title": "View Logs \u2192",
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-search=${__data.fields.Probe}"
                   }
                 ]
               }
@@ -538,27 +329,27 @@
                 "id": "mappings",
                 "value": [
                   {
-                    "type": "value",
                     "options": {
                       "0": {
-                        "text": "FAIL",
                         "color": "red",
-                        "index": 0
+                        "index": 0,
+                        "text": "FAIL"
                       },
                       "1": {
-                        "text": "PASS",
                         "color": "green",
-                        "index": 1
+                        "index": 1,
+                        "text": "PASS"
                       }
-                    }
+                    },
+                    "type": "value"
                   }
                 ]
               },
               {
                 "id": "custom.cellOptions",
                 "value": {
-                  "type": "color-background",
-                  "applyToRow": false
+                  "applyToRow": false,
+                  "type": "color-background"
                 }
               }
             ]
@@ -575,19 +366,19 @@
               },
               {
                 "id": "noValue",
-                "value": "—"
+                "value": "\u2014"
               },
               {
                 "id": "mappings",
                 "value": [
                   {
-                    "type": "value",
                     "options": {
                       "0": {
-                        "text": "—",
-                        "index": 0
+                        "index": 0,
+                        "text": "\u2014"
                       }
-                    }
+                    },
+                    "type": "value"
                   }
                 ]
               },
@@ -597,8 +388,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "green",
-                      "value": null
+                      "color": "green"
                     },
                     {
                       "color": "yellow",
@@ -639,8 +429,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "green",
-                      "value": null
+                      "color": "green"
                     },
                     {
                       "color": "yellow",
@@ -663,47 +452,522 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 4
+      },
+      "id": 10,
       "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "Status",
-            "desc": false
-          }
-        ],
         "cellHeight": "sm",
         "footer": {
           "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Status"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, probe_name) (probe_success)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, probe_name) (probe_duration_seconds)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "max by (instance, probe_name) (probe_http_status_code)",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "C"
         }
-      }
+      ],
+      "title": "Probe Status",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "env": true,
+              "host": true,
+              "job": true,
+              "node": true,
+              "vm_role": true
+            },
+            "indexByName": {
+              "Value #A": 2,
+              "Value #B": 4,
+              "Value #C": 3,
+              "instance": 1,
+              "probe_name": 0
+            },
+            "renameByName": {
+              "Value #A": "Status",
+              "Value #B": "Latency",
+              "Value #C": "HTTP Code",
+              "instance": "Target",
+              "probe_name": "Probe"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "desc": false,
+                "field": "Status"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
     },
     {
-      "type": "row",
-      "title": "Latency & Uptime",
       "collapsed": false,
       "gridPos": {
-        "x": 0,
-        "y": 10,
+        "h": 1,
         "w": 24,
-        "h": 1
+        "x": 0,
+        "y": 10
       },
-      "id": 201,
-      "panels": []
+      "id": 204,
+      "panels": [],
+      "title": "LAN vs WAN Reachability",
+      "type": "row"
     },
     {
-      "id": 11,
-      "type": "timeseries",
-      "title": "Response Latency",
-      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (grafana, core-dnsmasq, nas) against the external reference probes (internet, dns — both target 1.1.1.1) to isolate whether slowness is inside your network or outside. Probes are defined by BLACKBOX_*_TARGETS in .env; every configured probe appears here automatically.",
-      "gridPos": {
-        "x": 0,
-        "y": 11,
-        "w": 12,
-        "h": 8
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
+      },
+      "description": "ICMP reachability of the LAN gateway/router (192.168.1.1) from the monitoring VM. If this fails while NAS/Internet still pass, the router itself is the suspect -- the prime candidate for WAN-edge issues like remote Plex buffering. If this passes but Internet fails, the problem is beyond the router (ISP/modem).",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Unreachable"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "Reachable"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 0,
+        "y": 11
+      },
+      "id": 30,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "probe_success{probe_name=\"router\"}",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Router (LAN Gateway)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "ICMP reachability of the Synology NAS from the monitoring VM. Compare against Router/Internet to isolate a local-network issue from a WAN issue.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Unreachable"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "Reachable"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 8,
+        "y": 11
+      },
+      "id": 31,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "probe_success{probe_name=\"nas\"}",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "NAS",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "ICMP reachability of an external host (1.1.1.1), confirming the WAN path beyond the router is up. If Router passes but this fails, the problem is upstream of the router (ISP or modem) -- not this network.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Unreachable"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "Reachable"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 3,
+        "w": 8,
+        "x": 16,
+        "y": 11
+      },
+      "id": 32,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "probe_success{probe_name=\"internet\"}",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Internet (WAN)",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Round-trip ICMP latency for the three LAN/WAN reference points side by side. Router should be sub-millisecond to a few ms; if router latency spikes while NAS/Internet stay flat, suspect the router itself. If all three spike together, suspect the monitoring VM or its host.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 14
+      },
+      "id": 33,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "probe_duration_seconds{probe_name=~\"router|nas|internet\"}",
+          "instant": false,
+          "legendFormat": "{{probe_name}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "ICMP Latency: Router vs NAS vs Internet",
+      "type": "timeseries"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 20
+      },
+      "id": 201,
+      "panels": [],
+      "title": "Latency & Uptime",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Total round-trip time per probe over time. Rising latency often precedes outages. Compare internal probes (grafana, core-dnsmasq, nas) against the external reference probes (internet, dns \u2014 both target 1.1.1.1) to isolate whether slowness is inside your network or outside. Probes are defined by BLACKBOX_*_TARGETS in .env; every configured probe appears here automatically.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "links": [
+            {
+              "targetBlank": true,
+              "title": "View Logs \u2192",
+              "url": "/d/homelab-log-workbench?${__url_time_range}&var-search=${__field.labels.name}"
+            }
+          ],
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "s"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 0,
+        "y": 21
+      },
+      "id": 11,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -713,169 +977,47 @@
           },
           "editorMode": "code",
           "expr": "probe_duration_seconds{job=\"blackbox\", probe_name=~\".+\"}",
+          "instant": false,
           "legendFormat": "{{probe_name}}",
           "range": true,
-          "instant": false,
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "s",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 2,
-            "fillOpacity": 15,
-            "gradientMode": "scheme",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "none"
-            }
-          },
-          "color": {
-            "mode": "palette-classic-by-name"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "View Logs →",
-              "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__field.labels.probe_name}",
-              "targetBlank": true
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
+      "title": "Response Latency",
+      "type": "timeseries"
     },
     {
-      "id": 12,
-      "type": "timeseries",
-      "title": "Where Is the Latency?",
-      "description": "Breaks HTTP probe time into phases. If resolve is high → DNS problem. If tls is high → cert/handshake issue. If processing is high → the app itself is slow. If transfer is high → response is large or network is congested.",
-      "gridPos": {
-        "x": 12,
-        "y": 11,
-        "w": 12,
-        "h": 8
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "avg(probe_http_duration_seconds{phase=\"resolve\"})",
-          "legendFormat": "DNS Resolve",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "avg(probe_http_duration_seconds{phase=\"connect\"})",
-          "legendFormat": "TCP Connect",
-          "range": true,
-          "instant": false,
-          "refId": "B"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "avg(probe_http_duration_seconds{phase=\"tls\"})",
-          "legendFormat": "TLS Handshake",
-          "range": true,
-          "instant": false,
-          "refId": "C"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "avg(probe_http_duration_seconds{phase=\"processing\"})",
-          "legendFormat": "Server Processing",
-          "range": true,
-          "instant": false,
-          "refId": "D"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "avg(probe_http_duration_seconds{phase=\"transfer\"})",
-          "legendFormat": "Response Transfer",
-          "range": true,
-          "instant": false,
-          "refId": "E"
-        }
-      ],
+      "description": "Breaks HTTP probe time into phases for the probe(s) selected in $probe (defaults to All, which averages across every HTTP probe \u2014 narrow to one probe to see its own breakdown without dilution). If resolve is high \u2192 DNS problem. If tls is high \u2192 cert/handshake issue. If processing is high \u2192 the app itself is slow. If transfer is high \u2192 response is large or network is congested.",
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 2,
             "fillOpacity": 30,
             "gradientMode": "scheme",
-            "spanNulls": false,
+            "lineWidth": 2,
             "showPoints": "never",
+            "spanNulls": false,
             "stacking": {
               "mode": "normal"
             }
           },
-          "color": {
-            "mode": "palette-classic"
-          },
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
-          }
+          },
+          "unit": "s"
         },
         "overrides": [
           {
@@ -955,36 +1097,154 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 12,
+        "x": 12,
+        "y": 21
+      },
+      "id": 12,
       "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
         "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
           "calcs": [
             "mean",
             "max"
-          ]
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "avg(probe_http_duration_seconds{phase=\"resolve\", probe_name=~\"$probe\"})",
+          "instant": false,
+          "legendFormat": "DNS Resolve",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "avg(probe_http_duration_seconds{phase=\"connect\", probe_name=~\"$probe\"})",
+          "instant": false,
+          "legendFormat": "TCP Connect",
+          "range": true,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "avg(probe_http_duration_seconds{phase=\"tls\", probe_name=~\"$probe\"})",
+          "instant": false,
+          "legendFormat": "TLS Handshake",
+          "range": true,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "avg(probe_http_duration_seconds{phase=\"processing\", probe_name=~\"$probe\"})",
+          "instant": false,
+          "legendFormat": "Server Processing",
+          "range": true,
+          "refId": "D"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "avg(probe_http_duration_seconds{phase=\"transfer\", probe_name=~\"$probe\"})",
+          "instant": false,
+          "legendFormat": "Response Transfer",
+          "range": true,
+          "refId": "E"
+        }
+      ],
+      "title": "Where Is the Latency?",
+      "type": "timeseries"
     },
     {
-      "id": 13,
-      "type": "state-timeline",
-      "title": "Uptime History",
-      "description": "Green = reachable, red = unreachable. If all probes go red simultaneously → total internet outage. If only one goes red → that specific service is down. Gaps indicate Prometheus scrape misses.",
-      "gridPos": {
-        "x": 0,
-        "y": 19,
-        "w": 24,
-        "h": 6
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
+      },
+      "description": "Green = reachable, red = unreachable. If all probes go red simultaneously \u2192 total internet outage. If only one goes red \u2192 that specific service is down. Gaps indicate Prometheus scrape misses.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "DOWN"
+                },
+                "1": {
+                  "index": 1,
+                  "text": "UP"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 29
+      },
+      "id": 13,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.85,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -994,90 +1254,91 @@
           },
           "editorMode": "code",
           "expr": "probe_success{job=\"blackbox\", probe_name=~\".+\"}",
+          "instant": false,
           "legendFormat": "{{probe_name}}",
           "range": true,
-          "instant": false,
           "refId": "A"
         }
       ],
+      "title": "Uptime History",
+      "type": "state-timeline"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 35
+      },
+      "id": 202,
+      "panels": [],
+      "title": "Traffic",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Total network traffic (rx+tx) per container, stacked. This includes both internal (container-to-container) and external (internet) traffic \u2014 cAdvisor cannot distinguish them. For media/VPN stacks, the VPN container (ExpressVPN) traffic is a good proxy for actual internet egress. To measure true internet-only bandwidth, add node_exporter to the host and monitor the physical NIC.",
       "fieldConfig": {
         "defaults": {
           "color": {
-            "mode": "thresholds"
+            "mode": "palette-classic-by-name"
           },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 40,
+            "gradientMode": "scheme",
+            "lineWidth": 1,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "normal"
+            }
+          },
+          "links": [
+            {
+              "targetBlank": false,
+              "title": "Container detail \u2192",
+              "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__field.labels.service}&${host:queryparam}"
+            }
+          ],
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
-              },
-              {
-                "color": "green",
-                "value": 1
+                "color": "green"
               }
             ]
           },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "DOWN",
-                  "index": 0
-                },
-                "1": {
-                  "text": "UP",
-                  "index": 1
-                }
-              }
-            }
-          ]
+          "unit": "Bps"
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 8,
+        "w": 14,
+        "x": 0,
+        "y": 36
+      },
+      "id": 14,
       "options": {
-        "rowHeight": 0.85,
-        "showValue": "auto",
-        "mergeValues": true,
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
         "tooltip": {
           "mode": "multi",
           "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "list",
-          "placement": "bottom",
-          "showLegend": false
         }
-      }
-    },
-    {
-      "type": "row",
-      "title": "Traffic",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 25,
-        "w": 24,
-        "h": 1
-      },
-      "id": 202,
-      "panels": []
-    },
-    {
-      "id": 14,
-      "type": "timeseries",
-      "title": "Container Traffic",
-      "description": "Total network traffic (rx+tx) per container, stacked. This includes both internal (container-to-container) and external (internet) traffic — cAdvisor cannot distinguish them. For media/VPN stacks, the VPN container (ExpressVPN) traffic is a good proxy for actual internet egress. To measure true internet-only bandwidth, add node_exporter to the host and monitor the physical NIC.",
-      "gridPos": {
-        "x": 0,
-        "y": 26,
-        "w": 14,
-        "h": 8
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource_prometheus}"
       },
       "targets": [
         {
@@ -1087,114 +1348,21 @@
           },
           "editorMode": "code",
           "expr": "sum by (service) (rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
           "legendFormat": "{{service}}",
           "range": true,
-          "instant": false,
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "unit": "Bps",
-          "min": 0,
-          "custom": {
-            "drawStyle": "line",
-            "lineWidth": 1,
-            "fillOpacity": 40,
-            "gradientMode": "scheme",
-            "spanNulls": false,
-            "showPoints": "never",
-            "stacking": {
-              "mode": "normal"
-            }
-          },
-          "color": {
-            "mode": "palette-classic-by-name"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              }
-            ]
-          },
-          "links": [
-            {
-              "title": "Container detail →",
-              "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__field.labels.service}&${host:queryparam}",
-              "targetBlank": false
-            }
-          ]
-        },
-        "overrides": []
-      },
-      "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
-        "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        }
-      }
+      "title": "Container Traffic",
+      "type": "timeseries"
     },
     {
-      "id": 15,
-      "type": "table",
-      "title": "Top Traffic",
-      "description": "Containers ranked by current combined network traffic. Includes internal + external. In a VPN media stack, the vpn container’s traffic represents actual internet usage. Click to investigate.",
-      "gridPos": {
-        "x": 14,
-        "y": 26,
-        "w": 10,
-        "h": 8
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "topk(10, sum by (host, service) (rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval])))",
-          "format": "table",
-          "instant": true,
-          "range": false,
-          "refId": "A"
-        }
-      ],
-      "transformations": [
-        {
-          "id": "organize",
-          "options": {
-            "excludeByName": {
-              "Time": true
-            },
-            "indexByName": {
-              "host": 0,
-              "service": 1,
-              "Value": 2
-            },
-            "renameByName": {
-              "host": "Host",
-              "service": "Service",
-              "Value": "Bandwidth"
-            }
-          }
-        }
-      ],
+      "description": "Containers ranked by current combined network traffic. Includes internal + external. In a VPN media stack, the vpn container\u2019s traffic represents actual internet usage. Click to investigate.",
       "fieldConfig": {
         "defaults": {},
         "overrides": [
@@ -1218,8 +1386,7 @@
                   "mode": "absolute",
                   "steps": [
                     {
-                      "color": "green",
-                      "value": null
+                      "color": "green"
                     },
                     {
                       "color": "yellow",
@@ -1250,14 +1417,14 @@
                 "id": "links",
                 "value": [
                   {
-                    "title": "Container detail →",
-                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}",
-                    "targetBlank": false
+                    "targetBlank": false,
+                    "title": "Container detail \u2192",
+                    "url": "/d/homelab-container-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}"
                   },
                   {
-                    "title": "View Logs →",
-                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}",
-                    "targetBlank": true
+                    "targetBlank": true,
+                    "title": "View Logs \u2192",
+                    "url": "/d/homelab-log-workbench?${__url_time_range}&var-service=${__data.fields.Service}&var-host=${__data.fields.Host}"
                   }
                 ]
               }
@@ -1265,47 +1432,371 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 10,
+        "x": 14,
+        "y": 36
+      },
+      "id": 15,
       "options": {
-        "showHeader": true,
-        "sortBy": [
-          {
-            "displayName": "Bandwidth",
-            "desc": true
-          }
-        ],
         "cellHeight": "sm",
         "footer": {
           "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "Bandwidth"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "topk(10, sum by (host, service) (rate(container_network_receive_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval]) + rate(container_network_transmit_bytes_total{node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\", name!=\"\", image!=\"\"}[$__rate_interval])))",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
         }
-      }
+      ],
+      "title": "Top Traffic",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true
+            },
+            "indexByName": {
+              "Value": 2,
+              "host": 0,
+              "service": 1
+            },
+            "renameByName": {
+              "Value": "Bandwidth",
+              "host": "Host",
+              "service": "Service"
+            }
+          }
+        }
+      ],
+      "type": "table"
     },
     {
-      "type": "row",
-      "title": "VPN Status",
-      "collapsed": false,
-      "gridPos": {
-        "x": 0,
-        "y": 34,
-        "w": 24,
-        "h": 1
-      },
-      "id": 203,
-      "panels": []
-    },
-    {
-      "id": 20,
-      "type": "stat",
-      "title": "VPN Status",
-      "description": "Whether the ExpressVPN tunnel is connected. Green = tunnel up, Red = disconnected. If disconnected, qBittorrent traffic is blocked by Network Lock.",
-      "gridPos": {
-        "x": 0,
-        "y": 35,
-        "w": 8,
-        "h": 4
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
+      },
+      "description": "Real physical NIC throughput (rx+tx) per VM's eth0 interface, from node_exporter. Unlike Container Traffic above (cAdvisor rx+tx, which mixes internal container-to-container traffic with real external traffic -- a known, documented limitation), this is the actual wire-level rate for each VM's uplink.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "palette-classic-by-name"
+          },
+          "custom": {
+            "drawStyle": "line",
+            "fillOpacity": 15,
+            "gradientMode": "scheme",
+            "lineWidth": 2,
+            "showPoints": "never",
+            "spanNulls": false,
+            "stacking": {
+              "mode": "none"
+            }
+          },
+          "min": 0,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              }
+            ]
+          },
+          "unit": "Bps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 44
+      },
+      "id": 40,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum by (host) (rate(node_network_receive_bytes_total{device=\"eth0\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[$__rate_interval]) + rate(node_network_transmit_bytes_total{device=\"eth0\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "{{host}}",
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "Physical NIC Throughput (per VM, rx+tx)",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Packet errors and drops per VM's eth0 interface, from node_exporter. Errors should be zero. A small constant drop rate (a few packets/sec) on every VM is common background noise on a shared Proxmox bridge (broadcast/multicast frames the guest doesn't consume) -- shown yellow, not red. Sustained high rates (tens+ per second) indicate a real driver/hardware/congestion problem -- shown red.",
+      "fieldConfig": {
+        "defaults": {
+          "custom": {
+            "cellOptions": {
+              "type": "color-text"
+            }
+          },
+          "decimals": 4,
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 0.0001
+              },
+              {
+                "color": "red",
+                "value": 50
+              }
+            ]
+          },
+          "unit": "pps"
+        },
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Host"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 200
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 6,
+        "w": 24,
+        "x": 0,
+        "y": 52
+      },
+      "id": 41,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": true,
+            "displayName": "RX Errors/s"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "rate(node_network_receive_errs_total{device=\"eth0\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m])",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "rate(node_network_transmit_errs_total{device=\"eth0\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m])",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "B"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "rate(node_network_receive_drop_total{device=\"eth0\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m])",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "C"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "rate(node_network_transmit_drop_total{device=\"eth0\", node=~\"$node\", vm_role=~\"$vm_role\", host=~\"$host\"}[5m])",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "D"
+        }
+      ],
+      "title": "Packet Errors & Drops (per VM)",
+      "transformations": [
+        {
+          "id": "merge",
+          "options": {}
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "device": true,
+              "env": true,
+              "instance": true,
+              "job": true,
+              "node": true,
+              "service": true,
+              "vm_role": true
+            },
+            "indexByName": {
+              "Value #A": 1,
+              "Value #B": 2,
+              "Value #C": 3,
+              "Value #D": 4,
+              "host": 0
+            },
+            "renameByName": {
+              "Value #A": "RX Errors/s",
+              "Value #B": "TX Errors/s",
+              "Value #C": "RX Drops/s",
+              "Value #D": "TX Drops/s",
+              "host": "Host"
+            }
+          }
+        }
+      ],
+      "type": "table"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 58
+      },
+      "id": 203,
+      "panels": [],
+      "title": "VPN Status",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Whether the ExpressVPN tunnel is connected. Green = tunnel up, Red = disconnected. If disconnected, qBittorrent traffic is blocked by Network Lock.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "color": "red",
+                  "index": 0,
+                  "text": "Disconnected"
+                },
+                "1": {
+                  "color": "green",
+                  "index": 1,
+                  "text": "Connected"
+                }
+              },
+              "type": "value"
+            }
+          ],
+          "noValue": "No data",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "red"
+              },
+              {
+                "color": "green",
+                "value": 1
+              }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 0,
+        "y": 59
+      },
+      "id": 20,
+      "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
       },
       "targets": [
         {
@@ -1320,75 +1811,70 @@
           "refId": "A"
         }
       ],
+      "title": "VPN Status",
+      "type": "stat"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "State of the ExpressVPN tunnel over time. expressvpn_connection_uptime_seconds is permanently 0 on the current Lightway/WireGuard tunnel (the exporter can't read uptime for that tunnel type), and expressvpn_last_state_change_timestamp_seconds was verified to re-stamp on every scrape rather than only on real state changes -- neither can drive a trustworthy uptime stat. This timeline uses expressvpn_connection_status directly instead: solid green means connected for the entire window shown; any red means the tunnel dropped.",
       "fieldConfig": {
         "defaults": {
           "color": {
             "mode": "thresholds"
           },
+          "mappings": [
+            {
+              "options": {
+                "0": {
+                  "index": 0,
+                  "text": "Disconnected"
+                },
+                "1": {
+                  "index": 1,
+                  "text": "Connected"
+                }
+              },
+              "type": "value"
+            }
+          ],
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "red"
               },
               {
                 "color": "green",
                 "value": 1
               }
             ]
-          },
-          "mappings": [
-            {
-              "type": "value",
-              "options": {
-                "0": {
-                  "text": "Disconnected",
-                  "color": "red",
-                  "index": 0
-                },
-                "1": {
-                  "text": "Connected",
-                  "color": "green",
-                  "index": 1
-                }
-              }
-            }
-          ],
-          "noValue": "No data"
+          }
         },
         "overrides": []
       },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
-    },
-    {
-      "id": 21,
-      "type": "stat",
-      "title": "VPN Uptime",
-      "description": "How long the current VPN tunnel has been up. Drops to zero on reconnect — visible as dips in the sparkline. Frequent drops suggest unstable connectivity or server issues.",
       "gridPos": {
-        "x": 8,
-        "y": 35,
+        "h": 4,
         "w": 8,
-        "h": 4
+        "x": 8,
+        "y": 59
       },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource_prometheus}"
+      "id": 21,
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom",
+          "showLegend": false
+        },
+        "mergeValues": true,
+        "rowHeight": 0.85,
+        "showValue": "auto",
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
+        }
       },
       "targets": [
         {
@@ -1397,71 +1883,69 @@
             "uid": "${datasource_prometheus}"
           },
           "editorMode": "code",
-          "expr": "expressvpn_connection_uptime_seconds{host=~\"$host\"}",
+          "expr": "expressvpn_connection_status{host=~\"$host\"}",
+          "instant": false,
           "legendFormat": "{{host}}",
           "range": true,
-          "instant": false,
           "refId": "A"
         }
       ],
+      "title": "VPN Connection State",
+      "type": "state-timeline"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Number of VPN connection failures during the dashboard time range. Zero is healthy. Non-zero indicates the VPN had trouble connecting \u2014 check ExpressVPN container logs for details.",
       "fieldConfig": {
         "defaults": {
-          "unit": "s",
-          "min": 0,
           "color": {
             "mode": "thresholds"
           },
+          "decimals": 0,
+          "noValue": "0",
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "red",
-                "value": null
+                "color": "green"
               },
               {
                 "color": "yellow",
-                "value": 300
+                "value": 1
               },
               {
-                "color": "green",
-                "value": 3600
+                "color": "red",
+                "value": 3
               }
             ]
-          },
-          "noValue": "No data"
+          }
         },
         "overrides": []
       },
+      "gridPos": {
+        "h": 4,
+        "w": 8,
+        "x": 16,
+        "y": 59
+      },
+      "id": 22,
       "options": {
+        "colorMode": "background",
+        "graphMode": "none",
+        "justifyMode": "center",
+        "orientation": "auto",
         "reduceOptions": {
-          "values": false,
           "calcs": [
             "lastNotNull"
           ],
-          "fields": ""
+          "fields": "",
+          "values": false
         },
-        "orientation": "auto",
-        "textMode": "value_and_sparkline",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "area",
-        "justifyMode": "center"
-      }
-    },
-    {
-      "id": 22,
-      "type": "stat",
-      "title": "Connect Failures",
-      "description": "Number of VPN connection failures during the dashboard time range. Zero is healthy. Non-zero indicates the VPN had trouble connecting — check ExpressVPN container logs for details.",
-      "gridPos": {
-        "x": 16,
-        "y": 35,
-        "w": 8,
-        "h": 4
-      },
-      "datasource": {
-        "type": "prometheus",
-        "uid": "${datasource_prometheus}"
+        "textMode": "value",
+        "wideLayout": true
       },
       "targets": [
         {
@@ -1476,117 +1960,41 @@
           "refId": "A"
         }
       ],
-      "fieldConfig": {
-        "defaults": {
-          "decimals": 0,
-          "color": {
-            "mode": "thresholds"
-          },
-          "thresholds": {
-            "mode": "absolute",
-            "steps": [
-              {
-                "color": "green",
-                "value": null
-              },
-              {
-                "color": "yellow",
-                "value": 1
-              },
-              {
-                "color": "red",
-                "value": 3
-              }
-            ]
-          },
-          "noValue": "0"
-        },
-        "overrides": []
-      },
-      "options": {
-        "reduceOptions": {
-          "values": false,
-          "calcs": [
-            "lastNotNull"
-          ],
-          "fields": ""
-        },
-        "orientation": "auto",
-        "textMode": "value",
-        "wideLayout": true,
-        "colorMode": "background",
-        "graphMode": "none",
-        "justifyMode": "center"
-      }
+      "title": "Connect Failures",
+      "type": "stat"
     },
     {
-      "id": 23,
-      "type": "timeseries",
-      "title": "VPN Traffic",
-      "description": "Traffic through the vpn container's network namespace, as reported by cAdvisor. qBittorrent shares this namespace (network_mode: service:vpn), so this is effectively torrent traffic plus WebUI/scrape chatter. The ExpressVPN exporter's per-interface counters (expressvpn_network_*) died when the tunnel moved from tun0 to wgexpressvpn0 (Lightway/WireGuard) — the image's exporter only recognises tun* interfaces.",
-      "gridPos": {
-        "x": 0,
-        "y": 39,
-        "w": 24,
-        "h": 8
-      },
       "datasource": {
         "type": "prometheus",
         "uid": "${datasource_prometheus}"
       },
-      "targets": [
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(container_network_receive_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "RX (download)",
-          "range": true,
-          "instant": false,
-          "refId": "A"
-        },
-        {
-          "datasource": {
-            "type": "prometheus",
-            "uid": "${datasource_prometheus}"
-          },
-          "editorMode": "code",
-          "expr": "sum(rate(container_network_transmit_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
-          "legendFormat": "TX (upload)",
-          "range": true,
-          "instant": false,
-          "refId": "B"
-        }
-      ],
+      "description": "Traffic through the vpn container's network namespace, as reported by cAdvisor. qBittorrent shares this namespace (network_mode: service:vpn), so this is effectively torrent traffic plus WebUI/scrape chatter. The ExpressVPN exporter's own interface counters (expressvpn_network_rx_bytes_total, tx_bytes_total, etc.) are live and reporting real data on the current tunnel -- see the TX Drops stat alongside this panel, sourced directly from the exporter.",
       "fieldConfig": {
         "defaults": {
-          "unit": "Bps",
-          "min": 0,
+          "color": {
+            "mode": "palette-classic"
+          },
           "custom": {
             "drawStyle": "line",
-            "lineWidth": 2,
             "fillOpacity": 20,
             "gradientMode": "scheme",
-            "spanNulls": false,
+            "lineWidth": 2,
             "showPoints": "never",
+            "spanNulls": false,
             "stacking": {
               "mode": "none"
             }
           },
-          "color": {
-            "mode": "palette-classic"
-          },
+          "min": 0,
           "thresholds": {
             "mode": "absolute",
             "steps": [
               {
-                "color": "green",
-                "value": null
+                "color": "green"
               }
             ]
-          }
+          },
+          "unit": "Bps"
         },
         "overrides": [
           {
@@ -1621,21 +2029,414 @@
           }
         ]
       },
+      "gridPos": {
+        "h": 8,
+        "w": 18,
+        "x": 0,
+        "y": 63
+      },
+      "id": 23,
       "options": {
-        "tooltip": {
-          "mode": "multi",
-          "sort": "desc"
-        },
         "legend": {
-          "displayMode": "table",
-          "placement": "bottom",
-          "showLegend": true,
           "calcs": [
             "mean",
             "max"
-          ]
+          ],
+          "displayMode": "table",
+          "placement": "bottom",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "desc"
         }
-      }
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(container_network_receive_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "RX (download)",
+          "range": true,
+          "refId": "A"
+        },
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "sum(rate(container_network_transmit_bytes_total{host=~\"$host\", service=\"vpn\", name!=\"\", image!=\"\"}[$__rate_interval]))",
+          "instant": false,
+          "legendFormat": "TX (upload)",
+          "range": true,
+          "refId": "B"
+        }
+      ],
+      "title": "VPN Traffic",
+      "type": "timeseries"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Transmit-side packet drop rate reported directly by the ExpressVPN exporter (expressvpn_network_tx_dropped_total). This counter is naturally bursty under real download load (observed 0-45 pkt/s over the past week, not a flat baseline) -- thresholds are calibrated against that range, not against \"any nonzero = bad\". Unaffected by the broken uptime metric above.",
+      "fieldConfig": {
+        "defaults": {
+          "color": {
+            "mode": "thresholds"
+          },
+          "decimals": 1,
+          "noValue": "0",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              {
+                "color": "green"
+              },
+              {
+                "color": "yellow",
+                "value": 20
+              },
+              {
+                "color": "red",
+                "value": 60
+              }
+            ]
+          },
+          "unit": "pps"
+        },
+        "overrides": []
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 6,
+        "x": 18,
+        "y": 63
+      },
+      "id": 24,
+      "options": {
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "center",
+        "orientation": "auto",
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "fields": "",
+          "values": false
+        },
+        "textMode": "value",
+        "wideLayout": true
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "rate(expressvpn_network_tx_dropped_total{host=~\"$host\"}[$__rate_interval])",
+          "instant": false,
+          "range": true,
+          "refId": "A"
+        }
+      ],
+      "title": "VPN TX Drop Rate",
+      "type": "stat"
+    },
+    {
+      "collapsed": false,
+      "gridPos": {
+        "h": 1,
+        "w": 24,
+        "x": 0,
+        "y": 71
+      },
+      "id": 206,
+      "panels": [],
+      "title": "TLS Certificates",
+      "type": "row"
+    },
+    {
+      "datasource": {
+        "type": "prometheus",
+        "uid": "${datasource_prometheus}"
+      },
+      "description": "Days until expiry for every TLS certificate Blackbox is currently monitoring, one row per probe. Sorted soonest-first.",
+      "fieldConfig": {
+        "defaults": {},
+        "overrides": [
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Target"
+            },
+            "properties": [
+              {
+                "id": "custom.width",
+                "value": 320
+              }
+            ]
+          },
+          {
+            "matcher": {
+              "id": "byName",
+              "options": "Days Remaining"
+            },
+            "properties": [
+              {
+                "id": "custom.cellOptions",
+                "value": {
+                  "type": "color-background"
+                }
+              },
+              {
+                "id": "unit",
+                "value": "d"
+              },
+              {
+                "id": "decimals",
+                "value": 1
+              },
+              {
+                "id": "thresholds",
+                "value": {
+                  "mode": "absolute",
+                  "steps": [
+                    {
+                      "color": "red"
+                    },
+                    {
+                      "color": "yellow",
+                      "value": 7
+                    },
+                    {
+                      "color": "green",
+                      "value": 14
+                    }
+                  ]
+                }
+              }
+            ]
+          }
+        ]
+      },
+      "gridPos": {
+        "h": 8,
+        "w": 24,
+        "x": 0,
+        "y": 72
+      },
+      "id": 50,
+      "options": {
+        "cellHeight": "sm",
+        "footer": {
+          "show": false
+        },
+        "showHeader": true,
+        "sortBy": [
+          {
+            "desc": false,
+            "displayName": "Days Remaining"
+          }
+        ]
+      },
+      "targets": [
+        {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "${datasource_prometheus}"
+          },
+          "editorMode": "code",
+          "expr": "(probe_ssl_earliest_cert_expiry - time()) / 86400",
+          "format": "table",
+          "instant": true,
+          "range": false,
+          "refId": "A"
+        }
+      ],
+      "title": "Certificate Expiry (All Probes)",
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "env": true,
+              "host": true,
+              "job": true,
+              "node": true,
+              "vm_role": true
+            },
+            "indexByName": {
+              "Value": 2,
+              "instance": 1,
+              "probe_name": 0
+            },
+            "renameByName": {
+              "Value": "Days Remaining",
+              "instance": "Target",
+              "probe_name": "Service"
+            }
+          }
+        },
+        {
+          "id": "sortBy",
+          "options": {
+            "fields": {},
+            "sort": [
+              {
+                "field": "Days Remaining"
+              }
+            ]
+          }
+        }
+      ],
+      "type": "table"
     }
-  ]
+  ],
+  "refresh": "15s",
+  "schemaVersion": 42,
+  "tags": [
+    "homelab",
+    "network",
+    "connectivity"
+  ],
+  "templating": {
+    "list": [
+      {
+        "current": {},
+        "hide": 0,
+        "includeAll": false,
+        "label": "Prometheus",
+        "multi": false,
+        "name": "datasource_prometheus",
+        "options": [],
+        "query": "prometheus",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "current": {},
+        "hide": 2,
+        "includeAll": false,
+        "label": "Loki",
+        "multi": false,
+        "name": "datasource_loki",
+        "options": [],
+        "query": "loki",
+        "refresh": 1,
+        "type": "datasource"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "Node",
+        "multi": true,
+        "name": "node",
+        "options": [],
+        "query": "label_values(up, node)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 2,
+        "includeAll": true,
+        "label": "VM Role",
+        "multi": true,
+        "name": "vm_role",
+        "options": [],
+        "query": "label_values(up{node=~\"$node\"}, vm_role)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Host",
+        "multi": true,
+        "name": "host",
+        "options": [],
+        "query": "label_values(up{node=~\"$node\", vm_role=~\"$vm_role\"}, host)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "allValue": ".+",
+        "current": {},
+        "datasource": {
+          "type": "prometheus",
+          "uid": "${datasource_prometheus}"
+        },
+        "hide": 0,
+        "includeAll": true,
+        "label": "Probe",
+        "multi": true,
+        "name": "probe",
+        "options": [],
+        "query": "label_values(probe_http_duration_seconds, probe_name)",
+        "refresh": 1,
+        "sort": 1,
+        "type": "query"
+      },
+      {
+        "current": {
+          "selected": true,
+          "text": "prod",
+          "value": "prod"
+        },
+        "hide": 2,
+        "includeAll": false,
+        "multi": false,
+        "name": "env",
+        "options": [
+          {
+            "selected": true,
+            "text": "prod",
+            "value": "prod"
+          }
+        ],
+        "query": "prod",
+        "type": "custom"
+      }
+    ]
+  },
+  "time": {
+    "from": "now-1h",
+    "to": "now"
+  },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Network & Connectivity",
+  "uid": "homelab-network",
+  "weekStart": ""
 }
