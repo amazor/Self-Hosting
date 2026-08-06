@@ -57,11 +57,15 @@ This is **production** — it serves the user's home and (via `core`) is reachab
 | Deploy a stack | `python3 deploy.py <stack> --init-env -y` |
 | Deploy all stacks (single-host mode) | `python3 deploy.py all --init-env -y` |
 | Validate compose | `docker compose -f docker_compose/<stack>/compose.yml config` |
-| Lint Python | `python3 -m ruff check deploy.py scripts/ docker_compose/` |
+| Lint Python | `ruff check deploy.py scripts/ docker_compose/` |
 | Compile-check | `python3 -m py_compile <file>` |
+| Lint shell scripts | `shellcheck $(find . -iname '*.sh' -not -path './.git/*')` |
+| Lint YAML | `yamllint -c .yamllint docker_compose/` |
 
 `--force` (skip `.env` placeholder validation) is a Cursor Cloud/testing-only flag — don't use it against real infra, where `.env` should already be populated with real values.
 
+`ruff` here is installed as a standalone binary (not a pip package) — `ruff check ...` works, `python3 -m ruff` does not.
+
 ## No tests or CI
 
-Validation is `py_compile` + `ruff` + `docker compose config` + `BootstrapRunner`'s own `.env`/compose checks — there's no automated suite. When in doubt on a live VM, check the actual container/service state rather than trusting that config alone is correct.
+Validation is `py_compile` + `ruff` + `shellcheck` + `yamllint` + `docker compose config` + `BootstrapRunner`'s own `.env`/compose checks — there's no automated suite. When in doubt on a live VM, check the actual container/service state rather than trusting that config alone is correct.
