@@ -1,0 +1,12 @@
+# Grafana file-provisioned notification policy: route everything to ntfy.
+# Single receiver, no branching — this stack has exactly one Grafana-managed
+# rule today (see log-alert-rules.yml). Add routes here if that grows.
+apiVersion: 1
+
+policies:
+  - orgId: 1
+    receiver: ntfy
+    group_by: ["alertname"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

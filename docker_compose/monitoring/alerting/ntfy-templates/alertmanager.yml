@@ -1,0 +1,18 @@
+# ntfy notification template for Alertmanager webhooks.
+#
+# Alertmanager's webhook_configs payload has no human-friendly top-level
+# title/message (unlike Grafana's default webhook payload) — this template
+# builds one from the raw alert JSON. See docs/Chapter3b-monitoring-stack.md
+# for why templates (not a bridge service) were chosen.
+#
+# Selected via ?template=alertmanager on the ntfy publish URL.
+# Docs: https://docs.ntfy.sh/publish/#publish-using-a-template
+title: |
+  {{- if eq .status "firing" }}🔥 {{ .commonLabels.alertname }}{{- else }}✅ Resolved: {{ .commonLabels.alertname }}{{- end }}
+message: |
+  {{- range .alerts }}
+  [{{ .labels.severity | upper }}] {{ .annotations.summary }}
+  {{ .annotations.description }}
+  {{- end }}
+priority: |
+  {{- if eq .status "firing" }}{{- if eq .commonLabels.severity "critical" }}5{{- else }}3{{- end }}{{- else }}2{{- end }}

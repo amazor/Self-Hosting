@@ -1,0 +1,14 @@
+# ntfy notification template for Grafana webhook contact points.
+#
+# Fallback only: Grafana's default webhook payload already includes
+# pre-rendered top-level "title" and "message" fields, so the contact point
+# may work unmodified against ntfy (?template= omitted). This template is
+# here in case live testing showed the raw JSON dumping into the message body
+# instead — select it with ?template=grafana on the ntfy publish URL.
+# Docs: https://docs.ntfy.sh/publish/#publish-using-a-template
+title: |
+  {{- if eq .status "firing" }}🔥 {{ .title }}{{- else }}✅ {{ .title }}{{- end }}
+message: |
+  {{ .message }}
+priority: |
+  {{- if eq .status "firing" }}4{{- else }}2{{- end }}
