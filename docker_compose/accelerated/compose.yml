@@ -37,6 +37,10 @@ services:
       - ${CONFIG_ROOT:-./config}/plex:/config
       # Read-only view of final media library from Media VM.
       - ${MEDIA_LIBRARY_ROOT:-/mnt/media/library}:/data/library:ro
+      # Transcoder scratch space (Plex pref TranscoderTempDirectory=/transcode).
+      # Local disk, not tmpfs: this VM's RAM is shared with Immich ML, and a
+      # full tmpfs fails the transcode outright.
+      - ${CONFIG_ROOT:-./config}/plex-transcode:/transcode
     devices:
       # Intel Quick Sync / VAAPI
       - /dev/dri:/dev/dri
