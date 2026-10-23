@@ -229,6 +229,7 @@ def _ensure_config_dirs(config_base: Path, tracker: StepTracker) -> None:
     real_user, _ = get_real_user()
     dirs = [
         config_base / "plex",
+        config_base / "plex-transcode",
         config_base / "immich-postgres",
         config_base / "immich-ml-cache",
     ]

@@ -57,6 +57,10 @@ PLEX_PREFS: dict[str, object] = {
     "TranscoderH264Preset": "veryfast",
     "HardwareAcceleratedCodecs": 1,          # enable hardware transcoding (GPU)
     "HardwareAcceleratedEncoders": 1,
+    # Must match the /transcode bind mount in compose.yml. If this points at a
+    # path that isn't mounted, Plex logs "Error creating directory" on every
+    # transcode and silently falls back to $TMPDIR inside the container layer.
+    "TranscoderTempDirectory": "/transcode",
     # Home/managed users: do not allow media deletion from clients.
     "allowMediaDeletion": 0,
     # Metadata language and agent defaults.
